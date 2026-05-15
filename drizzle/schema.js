@@ -49,11 +49,16 @@ export const meetings = pgTable(
     transcript_text: text('transcript_text'),
     transcript_words: jsonb('transcript_words'),
     summary: jsonb('summary'),
+    // Lifecycle: 'processing' (audio uploaded, transcription in flight),
+    // 'ready' (transcript + summary persisted), 'failed' (background job errored).
+    status: text('status').notNull().default('processing'),
+    error_message: text('error_message'),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
     rmIdx: index('meetings_rm_idx').on(t.rm_id),
     startedAtIdx: index('meetings_started_at_idx').on(t.started_at),
     cpCodeIdx: index('meetings_cp_code_idx').on(t.cp_code),
+    statusIdx: index('meetings_status_idx').on(t.status),
   })
 );

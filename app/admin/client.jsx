@@ -1,24 +1,122 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Users, ChevronRight } from 'lucide-react';
+import { Users, X } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
 import Toast from '@/components/Toast';
 import { fmtDate } from '@/lib/utils';
+import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
 
-export default function AdminOverviewClient({ initialStats, initialMeetings, rms, cities = [] }) {
-  const [stats] = useState(initialStats);
+// One global date filter at the top of the admin page. Activity windows become
+// clickable presets that set this filter; Per-RM cards, the meetings table, and
+// the CSV export all read from the same filtered set.
+const PRESETS = [
+  { key: 'today', label: 'Today', days: 1 },
+  { key: 'week', label: 'Last 7 days', days: 7 },
+  { key: 'month', label: 'Last 30 days', days: 30 },
+  { key: 'ninety', label: 'Last 90 days', days: 90 },
+  { key: 'all', label: 'All time', days: null },
+];
+
+function startOfTodayISO() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return toLocalDateValue(d);
+}
+function nDaysAgoISO(n) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - (n - 1));
+  return toLocalDateValue(d);
+}
+// `<input type="date">` expects YYYY-MM-DD in local time.
+function toLocalDateValue(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export default function AdminOverviewClient({ initialMeetings, rms, cities = [] }) {
   const [meetings, setMeetings] = useState(initialMeetings);
+  usePollWhileProcessing(meetings, setMeetings);
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Global date range filter — shared by stats, Per-RM cards, table, and export.
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
 
   function showToast(msg, type) {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
   }
+
+  function applyPreset(key) {
+    if (key === 'all') {
+      setSince('');
+      setUntil('');
+      return;
+    }
+    if (key === 'today') {
+      const t = startOfTodayISO();
+      setSince(t);
+      setUntil(t);
+      return;
+    }
+    const preset = PRESETS.find((p) => p.key === key);
+    if (!preset) return;
+    setSince(nDaysAgoISO(preset.days));
+    setUntil(toLocalDateValue(new Date()));
+  }
+
+  // Identify which preset (if any) the current range matches, so the active card lights up.
+  const activePresetKey = useMemo(() => {
+    if (!since && !until) return 'all';
+    if (since && until && since === until && since === startOfTodayISO()) return 'today';
+    const today = toLocalDateValue(new Date());
+    if (until !== today) return null;
+    for (const p of PRESETS) {
+      if (p.days && since === nDaysAgoISO(p.days)) return p.key;
+    }
+    return null;
+  }, [since, until]);
+
+  // Filtered meeting list — single source of truth for stats + table.
+  const filteredMeetings = useMemo(() => {
+    return meetings.filter((m) => {
+      const t = new Date(m.started_at);
+      if (since) {
+        const start = new Date(since);
+        if (t < start) return false;
+      }
+      if (until) {
+        const end = new Date(until);
+        end.setHours(23, 59, 59, 999);
+        if (t > end) return false;
+      }
+      return true;
+    });
+  }, [meetings, since, until]);
+
+  // Activity-window counts are computed from the UNFILTERED list — they stay as quick
+  // reference points regardless of the current selection. The user told us they want
+  // the windows to be "affected by" the filter; we interpret that as: clicking a window
+  // sets the filter, and the rest of the page reflects it.
+  const stats = useMemo(() => computeWindowStats(meetings), [meetings]);
+
+  // Per-RM cards reflect whatever date range is currently selected.
+  const perRm = useMemo(() => computePerRm(filteredMeetings, rms), [filteredMeetings, rms]);
+
+  // Total for the currently filtered range — shown next to the date pickers.
+  const filteredTotal = useMemo(() => {
+    let secs = 0;
+    for (const m of filteredMeetings) secs += m.duration_seconds || 0;
+    return { count: filteredMeetings.length, minutes: Math.round(secs / 60) };
+  }, [filteredMeetings]);
 
   async function openMeetingFull(m) {
     setOpenMeeting(m);
@@ -31,27 +129,21 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
     }
   }
 
-  function handleExport(filters) {
-    // Mirror the in-page filters into the CSV export so the downloaded file
-    // matches what the admin currently sees on screen.
+  function handleExport(tableFilters) {
+    // Date range comes from the parent (us); the rest comes from MeetingsTable.
     const params = new URLSearchParams();
-    if (filters.rmFilter && filters.rmFilter !== 'all') params.set('rm', filters.rmFilter);
-    if (filters.cityFilter && filters.cityFilter !== 'all') params.set('city', filters.cityFilter);
-    if (filters.search) params.set('search', filters.search);
-    if (filters.since) params.set('start', filters.since);
-    if (filters.until) {
-      const u = new Date(filters.until);
+    if (tableFilters.rmFilter && tableFilters.rmFilter !== 'all') params.set('rm', tableFilters.rmFilter);
+    if (tableFilters.cityFilter && tableFilters.cityFilter !== 'all') params.set('city', tableFilters.cityFilter);
+    if (tableFilters.search) params.set('search', tableFilters.search);
+    if (since) params.set('start', since);
+    if (until) {
+      const u = new Date(until);
       if (!isNaN(u)) {
-        // Inclusive end-of-day, mirroring MeetingsTable's behavior.
         u.setHours(23, 59, 59, 999);
         params.set('end', u.toISOString());
       }
     }
-    // Note: sentiment lives inside summary jsonb — we skip server-side filtering for it
-    // to keep the query simple. The visible-on-screen filter still applies in the UI.
-
-    const url = `/api/admin/export?${params.toString()}`;
-    window.location.href = url;
+    window.location.href = `/api/admin/export?${params.toString()}`;
   }
 
   async function handleDelete() {
@@ -69,6 +161,8 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
     }
   }
 
+  const hasRange = since || until;
+
   return (
     <div>
       <div
@@ -76,7 +170,9 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-end',
-          marginBottom: 36,
+          marginBottom: 28,
+          flexWrap: 'wrap',
+          gap: 16,
         }}
       >
         <div>
@@ -90,39 +186,82 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
         </Link>
       </div>
 
-      {/* Time-window stats */}
+      {/* Global date filter (drives stats, table, export) */}
+      <div className="oh-date-bar">
+        <div className="oh-date-bar-label">Date range</div>
+        <div className="oh-date-bar-controls">
+          <input
+            className="oh-input oh-date"
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            aria-label="From date"
+          />
+          <span className="oh-date-sep">to</span>
+          <input
+            className="oh-input oh-date"
+            type="date"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            aria-label="To date"
+          />
+          {hasRange && (
+            <button
+              type="button"
+              className="oh-btn ghost oh-clear-btn"
+              onClick={() => { setSince(''); setUntil(''); }}
+            >
+              <X size={13} /> Clear
+            </button>
+          )}
+        </div>
+        <div className="oh-date-bar-total">
+          <strong>{filteredTotal.count}</strong> meeting{filteredTotal.count === 1 ? '' : 's'}
+          <span style={{ color: 'var(--ink-3)' }}> · {filteredTotal.minutes} min</span>
+        </div>
+      </div>
+
+      {/* Activity windows — click to set the date range */}
       <h2 className="oh-h2">Activity windows</h2>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
-          gap: 14,
-          marginBottom: 40,
-        }}
-      >
-        <Stat label="Today" value={stats.day.count} sub={`${stats.day.minutes} min`} />
-        <Stat label="Last 7 days" value={stats.week.count} sub={`${stats.week.minutes} min`} />
-        <Stat
+      <div className="oh-activity-grid">
+        <Preset
+          label="Today"
+          stat={stats.day}
+          active={activePresetKey === 'today'}
+          onClick={() => applyPreset('today')}
+        />
+        <Preset
+          label="Last 7 days"
+          stat={stats.week}
+          active={activePresetKey === 'week'}
+          onClick={() => applyPreset('week')}
+        />
+        <Preset
           label="Last 30 days"
-          value={stats.month.count}
-          sub={`${stats.month.minutes} min`}
+          stat={stats.month}
+          active={activePresetKey === 'month'}
+          onClick={() => applyPreset('month')}
         />
-        <Stat
+        <Preset
           label="Last 90 days"
-          value={stats.ninety.count}
-          sub={`${stats.ninety.minutes} min`}
+          stat={stats.ninety}
+          active={activePresetKey === 'ninety'}
+          onClick={() => applyPreset('ninety')}
         />
-        <Stat
+        <Preset
           label="All time"
-          value={stats.total.count}
-          sub={`${stats.total.minutes} min`}
+          stat={stats.total}
+          active={activePresetKey === 'all'}
+          onClick={() => applyPreset('all')}
         />
       </div>
 
-      {/* Per-RM cards */}
-      {stats.per_rm.length > 0 && (
+      {/* Per-RM cards — reflect the current date filter */}
+      {perRm.length > 0 && (
         <>
-          <h2 className="oh-h2">Per RM</h2>
+          <h2 className="oh-h2" style={{ marginTop: 32 }}>
+            Per RM {hasRange && <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 400 }}>· filtered</span>}
+          </h2>
           <div
             style={{
               display: 'grid',
@@ -131,16 +270,14 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
               marginBottom: 40,
             }}
           >
-            {stats.per_rm
-              .sort((a, b) => new Date(b.last_meeting) - new Date(a.last_meeting))
+            {perRm
+              .sort((a, b) => new Date(b.last_meeting || 0) - new Date(a.last_meeting || 0))
               .map((r) => (
                 <div key={r.rm_id} className="oh-rm-card">
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="name">{r.rm_name || r.rm_email}</div>
                     <div className="email">
-                      {r.last_meeting
-                        ? `last: ${fmtDate(r.last_meeting)}`
-                        : 'no meetings yet'}
+                      {r.last_meeting ? `last: ${fmtDate(r.last_meeting)}` : 'no meetings in range'}
                     </div>
                   </div>
                   <div className="stats">
@@ -161,12 +298,13 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
 
       <h2 className="oh-h2">All meetings</h2>
       <MeetingsTable
-        meetings={meetings}
+        meetings={filteredMeetings}
         rms={rms}
         cities={cities}
         onOpen={openMeetingFull}
         showRMColumn={true}
         onExport={handleExport}
+        hideDateFilter={true}
       />
 
       {openMeeting && openDetail && (
@@ -186,12 +324,72 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
   );
 }
 
-function Stat({ label, value, sub }) {
+function Preset({ label, stat, active, onClick }) {
   return (
-    <div className="oh-card oh-stat">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`oh-card oh-stat oh-preset ${active ? 'active' : ''}`}
+    >
       <div className="l">{label}</div>
-      <div className="v">{value}</div>
-      {sub && <div className="sub">{sub}</div>}
-    </div>
+      <div className="v">{stat.count}</div>
+      <div className="sub">{stat.minutes} min</div>
+    </button>
   );
+}
+
+// ---------- Pure derivations ----------
+
+function computeWindowStats(meetings) {
+  const now = Date.now();
+  const day = now - 24 * 60 * 60 * 1000;
+  const week = now - 7 * 24 * 60 * 60 * 1000;
+  const month = now - 30 * 24 * 60 * 60 * 1000;
+  const ninety = now - 90 * 24 * 60 * 60 * 1000;
+
+  const acc = (cutoff) => {
+    let count = 0;
+    let secs = 0;
+    for (const m of meetings) {
+      const t = new Date(m.started_at).getTime();
+      if (cutoff === null || t >= cutoff) {
+        count += 1;
+        secs += m.duration_seconds || 0;
+      }
+    }
+    return { count, minutes: Math.round(secs / 60) };
+  };
+
+  return {
+    day: acc(day),
+    week: acc(week),
+    month: acc(month),
+    ninety: acc(ninety),
+    total: acc(null),
+  };
+}
+
+function computePerRm(meetings, rms) {
+  const byId = new Map();
+  for (const m of meetings) {
+    const key = m.rm_id;
+    if (!key) continue;
+    const row = byId.get(key) || {
+      rm_id: key,
+      rm_name: m.rm_name,
+      rm_email: m.rm_email,
+      count: 0,
+      secs: 0,
+      last_meeting: null,
+    };
+    row.count += 1;
+    row.secs += m.duration_seconds || 0;
+    const t = m.started_at;
+    if (!row.last_meeting || new Date(t) > new Date(row.last_meeting)) row.last_meeting = t;
+    byId.set(key, row);
+  }
+  return Array.from(byId.values()).map((r) => ({
+    ...r,
+    minutes: Math.round(r.secs / 60),
+  }));
 }

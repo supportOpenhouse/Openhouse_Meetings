@@ -41,6 +41,8 @@ export async function GET(request) {
 
   const rows = await listAllMeetings(filters);
 
+  // Columns mirror the Claude summary schema in lib/claude.js (DEFAULT_QUESTIONS) so
+  // every question becomes its own cell, plus a composed "Summary" cell for a quick read.
   const headers = [
     'Date Added',
     'Meeting Started',
@@ -53,9 +55,17 @@ export async function GET(request) {
     'Duration',
     'Duration (seconds)',
     'Language',
+    'Status',
     'Sentiment',
     'Summary',
-    'Questions',
+    'Key Topics',
+    'CP Requirements',
+    'Properties Discussed',
+    'Budget',
+    'Objections',
+    'Commitments',
+    'Next Action',
+    'Follow-up Date',
     'Transcript',
     'Audio URL',
     'Purpose',
@@ -64,15 +74,16 @@ export async function GET(request) {
   const csvRows = [headers.map(csvCell).join(',')];
 
   for (const m of rows) {
-    const summary = m.summary || {};
-    const questions = Array.isArray(summary.questions)
-      ? summary.questions.join(' | ')
-      : (typeof summary.questions === 'string' ? summary.questions : '');
-    const summaryText =
-      summary.tl_dr ||
-      summary.summary ||
-      summary.tldr ||
-      (typeof summary === 'string' ? summary : '');
+    const s = m.summary || {};
+
+    // Compose a human-readable "Summary" rollup from the meaty fields.
+    const summaryRollup = [
+      s.key_topics && `Topics: ${s.key_topics}`,
+      s.cp_requirements && `Needs: ${s.cp_requirements}`,
+      s.next_action && `Next: ${s.next_action}`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
     csvRows.push(
       [
@@ -87,9 +98,17 @@ export async function GET(request) {
         fmtDuration(m.duration_seconds || 0),
         m.duration_seconds || 0,
         m.language || '',
-        summary.sentiment || '',
-        summaryText,
-        questions,
+        m.status || '',
+        s.sentiment || '',
+        summaryRollup,
+        s.key_topics || '',
+        s.cp_requirements || '',
+        s.properties_discussed || '',
+        s.budget || '',
+        listOrString(s.objections),
+        listOrString(s.commitments),
+        s.next_action || '',
+        s.follow_up_date || '',
         m.transcript_text || '',
         m.audio_url || '',
         m.purpose || '',
@@ -121,6 +140,12 @@ function csvCell(v) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+function listOrString(v) {
+  if (Array.isArray(v)) return v.filter(Boolean).join(' | ');
+  if (v === null || v === undefined) return '';
+  return String(v);
 }
 
 function toIsoDate(d) {

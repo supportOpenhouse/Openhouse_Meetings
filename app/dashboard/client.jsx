@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mic } from 'lucide-react';
 import Link from 'next/link';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
 import Toast from '@/components/Toast';
+import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
 
 export default function RMDashboardClient({ initialMeetings, user }) {
   const [meetings, setMeetings] = useState(initialMeetings);
+  usePollWhileProcessing(meetings, setMeetings);
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openMeetingDetail, setOpenMeetingDetail] = useState(null);
   const [toast, setToast] = useState(null);

@@ -109,6 +109,8 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-pill.admin { background: var(--ink); color: var(--paper); }
 .oh-pill.rm { background: var(--success-soft); color: var(--success); }
 .oh-pill.inactive { background: var(--danger-soft); color: var(--danger); }
+.oh-pill.processing { background: var(--paper-2); color: var(--ink-2); border: 1px dashed var(--border-strong); }
+.oh-pill.failed { background: var(--danger-soft); color: var(--danger); }
 
 .oh-modal-bg { position: fixed; inset: 0; background: rgba(26,24,21,0.55); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .oh-modal { background: var(--bg); border-radius: 14px; max-width: 880px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
@@ -196,6 +198,72 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-date-sep { font-size: 12px; color: var(--ink-3); padding: 0 2px; }
 .oh-clear-btn { padding: 8px 12px; font-size: 12.5px; }
 .oh-filter-count { font-size: 12px; color: var(--ink-3); }
+
+/* ---------- Admin: global date filter bar + activity presets ---------- */
+.oh-date-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.oh-date-bar-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.oh-date-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.oh-date-bar-total {
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.oh-date-bar-total strong { font-weight: 600; }
+
+.oh-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.oh-preset {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.15s;
+}
+.oh-preset:hover {
+  background: var(--paper-2);
+  border-color: var(--border-strong);
+}
+.oh-preset.active {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.oh-preset.active .l,
+.oh-preset.active .sub { color: var(--paper); opacity: 0.7; }
+
+@media (max-width: 768px) {
+  .oh-date-bar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .oh-date-bar-total { text-align: right; }
+  .oh-activity-grid { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* ---------- Mobile-only chrome ---------- */
 .oh-mobile-top {

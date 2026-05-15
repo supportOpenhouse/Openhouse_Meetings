@@ -12,6 +12,8 @@ import {
   Phone,
   Download,
   X,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
 
@@ -24,6 +26,9 @@ export default function MeetingsTable({
   emptyAction,
   // When provided, renders an "Export to CSV" button that receives the active filter set.
   onExport,
+  // Admin owns the date range globally — hide the table's local date inputs so we
+  // don't have two competing filters on the same page.
+  hideDateFilter = false,
 }) {
   const [rmFilter, setRMFilter] = useState('all');
   const [cityFilter, setCityFilter] = useState('all');
@@ -161,21 +166,25 @@ export default function MeetingsTable({
             <option value="n/a">No sentiment</option>
           </select>
 
-          <input
-            className="oh-input oh-date"
-            type="date"
-            value={since}
-            onChange={(e) => setSince(e.target.value)}
-            aria-label="From date"
-          />
-          <span className="oh-date-sep">to</span>
-          <input
-            className="oh-input oh-date"
-            type="date"
-            value={until}
-            onChange={(e) => setUntil(e.target.value)}
-            aria-label="To date"
-          />
+          {!hideDateFilter && (
+            <>
+              <input
+                className="oh-input oh-date"
+                type="date"
+                value={since}
+                onChange={(e) => setSince(e.target.value)}
+                aria-label="From date"
+              />
+              <span className="oh-date-sep">to</span>
+              <input
+                className="oh-input oh-date"
+                type="date"
+                value={until}
+                onChange={(e) => setUntil(e.target.value)}
+                aria-label="To date"
+              />
+            </>
+          )}
 
           {hasActive && (
             <button type="button" className="oh-btn ghost oh-clear-btn" onClick={clearAll}>
@@ -238,8 +247,6 @@ export default function MeetingsTable({
 }
 
 function DesktopRow({ m, showRM, cols, onClick }) {
-  const sent = m.summary?.sentiment;
-  const { pillClass, SentIcon } = getSentVisuals(sent);
   return (
     <div
       className="oh-meeting-row"
@@ -264,10 +271,7 @@ function DesktopRow({ m, showRM, cols, onClick }) {
         {fmtDuration(m.duration_seconds)}
       </div>
       <div>
-        <span className={`oh-pill ${pillClass}`}>
-          <SentIcon size={11} />
-          {sent || 'n/a'}
-        </span>
+        <StatusOrSentimentPill meeting={m} />
       </div>
       <ChevronRight size={16} color="var(--ink-3)" />
     </div>
@@ -275,16 +279,11 @@ function DesktopRow({ m, showRM, cols, onClick }) {
 }
 
 function MobileCard({ m, showRM, onClick }) {
-  const sent = m.summary?.sentiment;
-  const { pillClass, SentIcon } = getSentVisuals(sent);
   return (
     <div className="oh-meeting-card" onClick={onClick}>
       <div className="top">
         <div className="code">{m.cp_code}</div>
-        <span className={`oh-pill ${pillClass}`}>
-          <SentIcon size={11} />
-          {sent || 'n/a'}
-        </span>
+        <StatusOrSentimentPill meeting={m} />
       </div>
       <div className="meta">
         <span>{fmtDate(m.started_at)}</span>
@@ -300,6 +299,34 @@ function MobileCard({ m, showRM, onClick }) {
         )}
       </div>
     </div>
+  );
+}
+
+// Single source of truth for the right-side pill: lifecycle state wins over sentiment
+// until the meeting reaches `ready`, then we show the Claude sentiment.
+function StatusOrSentimentPill({ meeting }) {
+  const status = meeting.status || 'ready';
+  if (status === 'processing') {
+    return (
+      <span className="oh-pill processing">
+        <Loader2 size={11} className="oh-spin" /> processing
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="oh-pill failed" title={meeting.error_message || 'Processing failed'}>
+        <AlertCircle size={11} /> failed
+      </span>
+    );
+  }
+  const sent = meeting.summary?.sentiment;
+  const { pillClass, SentIcon } = getSentVisuals(sent);
+  return (
+    <span className={`oh-pill ${pillClass}`}>
+      <SentIcon size={11} />
+      {sent || 'n/a'}
+    </span>
   );
 }
 

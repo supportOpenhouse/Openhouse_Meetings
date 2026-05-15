@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
+import { fmtDuration } from '@/lib/utils';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -29,7 +30,10 @@ const STALL_FAIL_MS = 45_000;
 
 export default function NewMeetingClient({ user }) {
   const router = useRouter();
-  const [step, setStep] = useState('form'); // form | record | process
+  const [step, setStep] = useState('form'); // form | record | review | process
+  // Holds the Recorder instance methods (pause/resume/finalize/discard).
+  const recorderRef = useRef(null);
+  const [reviewedDuration, setReviewedDuration] = useState(0);
   const [form, setForm] = useState({
     cp_code: '',
     cp_mobile: '',
@@ -100,6 +104,31 @@ export default function NewMeetingClient({ user }) {
     }
   }
 
+  // Called by Recorder when the user taps Pause — show the review screen.
+  function onRecorderPaused(elapsedSec) {
+    setReviewedDuration(elapsedSec);
+    setStep('review');
+  }
+
+  // Review screen actions
+  function resumeRecording() {
+    setStep('record');
+    // Defer to next tick so the Recorder element is mounted/visible before resume.
+    setTimeout(() => recorderRef.current?.resume(), 0);
+  }
+  function uploadFromReview() {
+    // recorder.finalize() emits onRecorded(blob, durSec).
+    recorderRef.current?.finalize();
+  }
+  function discardRecording() {
+    if (!confirm('Discard this recording? You will need to start over.')) return;
+    recorderRef.current?.discard();
+    setRecordedBlob(null);
+    setRecordedDuration(0);
+    setStep('form');
+  }
+
+  // After finalize() the Recorder fires this with the actual webm blob.
   async function onRecorded(blob, durSec) {
     setRecordedBlob(blob);
     setRecordedDuration(durSec);
@@ -109,7 +138,7 @@ export default function NewMeetingClient({ user }) {
   async function runUpload(blob, durSec) {
     abortedRef.current = false;
     setStep('process');
-    setStage({ uploading: 'active', transcribing: 'pending', summarizing: 'pending' });
+    setStage({ uploading: 'active' });
     setUploadPct(0);
     setUploadStatus('starting');
     setError(null);
@@ -162,9 +191,10 @@ export default function NewMeetingClient({ user }) {
       if (abortedRef.current) return;
       clearWatchdog();
 
-      setStage((s) => ({ ...s, uploading: 'done', transcribing: 'active' }));
+      setStage({ uploading: 'done' });
 
-      const res = await fetch('/api/process-meeting', {
+      // 1. Persist a stub meeting row (status='processing'). Fast — just an INSERT.
+      const createRes = await fetch('/api/meetings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -178,15 +208,28 @@ export default function NewMeetingClient({ user }) {
           started_at: new Date(startedAt).toISOString(),
         }),
       });
+      if (!createRes.ok) {
+        const errData = await createRes.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned ${createRes.status}`);
+      }
+      const { id: meetingId } = await createRes.json();
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Server returned ${res.status}`);
+      // 2. Fire-and-forget the heavy processing. keepalive:true ensures the request
+      // survives the navigation we're about to do. We don't await — the user is free.
+      try {
+        fetch(`/api/meetings/${meetingId}/process`, {
+          method: 'POST',
+          keepalive: true,
+        });
+      } catch {
+        // Even if the fetch synchronously throws, the row exists and an admin can retry.
       }
 
-      setStage({ uploading: 'done', transcribing: 'done', summarizing: 'done' });
-      showToast('Meeting saved', 'success');
-      setTimeout(() => router.push('/dashboard'), 600);
+      showToast('Recording saved — processing in background', 'success');
+      router.push('/dashboard');
+      // Force a fresh server fetch so the new row (still status='processing') is in
+      // the cached Router data before polling takes over.
+      router.refresh();
     } catch (e) {
       if (abortedRef.current) return;
       clearWatchdog();
@@ -311,7 +354,7 @@ export default function NewMeetingClient({ user }) {
                 </label>
                 <input
                   className="oh-input"
-                  placeholder="e.g. CP-1284"
+                  placeholder="e.g. CP00670"
                   value={form.cp_code}
                   onChange={(e) => onCpCodeChange(e.target.value)}
                   autoComplete="off"
@@ -390,16 +433,16 @@ export default function NewMeetingClient({ user }) {
         </>
       )}
 
-      {step === 'record' && (
+      {(step === 'record' || step === 'review') && (
         <>
           <div className="oh-eyebrow">Step 2 of 2</div>
           <h1 className="oh-h1">
-            Recording <em>in progress</em>
+            {step === 'record' ? <>Recording <em>in progress</em></> : <>Recording <em>paused</em></>}
           </h1>
           <p className="oh-sub">
-            Speak normally. Tap the mic when you're done — we'll upload and process the audio
-            automatically. Long meetings (up to 60 min) are supported; keep this tab open until
-            processing finishes.
+            {step === 'record'
+              ? "Speak normally. Tap pause when you want to review or finish."
+              : "Review or continue recording. When you upload, you’ll be sent to the dashboard and processing finishes in the background."}
           </p>
 
           <div className="oh-meta-row">
@@ -414,16 +457,47 @@ export default function NewMeetingClient({ user }) {
             </div>
           </div>
 
-          <Recorder onDone={onRecorded} onCancel={() => setStep('form')} />
+          <div style={{ display: step === 'record' ? 'block' : 'none' }}>
+            <Recorder
+              ref={recorderRef}
+              onPause={onRecorderPaused}
+              onDone={onRecorded}
+              onCancel={() => setStep('form')}
+            />
+          </div>
+
+          {step === 'review' && (
+            <div className="oh-review-card">
+              <div className="oh-review-time">
+                <span className="oh-eyebrow">Recorded</span>
+                <div className="oh-mono">{fmtDuration(reviewedDuration)}</div>
+              </div>
+              <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginTop: 0 }}>
+                Continue if you have more to capture, or upload to finish. Discard throws this
+                recording away.
+              </p>
+              <div className="oh-review-actions">
+                <button className="oh-btn accent" onClick={uploadFromReview}>
+                  Upload
+                </button>
+                <button className="oh-btn" onClick={resumeRecording}>
+                  Continue recording
+                </button>
+                <button className="oh-btn ghost danger" onClick={discardRecording}>
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
       {step === 'process' && (
         <>
-          <h1 className="oh-h1">Processing…</h1>
+          <h1 className="oh-h1">Uploading…</h1>
           <p className="oh-sub">
-            Upload + transcription + summary typically takes 1–4 minutes for a 60-min recording.
-            Keep this tab open.
+            Once the upload finishes, you'll be sent to the dashboard and the rest
+            (transcription + summary) happens in the background.
           </p>
 
           <div className="oh-card" style={{ padding: '20px 24px', marginTop: 16 }}>
@@ -432,11 +506,6 @@ export default function NewMeetingClient({ user }) {
               state={stage.uploading}
               warn={uploadStatus === 'stalled'}
             />
-            <ProgressStep
-              label="Transcribing with ElevenLabs Scribe v2"
-              state={stage.transcribing}
-            />
-            <ProgressStep label="Generating summary with Claude" state={stage.summarizing} />
           </div>
 
           {uploadStatus === 'stalled' && !error && (
@@ -599,6 +668,31 @@ export default function NewMeetingClient({ user }) {
           opacity: 0.6;
         }
         .oh-cp-clear:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+        .oh-review-card {
+          margin-top: 20px;
+          background: var(--paper);
+          border: 1px solid var(--border-strong);
+          border-radius: 14px;
+          padding: 22px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .oh-review-time {
+          display: flex;
+          align-items: baseline;
+          gap: 12px;
+        }
+        .oh-review-time .oh-mono { font-size: 28px; font-weight: 500; letter-spacing: -0.01em; }
+        .oh-review-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        @media (max-width: 768px) {
+          .oh-review-actions { flex-direction: column-reverse; }
+          .oh-review-actions :global(.oh-btn) { width: 100%; }
+        }
         @media (max-width: 768px) {
           .oh-form-row-2 { grid-template-columns: 1fr; gap: 16px; }
           .oh-form-actions {
