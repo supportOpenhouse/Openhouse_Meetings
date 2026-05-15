@@ -15,7 +15,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react';
-import { fmtDate, fmtDuration } from '@/lib/utils';
+import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
 export default function MeetingsTable({
   meetings,
@@ -67,8 +67,12 @@ export default function MeetingsTable({
 
     if (search) {
       const s = search.toLowerCase();
+      // CP code match is special: case-insensitive AND space/hyphen-agnostic,
+      // so "cp 1284" / "CP-1284" / "cp1284" all match the same row.
+      const sCpCode = normalizeCpCode(search);
+      const rowCpCode = normalizeCpCode(m.cp_code || '');
       if (
-        !m.cp_code?.toLowerCase().includes(s) &&
+        !(sCpCode && rowCpCode.includes(sCpCode)) &&
         !m.cp_mobile?.includes(s) &&
         !(m.cp_name || '').toLowerCase().includes(s) &&
         !(m.cp_city || '').toLowerCase().includes(s) &&

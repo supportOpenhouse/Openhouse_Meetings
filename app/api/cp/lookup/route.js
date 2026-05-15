@@ -8,6 +8,7 @@ import {
   cities,
   normalizePhone,
 } from '@/lib/cpDb';
+import { normalizeCpCode } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
@@ -45,6 +46,8 @@ export async function GET(request) {
   try {
     let row;
     if (cpCode) {
+      // Case-insensitive, space- and hyphen-agnostic match: "CP-1284" === "cp 1284" === "cp1284".
+      const canonical = normalizeCpCode(cpCode);
       const [r] = await cpDb
         .select({
           cp_code: channelPartners.cp_code,
@@ -56,7 +59,7 @@ export async function GET(request) {
         })
         .from(channelPartners)
         .leftJoin(cities, eq(cities.id, channelPartners.city_id))
-        .where(eq(channelPartners.cp_code, cpCode))
+        .where(sql`lower(regexp_replace(${channelPartners.cp_code}, '[\\s-]+', '', 'g')) = ${canonical}`)
         .limit(1);
       row = r;
     } else {
