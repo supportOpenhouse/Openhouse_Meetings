@@ -169,6 +169,13 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-google-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; background: #fff; color: #1A1815; border: 1px solid var(--border-strong); width: 100%; justify-content: center; transition: all 0.15s; }
 .oh-google-btn:hover { background: var(--paper-2); }
 
+/* ---------- Meetings table filters (search + RM select) ---------- */
+.oh-table-filters { display: flex; gap: 10px; margin-bottom: 14px; align-items: stretch; }
+.oh-table-filters .oh-search { position: relative; flex: 1; max-width: 320px; }
+.oh-table-filters .oh-search .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; display: flex; }
+.oh-table-filters .oh-search input { width: 100%; padding-left: 36px; }
+.oh-table-filters select { min-width: 180px; }
+
 /* ---------- Mobile-only chrome ---------- */
 .oh-mobile-top {
   display: none;
@@ -288,6 +295,11 @@ html { -webkit-text-size-adjust: 100%; }
 
   /* Toast docks above the bottom nav */
   .oh-toast { right: 16px; left: 16px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: none; }
+
+  /* Stack table filters */
+  .oh-table-filters { flex-direction: column; gap: 8px; }
+  .oh-table-filters .oh-search { max-width: none; }
+  .oh-table-filters select { min-width: 0; width: 100%; }
 
   /* Speaker text slightly bigger for readability */
   .oh-speaker .text { font-size: 14.5px; }

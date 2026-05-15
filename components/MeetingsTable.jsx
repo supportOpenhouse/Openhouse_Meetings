@@ -43,8 +43,10 @@ export default function MeetingsTable({
   return (
     <div>
       <div className="oh-table-filters">
-        <div className="search">
-          <Search size={14} className="icon" />
+        <div className="oh-search">
+          <span className="icon">
+            <Search size={14} />
+          </span>
           <input
             className="oh-input"
             placeholder="Search CP code, mobile, or RM…"
@@ -112,40 +114,6 @@ export default function MeetingsTable({
         </div>
       )}
 
-      <style jsx>{`
-        .oh-table-filters {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 14px;
-        }
-        .oh-table-filters .search {
-          position: relative;
-          flex: 1;
-          max-width: 320px;
-        }
-        .oh-table-filters .search .icon {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--ink-3);
-          pointer-events: none;
-        }
-        .oh-table-filters .search :global(.oh-input) {
-          padding-left: 34px;
-          width: 100%;
-        }
-        .oh-table-filters :global(.oh-select) { min-width: 180px; }
-
-        @media (max-width: 768px) {
-          .oh-table-filters {
-            flex-direction: column;
-            gap: 8px;
-          }
-          .oh-table-filters .search { max-width: none; }
-          .oh-table-filters :global(.oh-select) { min-width: 0; width: 100%; }
-        }
-      `}</style>
     </div>
   );
 }
