@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   X,
   Phone,
@@ -21,74 +21,59 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
   const turns = buildSpeakerTurns(meeting.transcript_words || []);
   const fallbackText = !turns.length ? meeting.transcript_text || '' : '';
 
+  // Prevent body scroll while open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <div className="oh-modal-bg" onClick={onClose}>
       <div className="oh-modal" onClick={(e) => e.stopPropagation()}>
         <div className="oh-modal-header">
-          <div>
-            <div className="oh-eyebrow">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="oh-eyebrow oh-truncate">
               {meeting.rm_name || meeting.rm_email} · {fmtDate(meeting.started_at)}
             </div>
-            <h2
-              className="oh-serif"
-              style={{ fontSize: 28, margin: '4px 0 6px', letterSpacing: '-0.01em' }}
-            >
-              CP <span className="oh-mono" style={{ fontSize: 22 }}>{meeting.cp_code}</span>
+            <h2 className="oh-detail-title">
+              CP <span className="oh-mono">{meeting.cp_code}</span>
             </h2>
-            <div style={{ display: 'flex', gap: 18, fontSize: 13, color: 'var(--ink-2)' }}>
-              <span>
-                <Phone size={12} style={{ display: 'inline', verticalAlign: 'middle' }} />{' '}
-                {meeting.cp_mobile}
-              </span>
-              <span>
-                <Clock size={12} style={{ display: 'inline', verticalAlign: 'middle' }} />{' '}
-                {fmtDuration(meeting.duration_seconds)}
-              </span>
+            <div className="oh-detail-meta">
+              <span><Phone size={12} /> {meeting.cp_mobile}</span>
+              <span><Clock size={12} /> {fmtDuration(meeting.duration_seconds)}</span>
               {meeting.language && <span>· {meeting.language}</span>}
             </div>
           </div>
-          <button className="oh-btn ghost" style={{ padding: 8 }} onClick={onClose}>
+          <button
+            className="oh-btn ghost oh-close-btn"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X size={16} />
           </button>
         </div>
 
         <div className="oh-modal-body">
           {meeting.purpose && (
-            <div
-              style={{
-                background: 'var(--paper-2)',
-                padding: '12px 14px',
-                borderRadius: 8,
-                marginBottom: 20,
-                fontSize: 13.5,
-                color: 'var(--ink-2)',
-              }}
-            >
-              <strong style={{ color: 'var(--ink)' }}>Purpose:</strong> {meeting.purpose}
+            <div className="oh-purpose">
+              <strong>Purpose:</strong> {meeting.purpose}
             </div>
           )}
 
           {meeting.audio_url && (
             <div style={{ marginBottom: 24 }}>
               <div className="oh-eyebrow" style={{ marginBottom: 8 }}>
-                <Volume2
-                  size={11}
-                  style={{ display: 'inline', marginRight: 4 }}
-                />
+                <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
                 Recording
               </div>
               <audio controls src={meeting.audio_url} style={{ width: '100%' }} />
             </div>
           )}
 
-          <div
-            style={{
-              display: 'flex',
-              gap: 4,
-              marginBottom: 18,
-              borderBottom: '1px solid var(--border)',
-            }}
-          >
+          <div className="oh-tabs">
             <TabBtn active={tab === 'summary'} onClick={() => setTab('summary')}>
               <Sparkles size={13} /> Smart summary
             </TabBtn>
@@ -104,9 +89,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
                 turns.map((t, i) => (
                   <div
                     key={i}
-                    className={`oh-speaker s${
-                      parseInt(t.speaker.replace(/\D/g, '')) % 3
-                    }`}
+                    className={`oh-speaker s${parseInt(t.speaker.replace(/\D/g, '')) % 3}`}
                   >
                     <div className="who">{t.speaker.replace('speaker_', 'Speaker ')}</div>
                     <div className="text">{t.text}</div>
@@ -127,7 +110,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
           {canDelete && (
             <>
               <div className="oh-divider" />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div className="oh-delete-row">
                 <button className="oh-btn danger" onClick={onDelete}>
                   <Trash2 size={13} /> Delete meeting
                 </button>
@@ -136,6 +119,59 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        .oh-detail-title {
+          font-family: 'Instrument Serif', serif;
+          font-size: 28px;
+          letter-spacing: -0.01em;
+          margin: 4px 0 6px;
+        }
+        .oh-detail-title :global(.oh-mono) { font-size: 22px; }
+        .oh-detail-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 18px;
+          font-size: 13px;
+          color: var(--ink-2);
+        }
+        .oh-detail-meta span {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .oh-close-btn { padding: 8px; flex-shrink: 0; }
+        .oh-truncate {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .oh-purpose {
+          background: var(--paper-2);
+          padding: 12px 14px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          font-size: 13.5px;
+          color: var(--ink-2);
+        }
+        .oh-purpose strong { color: var(--ink); }
+        .oh-tabs {
+          display: flex;
+          gap: 4px;
+          margin-bottom: 18px;
+          border-bottom: 1px solid var(--border);
+        }
+        .oh-delete-row {
+          display: flex;
+          justify-content: flex-end;
+        }
+        @media (max-width: 768px) {
+          .oh-detail-title { font-size: 22px; }
+          .oh-detail-title :global(.oh-mono) { font-size: 18px; }
+          .oh-delete-row { justify-content: stretch; }
+          .oh-delete-row :global(.oh-btn) { width: 100%; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -144,21 +180,32 @@ function TabBtn({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      style={{
-        all: 'unset',
-        cursor: 'pointer',
-        padding: '10px 16px',
-        fontSize: 13.5,
-        color: active ? 'var(--ink)' : 'var(--ink-2)',
-        borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
-        marginBottom: -1,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        fontWeight: active ? 500 : 400,
-      }}
+      className={`oh-tab-btn ${active ? 'active' : ''}`}
     >
       {children}
+      <style jsx>{`
+        .oh-tab-btn {
+          all: unset;
+          cursor: pointer;
+          padding: 12px 16px;
+          font-size: 13.5px;
+          color: var(--ink-2);
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          transition: color 0.15s;
+        }
+        .oh-tab-btn.active {
+          color: var(--ink);
+          border-bottom-color: var(--accent);
+          font-weight: 500;
+        }
+        @media (max-width: 768px) {
+          .oh-tab-btn { padding: 14px 12px; font-size: 14px; flex: 1; justify-content: center; }
+        }
+      `}</style>
     </button>
   );
 }

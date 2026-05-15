@@ -8,11 +8,10 @@ import {
   TrendingUp,
   Snowflake,
   Minus,
-  Plus,
-  Mic,
+  Clock,
+  Phone,
 } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
-import Link from 'next/link';
 
 export default function MeetingsTable({
   meetings,
@@ -39,23 +38,15 @@ export default function MeetingsTable({
     return true;
   });
 
+  const cols = showRMColumn ? '1.4fr 1fr 1fr 0.8fr 0.8fr auto' : '1.4fr 1fr 1fr 0.8fr auto';
+
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-          <Search
-            size={14}
-            style={{
-              position: 'absolute',
-              left: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--ink-3)',
-            }}
-          />
+      <div className="oh-table-filters">
+        <div className="search">
+          <Search size={14} className="icon" />
           <input
             className="oh-input"
-            style={{ paddingLeft: 34, width: '100%' }}
             placeholder="Search CP code, mobile, or RM…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -66,7 +57,6 @@ export default function MeetingsTable({
             className="oh-select"
             value={rmFilter}
             onChange={(e) => setRMFilter(e.target.value)}
-            style={{ minWidth: 180 }}
           >
             <option value="all">All RMs</option>
             {rms.map((r) => (
@@ -87,12 +77,12 @@ export default function MeetingsTable({
         </div>
       ) : (
         <div className="oh-card" style={{ overflow: 'hidden' }}>
+          {/* Desktop column header */}
           <div
+            className="oh-meeting-header"
             style={{
               display: 'grid',
-              gridTemplateColumns: showRMColumn
-                ? '1.4fr 1fr 1fr 0.8fr 0.8fr auto'
-                : '1.4fr 1fr 1fr 0.8fr auto',
+              gridTemplateColumns: cols,
               gap: 16,
               padding: '12px 18px',
               borderBottom: '1px solid var(--border)',
@@ -110,34 +100,64 @@ export default function MeetingsTable({
             <div>Sentiment</div>
             <div></div>
           </div>
+
           {filtered.map((m) => (
-            <MeetingRow
-              key={m.id}
-              m={m}
-              onClick={() => onOpen(m)}
-              showRM={showRMColumn}
-            />
+            <div key={m.id}>
+              {/* Desktop grid row */}
+              <DesktopRow m={m} showRM={showRMColumn} cols={cols} onClick={() => onOpen(m)} />
+              {/* Mobile card */}
+              <MobileCard m={m} showRM={showRMColumn} onClick={() => onOpen(m)} />
+            </div>
           ))}
         </div>
       )}
+
+      <style jsx>{`
+        .oh-table-filters {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+        .oh-table-filters .search {
+          position: relative;
+          flex: 1;
+          max-width: 320px;
+        }
+        .oh-table-filters .search .icon {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--ink-3);
+          pointer-events: none;
+        }
+        .oh-table-filters .search :global(.oh-input) {
+          padding-left: 34px;
+          width: 100%;
+        }
+        .oh-table-filters :global(.oh-select) { min-width: 180px; }
+
+        @media (max-width: 768px) {
+          .oh-table-filters {
+            flex-direction: column;
+            gap: 8px;
+          }
+          .oh-table-filters .search { max-width: none; }
+          .oh-table-filters :global(.oh-select) { min-width: 0; width: 100%; }
+        }
+      `}</style>
     </div>
   );
 }
 
-function MeetingRow({ m, onClick, showRM }) {
+function DesktopRow({ m, showRM, cols, onClick }) {
   const sent = m.summary?.sentiment;
-  const pillClass =
-    sent === 'hot' ? 'hot' : sent === 'warm' ? 'warm' : sent === 'cold' ? 'cold' : 'neutral';
-  const SentIcon =
-    sent === 'hot' ? Flame : sent === 'warm' ? TrendingUp : sent === 'cold' ? Snowflake : Minus;
-
+  const { pillClass, SentIcon } = getSentVisuals(sent);
   return (
     <div
       className="oh-meeting-row"
       onClick={onClick}
-      style={{
-        gridTemplateColumns: showRM ? '1.4fr 1fr 1fr 0.8fr 0.8fr auto' : '1.4fr 1fr 1fr 0.8fr auto',
-      }}
+      style={{ gridTemplateColumns: cols }}
     >
       <div>
         <div style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
@@ -148,9 +168,7 @@ function MeetingRow({ m, onClick, showRM }) {
         </div>
       </div>
       {showRM && (
-        <div style={{ fontSize: 13.5 }}>
-          {m.rm_name || m.rm_email || '—'}
-        </div>
+        <div style={{ fontSize: 13.5 }}>{m.rm_name || m.rm_email || '—'}</div>
       )}
       <div className="oh-mono" style={{ fontSize: 13 }}>
         {m.cp_mobile}
@@ -167,4 +185,41 @@ function MeetingRow({ m, onClick, showRM }) {
       <ChevronRight size={16} color="var(--ink-3)" />
     </div>
   );
+}
+
+function MobileCard({ m, showRM, onClick }) {
+  const sent = m.summary?.sentiment;
+  const { pillClass, SentIcon } = getSentVisuals(sent);
+  return (
+    <div className="oh-meeting-card" onClick={onClick}>
+      <div className="top">
+        <div className="code">{m.cp_code}</div>
+        <span className={`oh-pill ${pillClass}`}>
+          <SentIcon size={11} />
+          {sent || 'n/a'}
+        </span>
+      </div>
+      <div className="meta">
+        <span>{fmtDate(m.started_at)}</span>
+        <span className="dot">·</span>
+        <span><Phone size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.cp_mobile}</span>
+        <span className="dot">·</span>
+        <span><Clock size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{fmtDuration(m.duration_seconds)}</span>
+        {showRM && (m.rm_name || m.rm_email) && (
+          <>
+            <span className="dot">·</span>
+            <span>{m.rm_name || m.rm_email}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function getSentVisuals(sent) {
+  const pillClass =
+    sent === 'hot' ? 'hot' : sent === 'warm' ? 'warm' : sent === 'cold' ? 'cold' : 'neutral';
+  const SentIcon =
+    sent === 'hot' ? Flame : sent === 'warm' ? TrendingUp : sent === 'cold' ? Snowflake : Minus;
+  return { pillClass, SentIcon };
 }

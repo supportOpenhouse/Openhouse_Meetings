@@ -20,7 +20,6 @@ export default function RMDashboardClient({ initialMeetings, user }) {
 
   async function openMeetingFull(m) {
     setOpenMeeting(m);
-    // fetch full record (transcript_words is heavy, kept out of list)
     try {
       const res = await fetch(`/api/meetings/${m.id}`);
       const data = await res.json();
@@ -59,33 +58,22 @@ export default function RMDashboardClient({ initialMeetings, user }) {
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          marginBottom: 36,
-        }}
-      >
+      <div className="oh-dashboard-header">
         <div>
           <div className="oh-eyebrow">Openhouse · {user.name}</div>
           <h1 className="oh-h1">
             My <em>meetings</em>
           </h1>
         </div>
-        <Link href="/new-meeting" className="oh-btn accent">
+        <Link
+          href="/new-meeting"
+          className="oh-btn accent oh-desktop-only"
+        >
           <Mic size={15} /> Start new meeting
         </Link>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-          marginBottom: 40,
-        }}
-      >
+      <div className="oh-stats-grid">
         <Stat label="Total meetings" value={meetings.length} />
         <Stat label="Today" value={todayCount} />
         <Stat label="This week" value={weekCount} />
@@ -117,6 +105,26 @@ export default function RMDashboardClient({ initialMeetings, user }) {
       )}
 
       <Toast toast={toast} />
+
+      <style jsx>{`
+        .oh-dashboard-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          gap: 16px;
+          margin-bottom: 36px;
+          flex-wrap: wrap;
+        }
+        .oh-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 12px;
+          margin-bottom: 32px;
+        }
+        @media (max-width: 768px) {
+          .oh-dashboard-header { margin-bottom: 24px; }
+        }
+      `}</style>
     </div>
   );
 }
