@@ -1,4 +1,5 @@
 import { handleUpload } from '@vercel/blob/client';
+import { put as blobPut, del as blobDel } from '@vercel/blob';
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
@@ -17,13 +18,61 @@ function tokenFingerprint(token) {
 
 // Preflight: lets the client confirm the server has a token wired up
 // before recording, so we fail fast with a clear message instead of stalling at 0%.
-export async function GET() {
+// Also supports ?selftest=1 to perform a tiny server-side put() — this bypasses the
+// browser CORS shield, so the actual error from Vercel Blob is captured in our logs.
+export async function GET(request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   const fp = tokenFingerprint(token);
+
+  const url = new URL(request.url);
+  if (url.searchParams.get('selftest') === '1') {
+    if (!token) {
+      return NextResponse.json({ ok: false, error: 'No token configured' }, { status: 500 });
+    }
+    const probePath = `meetings/${session.user.id}/_probe-${Date.now()}.txt`;
+    try {
+      const res = await blobPut(probePath, 'ok', {
+        access: 'public',
+        token,
+        contentType: 'text/plain',
+        addRandomSuffix: false,
+      });
+      // Clean up immediately so we don't litter the store.
+      try {
+        await blobDel(res.url, { token });
+      } catch (e) {
+        console.warn('[upload-url] selftest cleanup failed', e?.message);
+      }
+      console.log('[upload-url] selftest OK', { storeHint: fp?.storeHint, url: res.url });
+      return NextResponse.json({
+        ok: true,
+        selftest: 'passed',
+        token: fp,
+        probedUrl: res.url,
+      });
+    } catch (e) {
+      console.error('[upload-url] selftest FAILED', {
+        message: e?.message,
+        name: e?.name,
+        cause: e?.cause?.message,
+        storeHint: fp?.storeHint,
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          selftest: 'failed',
+          token: fp,
+          error: e?.message || 'put() failed',
+        },
+        { status: 500 }
+      );
+    }
+  }
+
   return NextResponse.json({
     ok: !!token,
     token: fp,
