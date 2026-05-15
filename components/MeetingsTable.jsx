@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Search,
   ChevronRight,
@@ -10,26 +10,63 @@ import {
   Minus,
   Clock,
   Phone,
+  Download,
+  X,
 } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
 
 export default function MeetingsTable({
   meetings,
   rms,
+  cities = [],
   onOpen,
   showRMColumn = true,
   emptyAction,
+  // When provided, renders an "Export to CSV" button that receives the active filter set.
+  onExport,
 }) {
   const [rmFilter, setRMFilter] = useState('all');
+  const [cityFilter, setCityFilter] = useState('all');
+  const [sentimentFilter, setSentimentFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
+
+  // Derive cities from meetings if the caller didn't pass an authoritative list.
+  const cityOptions = useMemo(() => {
+    if (cities && cities.length) return cities;
+    const set = new Set();
+    for (const m of meetings) if (m.cp_city) set.add(m.cp_city);
+    return Array.from(set).sort();
+  }, [cities, meetings]);
+
+  const filters = { rmFilter, cityFilter, sentimentFilter, search, since, until };
 
   const filtered = meetings.filter((m) => {
     if (rmFilter !== 'all' && m.rm_id !== rmFilter) return false;
+    if (cityFilter !== 'all' && m.cp_city !== cityFilter) return false;
+    if (sentimentFilter !== 'all' && (m.summary?.sentiment || 'n/a') !== sentimentFilter) return false;
+
+    if (since) {
+      const d = new Date(since);
+      if (!isNaN(d) && new Date(m.started_at) < d) return false;
+    }
+    if (until) {
+      // Treat "until" as inclusive end-of-day.
+      const d = new Date(until);
+      if (!isNaN(d)) {
+        const end = new Date(d.getTime() + 24 * 60 * 60 * 1000 - 1);
+        if (new Date(m.started_at) > end) return false;
+      }
+    }
+
     if (search) {
       const s = search.toLowerCase();
       if (
         !m.cp_code?.toLowerCase().includes(s) &&
         !m.cp_mobile?.includes(s) &&
+        !(m.cp_name || '').toLowerCase().includes(s) &&
+        !(m.cp_city || '').toLowerCase().includes(s) &&
         !(m.rm_name || '').toLowerCase().includes(s) &&
         !(m.rm_email || '').toLowerCase().includes(s)
       )
@@ -38,36 +75,118 @@ export default function MeetingsTable({
     return true;
   });
 
+  const hasActive = rmFilter !== 'all' || cityFilter !== 'all' || sentimentFilter !== 'all' || search || since || until;
+
+  function clearAll() {
+    setRMFilter('all');
+    setCityFilter('all');
+    setSentimentFilter('all');
+    setSearch('');
+    setSince('');
+    setUntil('');
+  }
+
   const cols = showRMColumn ? '1.4fr 1fr 1fr 0.8fr 0.8fr auto' : '1.4fr 1fr 1fr 0.8fr auto';
 
   return (
     <div>
-      <div className="oh-table-filters">
-        <div className="oh-search">
-          <span className="icon">
-            <Search size={14} />
-          </span>
-          <input
-            className="oh-input"
-            placeholder="Search CP code, mobile, or RM…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="oh-filters-wrap">
+        <div className="oh-table-filters">
+          <div className="oh-search">
+            <span className="icon">
+              <Search size={14} />
+            </span>
+            <input
+              className="oh-input"
+              placeholder="Search CP code, name, mobile, city, or RM…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {onExport && (
+            <button
+              type="button"
+              className="oh-btn ghost"
+              onClick={() => onExport(filters)}
+              title="Download a CSV of the currently filtered meetings (opens in Excel)."
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          )}
         </div>
-        {showRMColumn && rms && rms.length > 0 && (
+
+        <div className="oh-filter-row">
+          {showRMColumn && rms && rms.length > 0 && (
+            <select
+              className="oh-select"
+              value={rmFilter}
+              onChange={(e) => setRMFilter(e.target.value)}
+              aria-label="Filter by RM"
+            >
+              <option value="all">All RMs</option>
+              {rms.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name || r.email}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {cityOptions.length > 0 && (
+            <select
+              className="oh-select"
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              aria-label="Filter by city"
+            >
+              <option value="all">All cities</option>
+              {cityOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+
           <select
             className="oh-select"
-            value={rmFilter}
-            onChange={(e) => setRMFilter(e.target.value)}
+            value={sentimentFilter}
+            onChange={(e) => setSentimentFilter(e.target.value)}
+            aria-label="Filter by sentiment"
           >
-            <option value="all">All RMs</option>
-            {rms.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name || r.email}
-              </option>
-            ))}
+            <option value="all">All sentiments</option>
+            <option value="hot">Hot</option>
+            <option value="warm">Warm</option>
+            <option value="cold">Cold</option>
+            <option value="n/a">No sentiment</option>
           </select>
-        )}
+
+          <input
+            className="oh-input oh-date"
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            aria-label="From date"
+          />
+          <span className="oh-date-sep">to</span>
+          <input
+            className="oh-input oh-date"
+            type="date"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            aria-label="To date"
+          />
+
+          {hasActive && (
+            <button type="button" className="oh-btn ghost oh-clear-btn" onClick={clearAll}>
+              <X size={13} /> Clear
+            </button>
+          )}
+        </div>
+
+        <div className="oh-filter-count">
+          Showing <strong>{filtered.length}</strong> of {meetings.length} meetings
+        </div>
       </div>
 
       {filtered.length === 0 ? (

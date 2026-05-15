@@ -8,7 +8,7 @@ import MeetingDetail from '@/components/MeetingDetail';
 import Toast from '@/components/Toast';
 import { fmtDate } from '@/lib/utils';
 
-export default function AdminOverviewClient({ initialStats, initialMeetings, rms }) {
+export default function AdminOverviewClient({ initialStats, initialMeetings, rms, cities = [] }) {
   const [stats] = useState(initialStats);
   const [meetings, setMeetings] = useState(initialMeetings);
   const [openMeeting, setOpenMeeting] = useState(null);
@@ -29,6 +29,29 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
     } catch (e) {
       showToast('Could not load meeting', 'error');
     }
+  }
+
+  function handleExport(filters) {
+    // Mirror the in-page filters into the CSV export so the downloaded file
+    // matches what the admin currently sees on screen.
+    const params = new URLSearchParams();
+    if (filters.rmFilter && filters.rmFilter !== 'all') params.set('rm', filters.rmFilter);
+    if (filters.cityFilter && filters.cityFilter !== 'all') params.set('city', filters.cityFilter);
+    if (filters.search) params.set('search', filters.search);
+    if (filters.since) params.set('start', filters.since);
+    if (filters.until) {
+      const u = new Date(filters.until);
+      if (!isNaN(u)) {
+        // Inclusive end-of-day, mirroring MeetingsTable's behavior.
+        u.setHours(23, 59, 59, 999);
+        params.set('end', u.toISOString());
+      }
+    }
+    // Note: sentiment lives inside summary jsonb — we skip server-side filtering for it
+    // to keep the query simple. The visible-on-screen filter still applies in the UI.
+
+    const url = `/api/admin/export?${params.toString()}`;
+    window.location.href = url;
   }
 
   async function handleDelete() {
@@ -140,8 +163,10 @@ export default function AdminOverviewClient({ initialStats, initialMeetings, rms
       <MeetingsTable
         meetings={meetings}
         rms={rms}
+        cities={cities}
         onOpen={openMeetingFull}
         showRMColumn={true}
+        onExport={handleExport}
       />
 
       {openMeeting && openDetail && (

@@ -40,6 +40,7 @@ export const meetings = pgTable(
     cp_code: text('cp_code').notNull(),
     cp_mobile: text('cp_mobile').notNull(),
     cp_name: text('cp_name'),
+    cp_city: text('cp_city'),
     purpose: text('purpose'),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),

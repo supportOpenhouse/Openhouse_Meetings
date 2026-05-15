@@ -2,6 +2,8 @@
 
 * { box-sizing: border-box; }
 html, body { padding: 0; margin: 0; }
+/* Stops any stray element from pushing the page wider than the viewport — iOS Safari is unforgiving here. */
+html, body { overflow-x: hidden; max-width: 100%; }
 html { -webkit-text-size-adjust: 100%; }
 
 .oh {
@@ -82,6 +84,7 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-field label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-2); font-weight: 500; }
 .oh-input, .oh-select, .oh-textarea {
   all: unset;
+  box-sizing: border-box;
   background: var(--paper);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -164,17 +167,35 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-rm-card .stats { display: flex; gap: 24px; font-size: 12.5px; color: var(--ink-2); }
 .oh-rm-card .stats strong { color: var(--ink); font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 14px; display: block; }
 
-.oh-login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+.oh-login-wrap {
+  display: flex; align-items: center; justify-content: center;
+  /* 100dvh tracks the iOS Safari URL-bar collapse; the 100vh fallback covers old browsers */
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-left: calc(24px + env(safe-area-inset-left));
+  padding-right: calc(24px + env(safe-area-inset-right));
+}
 .oh-login-card { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 48px 40px; max-width: 420px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.05); }
-.oh-google-btn { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; background: #fff; color: #1A1815; border: 1px solid var(--border-strong); width: 100%; justify-content: center; transition: all 0.15s; }
+.oh-google-btn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; background: #fff; color: #1A1815; border: 1px solid var(--border-strong); width: 100%; justify-content: center; transition: all 0.15s; }
 .oh-google-btn:hover { background: var(--paper-2); }
 
 /* ---------- Meetings table filters (search + RM select) ---------- */
-.oh-table-filters { display: flex; gap: 10px; margin-bottom: 14px; align-items: stretch; }
-.oh-table-filters .oh-search { position: relative; flex: 1; max-width: 320px; }
+.oh-filters-wrap { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.oh-table-filters { display: flex; gap: 10px; align-items: stretch; }
+.oh-table-filters .oh-search { position: relative; flex: 1; max-width: 360px; }
 .oh-table-filters .oh-search .icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; display: flex; }
 .oh-table-filters .oh-search input { width: 100%; padding-left: 36px; }
 .oh-table-filters select { min-width: 180px; }
+
+.oh-filter-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.oh-filter-row select { min-width: 150px; }
+.oh-filter-row .oh-date { padding: 9px 11px; font-size: 13px; min-width: 140px; }
+.oh-date-sep { font-size: 12px; color: var(--ink-3); padding: 0 2px; }
+.oh-clear-btn { padding: 8px 12px; font-size: 12.5px; }
+.oh-filter-count { font-size: 12px; color: var(--ink-3); }
 
 /* ---------- Mobile-only chrome ---------- */
 .oh-mobile-top {
@@ -198,7 +219,7 @@ html { -webkit-text-size-adjust: 100%; }
   gap: 4px;
 }
 .oh-mobile-bottom .item {
-  all: unset; cursor: pointer;
+  all: unset; box-sizing: border-box; cursor: pointer;
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   padding: 10px 6px; border-radius: 10px;
   color: var(--ink-2); font-size: 11px; font-weight: 500;
@@ -300,6 +321,10 @@ html { -webkit-text-size-adjust: 100%; }
   .oh-table-filters { flex-direction: column; gap: 8px; }
   .oh-table-filters .oh-search { max-width: none; }
   .oh-table-filters select { min-width: 0; width: 100%; }
+  .oh-filter-row { gap: 6px; }
+  .oh-filter-row select { min-width: 0; flex: 1 1 calc(50% - 6px); }
+  .oh-filter-row .oh-date { flex: 1 1 calc(50% - 6px); min-width: 0; }
+  .oh-date-sep { display: none; }
 
   /* Speaker text slightly bigger for readability */
   .oh-speaker .text { font-size: 14.5px; }

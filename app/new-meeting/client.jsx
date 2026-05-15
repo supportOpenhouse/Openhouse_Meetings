@@ -14,6 +14,9 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  MapPin,
+  Search,
+  X,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
@@ -31,8 +34,14 @@ export default function NewMeetingClient({ user }) {
     cp_code: '',
     cp_mobile: '',
     cp_name: '',
+    cp_city: '',
     purpose: '',
   });
+  // Tracks the most recent lookup so the UI can show "✓ matched" / "not found" / "looking up…".
+  // shape: { state: 'idle'|'loading'|'matched'|'unmatched'|'error', byField: 'cp_code'|'phone', cp?: {...}, message?: string }
+  const [cpLookup, setCpLookup] = useState({ state: 'idle' });
+  const lookupTimer = useRef(null);
+  const lookupSeq = useRef(0);
   const [startedAt, setStartedAt] = useState(null);
   const [stage, setStage] = useState({
     uploading: 'pending',
@@ -163,6 +172,7 @@ export default function NewMeetingClient({ user }) {
           cp_code: form.cp_code,
           cp_mobile: form.cp_mobile,
           cp_name: form.cp_name,
+          cp_city: form.cp_city,
           purpose: form.purpose,
           duration_seconds: durSec,
           started_at: new Date(startedAt).toISOString(),
@@ -196,6 +206,82 @@ export default function NewMeetingClient({ user }) {
     runUpload(recordedBlob, recordedDuration);
   }
 
+  // Debounced lookup against /api/cp/lookup whenever the user finishes typing
+  // either cp_code or cp_mobile. Prefills the OTHER mandatory field + name + city
+  // when a CP is found. Manual edits to a prefilled field are preserved (we only
+  // overwrite when the field is empty — see scheduleLookup below).
+  function scheduleLookup({ cp_code, cp_mobile }) {
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
+    const seq = ++lookupSeq.current;
+
+    const code = (cp_code ?? form.cp_code).trim();
+    const mobileDigits = (cp_mobile ?? form.cp_mobile).replace(/\D+/g, '');
+
+    // Need at least one fully-typed identifier to attempt a lookup.
+    const ready = code.length >= 2 || mobileDigits.length >= 10;
+    if (!ready) {
+      setCpLookup({ state: 'idle' });
+      return;
+    }
+
+    setCpLookup((p) => ({ ...p, state: 'loading' }));
+    lookupTimer.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        // Prefer cp_code when present — it's the unique key on the CP side.
+        if (code) params.set('cp_code', code);
+        else params.set('phone', mobileDigits);
+
+        const res = await fetch(`/api/cp/lookup?${params}`);
+        if (seq !== lookupSeq.current) return; // a newer keystroke superseded us
+        const data = await res.json();
+
+        if (!res.ok) {
+          setCpLookup({ state: 'error', message: data?.error || 'Lookup failed' });
+          return;
+        }
+        if (data.configured === false) {
+          setCpLookup({ state: 'idle' });
+          return;
+        }
+        if (!data.found) {
+          setCpLookup({ state: 'unmatched', byField: code ? 'cp_code' : 'phone' });
+          return;
+        }
+        setCpLookup({
+          state: 'matched',
+          byField: code ? 'cp_code' : 'phone',
+          cp: data.cp,
+        });
+
+        // Prefill empty fields only — don't clobber what the RM typed.
+        setForm((f) => ({
+          ...f,
+          cp_code: f.cp_code.trim() || data.cp.cp_code || '',
+          cp_mobile: f.cp_mobile.trim() || data.cp.phone || '',
+          cp_name: f.cp_name.trim() || data.cp.name || '',
+          cp_city: f.cp_city.trim() || data.cp.city || '',
+        }));
+      } catch (e) {
+        if (seq !== lookupSeq.current) return;
+        setCpLookup({ state: 'error', message: e?.message || 'Lookup failed' });
+      }
+    }, 450);
+  }
+
+  function onCpCodeChange(value) {
+    setForm((f) => ({ ...f, cp_code: value }));
+    scheduleLookup({ cp_code: value });
+  }
+  function onCpMobileChange(value) {
+    setForm((f) => ({ ...f, cp_mobile: value }));
+    scheduleLookup({ cp_mobile: value });
+  }
+  function clearCpFill() {
+    setForm({ cp_code: '', cp_mobile: '', cp_name: '', cp_city: '', purpose: form.purpose });
+    setCpLookup({ state: 'idle' });
+  }
+
   const canStart = form.cp_code.trim() && form.cp_mobile.trim();
 
   return (
@@ -221,40 +307,56 @@ export default function NewMeetingClient({ user }) {
             <div className="oh-form-row-2">
               <div className="oh-field">
                 <label>
-                  <Hash size={11} style={{ display: 'inline', marginRight: 4 }} /> CP code
+                  <Hash size={11} style={{ display: 'inline', marginRight: 4 }} /> CP code <span className="oh-req">*</span>
                 </label>
                 <input
                   className="oh-input"
                   placeholder="e.g. CP-1284"
                   value={form.cp_code}
-                  onChange={(e) => setForm({ ...form, cp_code: e.target.value })}
+                  onChange={(e) => onCpCodeChange(e.target.value)}
                   autoComplete="off"
                 />
               </div>
               <div className="oh-field">
                 <label>
-                  <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> CP mobile
+                  <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> CP mobile <span className="oh-req">*</span>
                 </label>
                 <input
                   className="oh-input"
                   placeholder="98XXXXXXXX"
                   value={form.cp_mobile}
-                  onChange={(e) => setForm({ ...form, cp_mobile: e.target.value })}
+                  onChange={(e) => onCpMobileChange(e.target.value)}
                   inputMode="tel"
                   autoComplete="off"
                 />
               </div>
             </div>
-            <div className="oh-field">
-              <label>
-                <User size={11} style={{ display: 'inline', marginRight: 4 }} /> CP name (optional)
-              </label>
-              <input
-                className="oh-input"
-                placeholder="Channel partner's name"
-                value={form.cp_name}
-                onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
-              />
+
+            <CpLookupStatus lookup={cpLookup} onClear={clearCpFill} />
+
+            <div className="oh-form-row-2">
+              <div className="oh-field">
+                <label>
+                  <User size={11} style={{ display: 'inline', marginRight: 4 }} /> CP name (optional)
+                </label>
+                <input
+                  className="oh-input"
+                  placeholder="Channel partner's name"
+                  value={form.cp_name}
+                  onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
+                />
+              </div>
+              <div className="oh-field">
+                <label>
+                  <MapPin size={11} style={{ display: 'inline', marginRight: 4 }} /> City (optional)
+                </label>
+                <input
+                  className="oh-input"
+                  placeholder="e.g. Gurugram"
+                  value={form.cp_city}
+                  onChange={(e) => setForm({ ...form, cp_city: e.target.value })}
+                />
+              </div>
             </div>
             <div className="oh-field">
               <label>
@@ -460,6 +562,43 @@ export default function NewMeetingClient({ user }) {
           padding: 1px 4px;
           border-radius: 4px;
         }
+        .oh-req { color: var(--danger); margin-left: 2px; }
+        .oh-cp-lookup {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          border-radius: 8px;
+          background: var(--paper-2);
+          color: var(--ink-2);
+          font-size: 13px;
+          margin-top: -6px;
+        }
+        .oh-cp-lookup.matched {
+          background: rgba(34, 139, 34, 0.08);
+          color: #2f6f2f;
+          border: 1px solid rgba(34, 139, 34, 0.18);
+        }
+        .oh-cp-lookup.unmatched {
+          background: var(--paper-2);
+          color: var(--ink-2);
+          border: 1px solid var(--border-strong);
+        }
+        .oh-cp-lookup.error {
+          background: var(--danger-soft, rgba(192, 57, 43, 0.08));
+          color: var(--danger);
+        }
+        .oh-cp-clear {
+          all: unset;
+          box-sizing: border-box;
+          margin-left: auto;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          color: inherit;
+          opacity: 0.6;
+        }
+        .oh-cp-clear:hover { opacity: 1; background: rgba(0,0,0,0.06); }
         @media (max-width: 768px) {
           .oh-form-row-2 { grid-template-columns: 1fr; gap: 16px; }
           .oh-form-actions {
@@ -469,6 +608,45 @@ export default function NewMeetingClient({ user }) {
           .oh-form-actions :global(.oh-btn) { width: 100%; }
         }
       `}</style>
+    </div>
+  );
+}
+
+function CpLookupStatus({ lookup, onClear }) {
+  if (!lookup || lookup.state === 'idle') return null;
+  if (lookup.state === 'loading') {
+    return (
+      <div className="oh-cp-lookup">
+        <Loader2 size={14} className="oh-spin" /> Looking up CP…
+      </div>
+    );
+  }
+  if (lookup.state === 'matched') {
+    return (
+      <div className="oh-cp-lookup matched">
+        <CheckCircle2 size={14} />
+        <span>
+          Matched <strong>{lookup.cp?.name || lookup.cp?.cp_code}</strong>
+          {lookup.cp?.city ? ` · ${lookup.cp.city}` : ''}
+          {lookup.cp?.company ? ` · ${lookup.cp.company}` : ''}
+        </span>
+        <button type="button" className="oh-cp-clear" onClick={onClear} title="Clear prefilled data">
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
+  if (lookup.state === 'unmatched') {
+    return (
+      <div className="oh-cp-lookup unmatched">
+        <Search size={14} />
+        No match in CP inventory — enter the remaining details manually.
+      </div>
+    );
+  }
+  return (
+    <div className="oh-cp-lookup error">
+      <AlertCircle size={14} /> {lookup.message || 'Lookup error'}
     </div>
   );
 }

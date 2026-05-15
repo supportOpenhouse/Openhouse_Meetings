@@ -5,6 +5,15 @@ export const metadata = {
   description: 'CP meeting recordings, transcripts, and summaries for the Openhouse RM team.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  // viewportFit:'cover' lets us draw under the notch and use env(safe-area-inset-*) padding.
+  viewportFit: 'cover',
+  themeColor: '#F4EFE4',
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

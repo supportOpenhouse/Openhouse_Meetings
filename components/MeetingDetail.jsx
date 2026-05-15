@@ -12,6 +12,8 @@ import {
   TrendingUp,
   Snowflake,
   Trash2,
+  User,
+  MapPin,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
 import { DEFAULT_QUESTIONS } from './questions';
@@ -42,7 +44,9 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               CP <span className="oh-mono">{meeting.cp_code}</span>
             </h2>
             <div className="oh-detail-meta">
+              {meeting.cp_name && <span><User size={12} /> {meeting.cp_name}</span>}
               <span><Phone size={12} /> {meeting.cp_mobile}</span>
+              {meeting.cp_city && <span><MapPin size={12} /> {meeting.cp_city}</span>}
               <span><Clock size={12} /> {fmtDuration(meeting.duration_seconds)}</span>
               {meeting.language && <span>· {meeting.language}</span>}
             </div>
