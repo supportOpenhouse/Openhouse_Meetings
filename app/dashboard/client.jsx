@@ -87,6 +87,7 @@ export default function RMDashboardClient({ initialMeetings, user }) {
         meetings={meetings}
         showRMColumn={false}
         onOpen={openMeetingFull}
+        hideDateFilter={true}
         emptyAction={
           <Link href="/new-meeting" className="oh-btn primary" style={{ marginTop: 16 }}>
             <Mic size={14} /> Start your first meeting

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Users, X } from 'lucide-react';
+import { Users, X, Calendar } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
 import Toast from '@/components/Toast';
@@ -190,21 +190,30 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
       <div className="oh-date-bar">
         <div className="oh-date-bar-label">Date range</div>
         <div className="oh-date-bar-controls">
-          <input
-            className="oh-input oh-date"
-            type="date"
-            value={since}
-            onChange={(e) => setSince(e.target.value)}
-            aria-label="From date"
-          />
-          <span className="oh-date-sep">to</span>
-          <input
-            className="oh-input oh-date"
-            type="date"
-            value={until}
-            onChange={(e) => setUntil(e.target.value)}
-            aria-label="To date"
-          />
+          <label className="oh-date-field">
+            <span className="oh-date-field-label">
+              <Calendar size={12} /> From
+            </span>
+            <input
+              className="oh-input oh-date"
+              type="date"
+              value={since}
+              onChange={(e) => setSince(e.target.value)}
+              aria-label="From date"
+            />
+          </label>
+          <label className="oh-date-field">
+            <span className="oh-date-field-label">
+              <Calendar size={12} /> To
+            </span>
+            <input
+              className="oh-input oh-date"
+              type="date"
+              value={until}
+              onChange={(e) => setUntil(e.target.value)}
+              aria-label="To date"
+            />
+          </label>
           {hasRange && (
             <button
               type="button"

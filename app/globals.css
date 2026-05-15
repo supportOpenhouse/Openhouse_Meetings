@@ -196,6 +196,41 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-filter-row select { min-width: 150px; }
 .oh-filter-row .oh-date { padding: 9px 11px; font-size: 13px; min-width: 140px; }
 .oh-date-sep { font-size: 12px; color: var(--ink-3); padding: 0 2px; }
+
+/* Restore the platform's default date-input chrome so the empty state still shows
+   the "dd/mm/yyyy" hint on Android Chrome / iOS Safari instead of a blank box.
+   `all: unset` on .oh-input had stripped that. */
+input.oh-date {
+  -webkit-appearance: none;
+  appearance: none;
+  color-scheme: light;
+}
+input.oh-date::-webkit-date-and-time-value { text-align: left; }
+input.oh-date::-webkit-datetime-edit { color: var(--ink); }
+input.oh-date::-webkit-datetime-edit-fields-wrapper { color: var(--ink); }
+input.oh-date::-webkit-datetime-edit-text { color: var(--ink-3); padding: 0 2px; }
+input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointer; }
+
+/* Labeled date wrapper (used in the admin date-range bar). Floating-style label
+   sits above the value so the input is obviously a date picker even when empty. */
+.oh-date-field {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.oh-date-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.oh-date-field .oh-date { width: 100%; }
 .oh-clear-btn { padding: 8px 12px; font-size: 12.5px; }
 .oh-filter-count { font-size: 12px; color: var(--ink-3); }
 
@@ -395,6 +430,7 @@ html { -webkit-text-size-adjust: 100%; }
   .oh-filter-row select { min-width: 0; flex: 1 1 calc(50% - 6px); }
   .oh-filter-row .oh-date { flex: 1 1 calc(50% - 6px); min-width: 0; }
   .oh-date-sep { display: none; }
+  .oh-date-field { flex: 1 1 calc(50% - 6px); }
 
   /* Speaker text slightly bigger for readability */
   .oh-speaker .text { font-size: 14.5px; }
