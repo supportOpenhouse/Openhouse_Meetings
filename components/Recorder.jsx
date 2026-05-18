@@ -33,14 +33,88 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   const timerRef = useRef(null);
   const streamRef = useRef(null);
   const mimeRef = useRef('');
+  // Screen wake lock — held while actively recording so a screen-off doesn't
+  // suspend the tab. Re-acquired on visibilitychange because the browser drops
+  // it whenever the page becomes hidden.
+  const wakeLockRef = useRef(null);
+  // True while a system audio interruption (incoming/picked-up call) has us
+  // paused. Distinguishes auto-pause-for-call from user-initiated pause so we
+  // can auto-resume after the call without entering the review screen.
+  const callPausedRef = useRef(false);
+  const [callInterrupted, setCallInterrupted] = useState(false);
+  // Silent oscillator that keeps the audio session marked "in use" so mobile
+  // browsers are less likely to suspend us when backgrounded briefly.
+  const silentAudioRef = useRef(null);
 
   useEffect(
     () => () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      releaseWakeLock();
+      stopSilentAudio();
     },
     []
   );
+
+  // Re-acquire wake lock when the tab comes back to the foreground — the
+  // browser auto-releases it on hide, but we want it back if we're still
+  // actively recording.
+  useEffect(() => {
+    function onVis() {
+      if (document.visibilityState === 'visible' && recording && !paused) {
+        acquireWakeLock();
+      }
+    }
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [recording, paused]);
+
+  async function acquireWakeLock() {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+    if (wakeLockRef.current) return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      wakeLockRef.current = lock;
+      lock.addEventListener('release', () => {
+        if (wakeLockRef.current === lock) wakeLockRef.current = null;
+      });
+    } catch {
+      // Low-power mode, permission denied, etc. — silently degrade.
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLockRef.current) {
+      try { wakeLockRef.current.release(); } catch {}
+      wakeLockRef.current = null;
+    }
+  }
+
+  function startSilentAudio() {
+    try {
+      if (silentAudioRef.current) return;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0; // truly silent
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      silentAudioRef.current = { ctx, osc };
+    } catch {
+      // Not critical.
+    }
+  }
+
+  function stopSilentAudio() {
+    const s = silentAudioRef.current;
+    if (!s) return;
+    try { s.osc.stop(); } catch {}
+    try { s.ctx.close(); } catch {}
+    silentAudioRef.current = null;
+  }
 
   useImperativeHandle(ref, () => ({
     finalize,
@@ -94,14 +168,62 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       // explicitly, since the user might pause-then-continue several times before
       // committing to upload.
 
+      // System audio interruption (phone call answered, WhatsApp call answered,
+      // Bluetooth handoff). The OS mutes the input track; we pause and wait for
+      // unmute, then auto-resume. If the call is never picked up the track is
+      // not muted and recording continues uninterrupted.
+      const [audioTrack] = stream.getAudioTracks();
+      if (audioTrack) {
+        audioTrack.onmute = handleTrackMute;
+        audioTrack.onunmute = handleTrackUnmute;
+        audioTrack.onended = handleTrackEnded;
+      }
+
       accumRef.current = 0;
       startRef.current = Date.now();
       mr.start(1000);
       setRecording(true);
       setPaused(false);
       startTimer();
+      acquireWakeLock();
+      startSilentAudio();
     } catch (e) {
       setError(e.message || 'Could not access the microphone');
+    }
+  }
+
+  // OS interrupted the mic — almost always a picked-up phone or WhatsApp call.
+  // Pause underneath without triggering the review-screen flow.
+  function handleTrackMute() {
+    if (!mrRef.current || mrRef.current.state !== 'recording') return;
+    accumRef.current += Math.round((Date.now() - startRef.current) / 1000);
+    startRef.current = null;
+    try { mrRef.current.pause(); } catch {}
+    stopTimer();
+    setElapsed(accumRef.current);
+    callPausedRef.current = true;
+    setCallInterrupted(true);
+  }
+
+  function handleTrackUnmute() {
+    if (!callPausedRef.current) return;
+    callPausedRef.current = false;
+    setCallInterrupted(false);
+    if (!mrRef.current) return;
+    if (mrRef.current.state === 'paused') {
+      try { mrRef.current.resume(); } catch {}
+    }
+    startRef.current = Date.now();
+    startTimer();
+    acquireWakeLock();
+  }
+
+  function handleTrackEnded() {
+    // Stream died entirely (some Android OEMs kill the mic on call pickup
+    // instead of muting). Best-effort: finalize what we have so the user
+    // doesn't lose the recording.
+    if (mrRef.current && mrRef.current.state !== 'inactive') {
+      setError('Microphone was released by the system (likely a call). Tap pause to finish, or restart recording.');
     }
   }
 
@@ -114,6 +236,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     setPaused(true);
     stopTimer();
     setElapsed(accumRef.current);
+    releaseWakeLock();
     onPause && onPause(accumRef.current);
   }
 
@@ -123,6 +246,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     startRef.current = Date.now();
     setPaused(false);
     startTimer();
+    acquireWakeLock();
   }
 
   function finalize() {
@@ -142,6 +266,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       stopTimer();
       setRecording(false);
       setPaused(false);
+      releaseWakeLock();
+      stopSilentAudio();
+      callPausedRef.current = false;
+      setCallInterrupted(false);
       onDone(blob, durSec);
     };
 
@@ -170,6 +298,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     setRecording(false);
     setPaused(false);
     setElapsed(0);
+    releaseWakeLock();
+    stopSilentAudio();
+    callPausedRef.current = false;
+    setCallInterrupted(false);
     onCancel && onCancel();
   }
 
@@ -202,8 +334,9 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
         }}
       >
         {!recording && !error && 'Tap the mic to start recording. Allow microphone access when prompted.'}
-        {recording && !paused && 'Recording… tap the pause button to review and finish.'}
-        {recording && paused && 'Paused. Use the controls below to continue, upload, or discard.'}
+        {recording && !paused && !callInterrupted && 'Recording… tap the pause button to review and finish.'}
+        {recording && callInterrupted && 'Call in progress — recording auto-paused. It will resume when the call ends.'}
+        {recording && paused && !callInterrupted && 'Paused. Use the controls below to continue, upload, or discard.'}
         {error && <span style={{ color: 'var(--danger)' }}>{error}</span>}
       </div>
 
