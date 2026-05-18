@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Users, Loader2, X } from 'lucide-react';
+import { RefreshCw, Users, Loader2, X, Search } from 'lucide-react';
 
 const STATUS_COLORS = {
   'Consistently Active': { bg: 'rgba(34, 139, 34, 0.10)', border: 'rgba(34, 139, 34, 0.25)', fg: '#2f6f2f' },
@@ -14,12 +14,14 @@ const STATUS_COLORS = {
   'Dormant': { bg: 'rgba(120, 120, 120, 0.06)', border: 'rgba(120, 120, 120, 0.18)', fg: '#7a7a7a' },
 };
 
-export default function CpDashboardClient({ initialData, initialMonths, isAdmin, user }) {
+export default function CpDashboardClient({ initialData, initialMonths, isAdmin, user, rms = [] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [data, setData] = useState(initialData);
   const [monthsToShow, setMonthsToShow] = useState(initialMonths);
   const [statusFilter, setStatusFilter] = useState(null);
+  const [rmFilter, setRmFilter] = useState('all'); // 'all' | 'unassigned' | rm_id
+  const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
 
@@ -50,12 +52,33 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
     }
   }
 
-  // Apply the active status filter (if any) to the flat row list.
-  const visibleCps = statusFilter ? data.cps.filter((c) => c.status_key === statusFilter) : data.cps;
-  // Monthly totals recomputed to reflect the current filter.
+  // Combined client-side filter: status + RM (admin only) + search.
+  const visibleCps = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const needleDigits = needle.replace(/\D+/g, '');
+    return data.cps.filter((c) => {
+      if (statusFilter && c.status_key !== statusFilter) return false;
+      if (isAdmin && rmFilter !== 'all') {
+        if (rmFilter === 'unassigned' && c.rm_id) return false;
+        if (rmFilter !== 'unassigned' && c.rm_id !== rmFilter) return false;
+      }
+      if (needle) {
+        const codeHit = c.cp_code.toLowerCase().includes(needle);
+        const nameHit = c.cp_name && c.cp_name.toLowerCase().includes(needle);
+        const phoneHit =
+          needleDigits.length >= 3 &&
+          ((c.cp_phone_normalized && c.cp_phone_normalized.includes(needleDigits)) ||
+            (c.cp_phone && c.cp_phone.replace(/\D+/g, '').includes(needleDigits)));
+        if (!codeHit && !nameHit && !phoneHit) return false;
+      }
+      return true;
+    });
+  }, [data.cps, statusFilter, rmFilter, search, isAdmin]);
+
   const visibleTotals = data.months.map((_, i) =>
     visibleCps.reduce((s, c) => s + (c.monthly[i] || 0), 0)
   );
+  const hasAnyFilter = statusFilter || rmFilter !== 'all' || search.trim() !== '';
 
   return (
     <div className="oh-page">
@@ -120,15 +143,67 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
           </>
         )}
       </div>
+      <div className="oh-cp-search-row">
+        <div className="oh-cp-search">
+          <Search size={14} />
+          <input
+            type="search"
+            placeholder="Search by CP code, name, or phone…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              type="button"
+              className="oh-cp-search-clear"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        {isAdmin && (
+          <select
+            className="oh-input"
+            value={rmFilter}
+            onChange={(e) => setRmFilter(e.target.value)}
+            style={{ maxWidth: 220 }}
+          >
+            <option value="all">All RMs</option>
+            <option value="unassigned">Unassigned</option>
+            {rms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {hasAnyFilter && (
+          <button
+            type="button"
+            className="oh-cp-clear-filter"
+            onClick={() => {
+              setSearch('');
+              setStatusFilter(null);
+              setRmFilter('all');
+            }}
+          >
+            <X size={12} /> reset all
+          </button>
+        )}
+      </div>
+
       {syncMsg && <div className="oh-cp-sync-msg">{syncMsg}</div>}
 
       <div className="oh-cp-table-wrap">
         <table className="oh-cp-table">
           <thead>
             <tr>
-              <th style={{ minWidth: 110 }}>CP code</th>
+              <th style={{ minWidth: 100 }}>CP code</th>
+              <th style={{ minWidth: 160 }}>CP name</th>
               {isAdmin && <th style={{ minWidth: 130 }}>RM</th>}
-              <th style={{ minWidth: 180 }}>Status</th>
+              <th style={{ minWidth: 170 }}>Status</th>
               {data.months.map((m) => (
                 <th key={m.key} className="oh-cp-month-col">
                   {m.short}
@@ -141,7 +216,7 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
             {visibleCps.length === 0 && (
               <tr>
                 <td
-                  colSpan={(isAdmin ? 2 : 1) + 1 + data.months.length + 1}
+                  colSpan={(isAdmin ? 3 : 2) + 1 + data.months.length + 1}
                   style={{ textAlign: 'center', color: 'var(--ink-3)', padding: 24 }}
                 >
                   No CPs match this filter.
@@ -153,6 +228,12 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
               return (
                 <tr key={cp.cp_code}>
                   <td className="oh-mono">{cp.cp_code}</td>
+                  <td>
+                    {cp.cp_name || <span className="oh-cp-unassigned">—</span>}
+                    {cp.cp_phone && (
+                      <div className="oh-cp-phone oh-mono">{cp.cp_phone}</div>
+                    )}
+                  </td>
                   {isAdmin && (
                     <td>
                       {cp.rm_name || <span className="oh-cp-unassigned">unassigned</span>}
@@ -174,8 +255,9 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
             })}
             <tr className="oh-cp-totals-row">
               <td>Totals</td>
+              <td />
               {isAdmin && <td />}
-              <td>{statusFilter ? `(${visibleCps.length} CPs filtered)` : `(${visibleCps.length} CPs)`}</td>
+              <td>{hasAnyFilter ? `(${visibleCps.length} of ${data.cps.length} CPs)` : `(${visibleCps.length} CPs)`}</td>
               {visibleTotals.map((t, i) => (
                 <td key={i} className="oh-cp-cell oh-mono">{t}</td>
               ))}
@@ -237,6 +319,51 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
         .oh-cp-clear-filter:hover {
           color: var(--ink);
           background: var(--paper-2);
+        }
+        .oh-cp-search-row {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .oh-cp-search {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          min-width: 240px;
+          background: var(--paper);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 0 10px;
+        }
+        .oh-cp-search :global(svg) {
+          color: var(--ink-3);
+        }
+        .oh-cp-search input {
+          all: unset;
+          flex: 1;
+          padding: 9px 0;
+          font-size: 13.5px;
+          color: var(--ink);
+        }
+        .oh-cp-search-clear {
+          all: unset;
+          cursor: pointer;
+          padding: 4px;
+          border-radius: 4px;
+          color: var(--ink-3);
+          display: inline-flex;
+        }
+        .oh-cp-search-clear:hover {
+          color: var(--ink);
+          background: var(--paper-2);
+        }
+        .oh-cp-phone {
+          font-size: 11.5px;
+          color: var(--ink-3);
+          margin-top: 1px;
         }
         .oh-cp-sync-msg {
           font-size: 13px;
