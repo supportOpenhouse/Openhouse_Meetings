@@ -49,6 +49,33 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   // onmute/onunmute when a call is answered — the property updates but the
   // event is skipped.
   const trackPollRef = useRef(null);
+  const audioTrackRef = useRef(null);
+  // Visible-on-screen debug log, enabled by ?debug=1. The user is debugging
+  // call-interruption detection on Android Chrome and can't see DevTools live
+  // during a real phone call — so we render the log inline.
+  const [debugOn, setDebugOn] = useState(false);
+  const [debugLog, setDebugLog] = useState([]);
+  const [diag, setDiag] = useState({ mrState: 'idle', muted: null, ready: null });
+  function dbg(label) {
+    const t = audioTrackRef.current;
+    const entry = {
+      ts: new Date().toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0'),
+      label,
+      mr: mrRef.current?.state || 'none',
+      muted: t ? String(t.muted) : '-',
+      ready: t ? t.readyState : '-',
+    };
+    setDebugLog((prev) => {
+      const next = [...prev, entry];
+      return next.length > 40 ? next.slice(-40) : next;
+    });
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('debug') === '1') setDebugOn(true);
+  }, []);
 
   useEffect(
     () => () => {
@@ -124,13 +151,28 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   function startTrackPoll(track) {
     stopTrackPoll();
     if (!track) return;
+    let lastMuted = track.muted;
+    let lastReady = track.readyState;
+    let lastMrState = mrRef.current?.state;
     trackPollRef.current = setInterval(() => {
       // track.muted reflects OS-level interruption (call answered, audio focus
       // taken). readyState 'ended' means the OS killed the track entirely.
-      const interrupted = track.muted || track.readyState === 'ended';
+      const muted = track.muted;
+      const ready = track.readyState;
+      const mrState = mrRef.current?.state;
+      setDiag({ mrState: mrState || 'none', muted: String(muted), ready });
+      if (muted !== lastMuted || ready !== lastReady || mrState !== lastMrState) {
+        dbg(`poll Δ muted=${muted} ready=${ready} mr=${mrState}`);
+        lastMuted = muted;
+        lastReady = ready;
+        lastMrState = mrState;
+      }
+      const interrupted = muted || ready === 'ended';
       if (interrupted && !callPausedRef.current) {
+        dbg('poll → handleTrackMute');
         handleTrackMute();
       } else if (!interrupted && callPausedRef.current) {
+        dbg('poll → handleTrackUnmute');
         handleTrackUnmute();
       }
     }, 400);
@@ -200,11 +242,16 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       // unmute, then auto-resume. If the call is never picked up the track is
       // not muted and recording continues uninterrupted.
       const [audioTrack] = stream.getAudioTracks();
+      audioTrackRef.current = audioTrack || null;
       if (audioTrack) {
-        audioTrack.onmute = handleTrackMute;
-        audioTrack.onunmute = handleTrackUnmute;
-        audioTrack.onended = handleTrackEnded;
+        audioTrack.onmute = () => { dbg('event onmute'); handleTrackMute(); };
+        audioTrack.onunmute = () => { dbg('event onunmute'); handleTrackUnmute(); };
+        audioTrack.onended = () => { dbg('event onended'); handleTrackEnded(); };
       }
+      mr.onpause = () => dbg('mr.onpause');
+      mr.onresume = () => dbg('mr.onresume');
+      mr.onerror = (e) => dbg('mr.onerror ' + (e?.error?.name || ''));
+      dbg('start');
 
       accumRef.current = 0;
       startRef.current = Date.now();
@@ -223,6 +270,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   // OS interrupted the mic — almost always a picked-up phone or WhatsApp call.
   // Pause underneath without triggering the review-screen flow.
   function handleTrackMute() {
+    dbg(`handleTrackMute (mr=${mrRef.current?.state})`);
     if (!mrRef.current || mrRef.current.state !== 'recording') return;
     accumRef.current += Math.round((Date.now() - startRef.current) / 1000);
     startRef.current = null;
@@ -234,6 +282,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   }
 
   function handleTrackUnmute() {
+    dbg(`handleTrackUnmute (callPaused=${callPausedRef.current})`);
     if (!callPausedRef.current) return;
     callPausedRef.current = false;
     setCallInterrupted(false);
@@ -374,6 +423,35 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
         <button className="oh-btn ghost" onClick={() => onCancel && onCancel()}>
           Cancel
         </button>
+      )}
+
+      {debugOn && (
+        <div
+          style={{
+            marginTop: 16,
+            width: '100%',
+            maxWidth: 480,
+            fontFamily: 'Geist Mono, ui-monospace, monospace',
+            fontSize: 11,
+            background: '#111',
+            color: '#0f0',
+            padding: 10,
+            borderRadius: 8,
+            border: '1px solid #444',
+          }}
+        >
+          <div style={{ marginBottom: 6, color: '#fff' }}>
+            DEBUG · mr={diag.mrState} muted={diag.muted} ready={diag.ready} callPaused={String(callInterrupted)}
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {debugLog.length === 0 && <div style={{ color: '#888' }}>(no events yet — start recording)</div>}
+            {debugLog.map((e, i) => (
+              <div key={i}>
+                {e.ts} {e.label} [mr={e.mr} muted={e.muted} ready={e.ready}]
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
