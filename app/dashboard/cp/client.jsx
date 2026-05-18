@@ -1,8 +1,8 @@
 'use client';
 
-import { Fragment, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, RefreshCw, Users, Loader2 } from 'lucide-react';
+import { RefreshCw, Users, Loader2, X } from 'lucide-react';
 
 const STATUS_COLORS = {
   'Consistently Active': { bg: 'rgba(34, 139, 34, 0.10)', border: 'rgba(34, 139, 34, 0.25)', fg: '#2f6f2f' },
@@ -19,7 +19,7 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
   const [pending, startTransition] = useTransition();
   const [data, setData] = useState(initialData);
   const [monthsToShow, setMonthsToShow] = useState(initialMonths);
-  const [collapsed, setCollapsed] = useState({}); // status_key → bool
+  const [statusFilter, setStatusFilter] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
 
@@ -50,18 +50,12 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
     }
   }
 
-  // Group CPs by status_key while preserving the server-side order.
-  const groups = [];
-  {
-    let current = null;
-    for (const cp of data.cps) {
-      if (!current || current.key !== cp.status_key) {
-        current = { key: cp.status_key, label: cp.status, items: [] };
-        groups.push(current);
-      }
-      current.items.push(cp);
-    }
-  }
+  // Apply the active status filter (if any) to the flat row list.
+  const visibleCps = statusFilter ? data.cps.filter((c) => c.status_key === statusFilter) : data.cps;
+  // Monthly totals recomputed to reflect the current filter.
+  const visibleTotals = data.months.map((_, i) =>
+    visibleCps.reduce((s, c) => s + (c.monthly[i] || 0), 0)
+  );
 
   return (
     <div className="oh-page">
@@ -76,13 +70,37 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
 
       <div className="oh-cp-toolbar">
         <div className="oh-cp-counts">
-          <span className="oh-cp-total">{data.counts.total} CPs</span>
+          <button
+            type="button"
+            className={`oh-cp-chip oh-cp-chip-btn ${!statusFilter ? 'active' : ''}`}
+            onClick={() => setStatusFilter(null)}
+            style={!statusFilter ? activeChipStyle() : neutralChipStyle()}
+          >
+            All · {data.counts.total}
+          </button>
           {Object.entries(data.counts.byStatus).map(([k, n]) =>
             n > 0 ? (
-              <span key={k} className="oh-cp-chip" style={chipStyle(k)}>
+              <button
+                key={k}
+                type="button"
+                className={`oh-cp-chip oh-cp-chip-btn ${statusFilter === k ? 'active' : ''}`}
+                onClick={() => setStatusFilter(statusFilter === k ? null : k)}
+                style={chipStyle(k, statusFilter === k)}
+                title={`Filter to ${k}`}
+              >
                 {n} {k}
-              </span>
+              </button>
             ) : null
+          )}
+          {statusFilter && (
+            <button
+              type="button"
+              className="oh-cp-clear-filter"
+              onClick={() => setStatusFilter(null)}
+              title="Clear filter"
+            >
+              <X size={12} /> clear
+            </button>
           )}
         </div>
         <div style={{ flex: 1 }} />
@@ -108,8 +126,9 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
         <table className="oh-cp-table">
           <thead>
             <tr>
-              <th style={{ minWidth: 130 }}>CP code</th>
-              {isAdmin && <th style={{ minWidth: 140 }}>RM</th>}
+              <th style={{ minWidth: 110 }}>CP code</th>
+              {isAdmin && <th style={{ minWidth: 130 }}>RM</th>}
+              <th style={{ minWidth: 180 }}>Status</th>
               {data.months.map((m) => (
                 <th key={m.key} className="oh-cp-month-col">
                   {m.short}
@@ -119,51 +138,49 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => {
-              const isCollapsed = collapsed[g.key];
+            {visibleCps.length === 0 && (
+              <tr>
+                <td
+                  colSpan={(isAdmin ? 2 : 1) + 1 + data.months.length + 1}
+                  style={{ textAlign: 'center', color: 'var(--ink-3)', padding: 24 }}
+                >
+                  No CPs match this filter.
+                </td>
+              </tr>
+            )}
+            {visibleCps.map((cp) => {
+              const rowTotal = cp.monthly.reduce((a, b) => a + b, 0);
               return (
-                <Fragment key={g.key}>
-                  <tr className="oh-cp-group-row">
-                    <td colSpan={(isAdmin ? 2 : 1) + data.months.length + 1}>
-                      <button
-                        className="oh-cp-group-toggle"
-                        onClick={() => setCollapsed((c) => ({ ...c, [g.key]: !isCollapsed }))}
-                      >
-                        {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                        <span className="oh-cp-chip" style={chipStyle(g.key)}>
-                          {g.label}
-                        </span>
-                        <span className="oh-cp-group-count">{g.items.length}</span>
-                      </button>
+                <tr key={cp.cp_code}>
+                  <td className="oh-mono">{cp.cp_code}</td>
+                  {isAdmin && (
+                    <td>
+                      {cp.rm_name || <span className="oh-cp-unassigned">unassigned</span>}
                     </td>
-                  </tr>
-                  {!isCollapsed &&
-                    g.items.map((cp) => {
-                      const rowTotal = cp.monthly.reduce((a, b) => a + b, 0);
-                      return (
-                        <tr key={cp.cp_code}>
-                          <td className="oh-mono">{cp.cp_code}</td>
-                          {isAdmin && <td>{cp.rm_name || <span className="oh-cp-unassigned">unassigned</span>}</td>}
-                          {cp.monthly.map((n, i) => (
-                            <td key={i} className={`oh-cp-cell oh-mono ${n === 0 ? 'zero' : ''}`}>
-                              {n}
-                            </td>
-                          ))}
-                          <td className="oh-cp-cell oh-mono oh-cp-total-cell">{rowTotal}</td>
-                        </tr>
-                      );
-                    })}
-                </Fragment>
+                  )}
+                  <td>
+                    <span className="oh-cp-chip" style={chipStyle(cp.status_key)}>
+                      {cp.status}
+                    </span>
+                  </td>
+                  {cp.monthly.map((n, i) => (
+                    <td key={i} className={`oh-cp-cell oh-mono ${n === 0 ? 'zero' : ''}`}>
+                      {n}
+                    </td>
+                  ))}
+                  <td className="oh-cp-cell oh-mono oh-cp-total-cell">{rowTotal}</td>
+                </tr>
               );
             })}
             <tr className="oh-cp-totals-row">
               <td>Totals</td>
               {isAdmin && <td />}
-              {data.totals.map((t, i) => (
+              <td>{statusFilter ? `(${visibleCps.length} CPs filtered)` : `(${visibleCps.length} CPs)`}</td>
+              {visibleTotals.map((t, i) => (
                 <td key={i} className="oh-cp-cell oh-mono">{t}</td>
               ))}
               <td className="oh-cp-cell oh-mono oh-cp-total-cell">
-                {data.totals.reduce((a, b) => a + b, 0)}
+                {visibleTotals.reduce((a, b) => a + b, 0)}
               </td>
             </tr>
           </tbody>
@@ -184,13 +201,6 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
           gap: 6px;
           align-items: center;
         }
-        .oh-cp-total {
-          font-size: 13px;
-          color: var(--ink-2);
-          padding-right: 6px;
-          border-right: 1px solid var(--border);
-          margin-right: 4px;
-        }
         .oh-cp-chip {
           font-size: 11.5px;
           padding: 3px 8px;
@@ -198,6 +208,35 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
           border: 1px solid;
           font-weight: 500;
           white-space: nowrap;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .oh-cp-chip-btn {
+          cursor: pointer;
+          transition: transform 80ms ease, box-shadow 80ms ease;
+        }
+        .oh-cp-chip-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+        .oh-cp-chip-btn.active {
+          font-weight: 600;
+        }
+        .oh-cp-clear-filter {
+          all: unset;
+          cursor: pointer;
+          color: var(--ink-3);
+          font-size: 12px;
+          padding: 3px 6px;
+          border-radius: 4px;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+        }
+        .oh-cp-clear-filter:hover {
+          color: var(--ink);
+          background: var(--paper-2);
         }
         .oh-cp-sync-msg {
           font-size: 13px;
@@ -248,27 +287,8 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
         .oh-cp-cell.zero {
           color: var(--ink-3);
         }
-        .oh-cp-group-row td {
-          background: var(--paper-2);
-          padding: 0 !important;
-        }
-        .oh-cp-group-toggle {
-          all: unset;
-          box-sizing: border-box;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          width: 100%;
-          cursor: pointer;
-        }
-        .oh-cp-group-toggle:hover {
-          background: rgba(0, 0, 0, 0.03);
-        }
-        .oh-cp-group-count {
-          font-size: 12px;
-          color: var(--ink-3);
-          margin-left: 4px;
+        .oh-cp-table tbody tr:hover td {
+          background: rgba(0, 0, 0, 0.02);
         }
         .oh-cp-unassigned {
           color: var(--ink-3);
@@ -293,7 +313,32 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
   );
 }
 
-function chipStyle(key) {
+function chipStyle(key, active = false) {
   const c = STATUS_COLORS[key] || STATUS_COLORS['Dormant'];
+  if (active) {
+    // Selected filter — darker fill, bolder border so it pops out of the row.
+    return {
+      background: c.bg.replace(/0\.\d+\)/, '0.22)'),
+      borderColor: c.fg,
+      color: c.fg,
+      borderWidth: '1.5px',
+    };
+  }
   return { background: c.bg, borderColor: c.border, color: c.fg };
+}
+
+function neutralChipStyle() {
+  return {
+    background: 'var(--paper-2)',
+    borderColor: 'var(--border)',
+    color: 'var(--ink-2)',
+  };
+}
+
+function activeChipStyle() {
+  return {
+    background: 'var(--ink)',
+    borderColor: 'var(--ink)',
+    color: 'var(--paper)',
+  };
 }
