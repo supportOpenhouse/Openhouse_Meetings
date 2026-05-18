@@ -229,7 +229,19 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
                 <tr key={cp.cp_code}>
                   <td className="oh-mono">{cp.cp_code}</td>
                   <td>
-                    {cp.cp_name || <span className="oh-cp-unassigned">—</span>}
+                    <span className="oh-cp-name-row">
+                      {cp.cp_name || <span className="oh-cp-unassigned">—</span>}
+                      {cp.cp_phone && (
+                        <a
+                          className="oh-cp-dial"
+                          href={`tel:${cp.cp_phone}`}
+                          title={`Call ${cp.cp_phone}`}
+                          aria-label={`Call ${cp.cp_name || cp.cp_code} at ${cp.cp_phone}`}
+                        >
+                          📞
+                        </a>
+                      )}
+                    </span>
                     {cp.cp_phone && (
                       <div className="oh-cp-phone oh-mono">{cp.cp_phone}</div>
                     )}
@@ -364,6 +376,25 @@ export default function CpDashboardClient({ initialData, initialMonths, isAdmin,
           font-size: 11.5px;
           color: var(--ink-3);
           margin-top: 1px;
+        }
+        .oh-cp-name-row {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .oh-cp-dial {
+          text-decoration: none;
+          font-size: 14px;
+          line-height: 1;
+          padding: 2px 4px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: transform 80ms ease, background 80ms ease;
+        }
+        .oh-cp-dial:hover,
+        .oh-cp-dial:active {
+          background: var(--paper-2);
+          transform: scale(1.1);
         }
         .oh-cp-sync-msg {
           font-size: 13px;
