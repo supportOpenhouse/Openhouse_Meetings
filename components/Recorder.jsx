@@ -45,11 +45,16 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   // Silent oscillator that keeps the audio session marked "in use" so mobile
   // browsers are less likely to suspend us when backgrounded briefly.
   const silentAudioRef = useRef(null);
+  // Polls track.muted because Android Chrome doesn't reliably fire
+  // onmute/onunmute when a call is answered — the property updates but the
+  // event is skipped.
+  const trackPollRef = useRef(null);
 
   useEffect(
     () => () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      stopTrackPoll();
       releaseWakeLock();
       stopSilentAudio();
     },
@@ -114,6 +119,28 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     try { s.osc.stop(); } catch {}
     try { s.ctx.close(); } catch {}
     silentAudioRef.current = null;
+  }
+
+  function startTrackPoll(track) {
+    stopTrackPoll();
+    if (!track) return;
+    trackPollRef.current = setInterval(() => {
+      // track.muted reflects OS-level interruption (call answered, audio focus
+      // taken). readyState 'ended' means the OS killed the track entirely.
+      const interrupted = track.muted || track.readyState === 'ended';
+      if (interrupted && !callPausedRef.current) {
+        handleTrackMute();
+      } else if (!interrupted && callPausedRef.current) {
+        handleTrackUnmute();
+      }
+    }, 400);
+  }
+
+  function stopTrackPoll() {
+    if (trackPollRef.current) {
+      clearInterval(trackPollRef.current);
+      trackPollRef.current = null;
+    }
   }
 
   useImperativeHandle(ref, () => ({
@@ -187,6 +214,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       startTimer();
       acquireWakeLock();
       startSilentAudio();
+      startTrackPoll(audioTrack);
     } catch (e) {
       setError(e.message || 'Could not access the microphone');
     }
@@ -264,6 +292,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       streamRef.current = null;
       mrRef.current = null;
       stopTimer();
+      stopTrackPoll();
       setRecording(false);
       setPaused(false);
       releaseWakeLock();
@@ -295,6 +324,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     startRef.current = null;
     mrRef.current = null;
     stopTimer();
+    stopTrackPoll();
     setRecording(false);
     setPaused(false);
     setElapsed(0);
