@@ -62,6 +62,49 @@ async function run() {
   await sql`CREATE INDEX IF NOT EXISTS meetings_started_at_idx ON meetings(started_at)`;
   await sql`CREATE INDEX IF NOT EXISTS meetings_cp_code_idx ON meetings(cp_code)`;
 
+  console.log('Creating cp_assignments table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS cp_assignments (
+      cp_code text PRIMARY KEY,
+      rm_id uuid REFERENCES users(id) ON DELETE SET NULL,
+      is_admin_override boolean NOT NULL DEFAULT false,
+      source text NOT NULL DEFAULT 'seed',
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      updated_by uuid REFERENCES users(id) ON DELETE SET NULL
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS cp_assignments_rm_idx ON cp_assignments(rm_id)`;
+
+  console.log('Creating cp_visits table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS cp_visits (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_row_id text NOT NULL,
+      cp_code text NOT NULL,
+      visited_at date NOT NULL,
+      status_raw text,
+      broker_contact text,
+      raw jsonb,
+      synced_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS cp_visits_source_row_uq ON cp_visits(source_row_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS cp_visits_cp_code_idx ON cp_visits(cp_code)`;
+  await sql`CREATE INDEX IF NOT EXISTS cp_visits_visited_at_idx ON cp_visits(visited_at)`;
+
+  console.log('Creating cp_sync_state table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS cp_sync_state (
+      id integer PRIMARY KEY,
+      last_synced_at timestamptz,
+      last_row_count integer,
+      last_error text,
+      in_progress boolean NOT NULL DEFAULT false
+    )
+  `;
+  // Ensure the singleton row exists so UPSERTs in the sync code can target id=1.
+  await sql`INSERT INTO cp_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+
   console.log('\n✓ Done. Schema is ready.');
 }
 

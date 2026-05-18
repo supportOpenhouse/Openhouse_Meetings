@@ -8,6 +8,8 @@ import {
   boolean,
   pgEnum,
   index,
+  date,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['admin', 'rm']);
@@ -62,3 +64,52 @@ export const meetings = pgTable(
     statusIdx: index('meetings_status_idx').on(t.status),
   })
 );
+
+// Channel-partner ownership. Authoritative within our app — seeded once from
+// the RM portfolio paste, then maintained via the admin UI. The sheet sync may
+// fill blanks (rm_id is null) but never overrides a row with is_admin_override.
+export const cpAssignments = pgTable(
+  'cp_assignments',
+  {
+    cp_code: text('cp_code').primaryKey(),
+    rm_id: uuid('rm_id').references(() => users.id, { onDelete: 'set null' }),
+    is_admin_override: boolean('is_admin_override').notNull().default(false),
+    source: text('source').notNull().default('seed'), // 'seed' | 'sheet' | 'admin'
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_by: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => ({
+    rmIdx: index('cp_assignments_rm_idx').on(t.rm_id),
+  })
+);
+
+// One row per visit from the source gsheet. source_row_id is the sheet's `id`
+// column — unique so re-runs of the sync idempotently upsert.
+export const cpVisits = pgTable(
+  'cp_visits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    source_row_id: text('source_row_id').notNull(),
+    cp_code: text('cp_code').notNull(),
+    visited_at: date('visited_at').notNull(),
+    status_raw: text('status_raw'),
+    broker_contact: text('broker_contact'),
+    raw: jsonb('raw'),
+    synced_at: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    sourceRowUnique: uniqueIndex('cp_visits_source_row_uq').on(t.source_row_id),
+    cpCodeIdx: index('cp_visits_cp_code_idx').on(t.cp_code),
+    visitedAtIdx: index('cp_visits_visited_at_idx').on(t.visited_at),
+  })
+);
+
+// Singleton row (id = 1) tracking last successful sheet pull. Used by the
+// lazy-TTL cache so dashboard requests only trigger a fresh sync when needed.
+export const cpSyncState = pgTable('cp_sync_state', {
+  id: integer('id').primaryKey(),
+  last_synced_at: timestamp('last_synced_at', { withTimezone: true }),
+  last_row_count: integer('last_row_count'),
+  last_error: text('last_error'),
+  in_progress: boolean('in_progress').notNull().default(false),
+});

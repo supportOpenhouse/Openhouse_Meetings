@@ -1,6 +1,6 @@
 import { signOut } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, Plus, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, LogOut, Building2 } from 'lucide-react';
 
 export default function AppShell({ user, current, children }) {
   const isAdmin = user.role === 'admin';
@@ -8,10 +8,13 @@ export default function AppShell({ user, current, children }) {
   const navItems = isAdmin
     ? [
         { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard },
+        { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
+        { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users },
         { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: Users },
       ]
     : [
         { href: '/dashboard', key: 'dashboard', label: 'My meetings', icon: LayoutDashboard },
+        { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
         { href: '/new-meeting', key: 'new', label: 'New meeting', icon: Plus },
       ];
 

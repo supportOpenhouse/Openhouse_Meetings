@@ -56,7 +56,9 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   const [debugOn, setDebugOn] = useState(false);
   const [debugLog, setDebugLog] = useState([]);
   const [diag, setDiag] = useState({ mrState: 'idle', muted: null, ready: null });
+  const debugOnRef = useRef(false);
   function dbg(label) {
+    if (!debugOnRef.current) return;
     const t = audioTrackRef.current;
     const entry = {
       ts: new Date().toLocaleTimeString('en-GB', { hour12: false }) + '.' + String(Date.now() % 1000).padStart(3, '0'),
@@ -74,7 +76,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const p = new URLSearchParams(window.location.search);
-    if (p.get('debug') === '1') setDebugOn(true);
+    if (p.get('debug') === '1') {
+      setDebugOn(true);
+      debugOnRef.current = true;
+    }
   }, []);
 
   useEffect(
@@ -160,7 +165,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       const muted = track.muted;
       const ready = track.readyState;
       const mrState = mrRef.current?.state;
-      setDiag({ mrState: mrState || 'none', muted: String(muted), ready });
+      if (debugOnRef.current) setDiag({ mrState: mrState || 'none', muted: String(muted), ready });
       if (muted !== lastMuted || ready !== lastReady || mrState !== lastMrState) {
         dbg(`poll Δ muted=${muted} ready=${ready} mr=${mrState}`);
         lastMuted = muted;
