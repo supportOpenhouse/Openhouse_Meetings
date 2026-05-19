@@ -11,9 +11,8 @@
 //
 // Add new keys at the END to keep older saved summaries renderable.
 
-// NOTE: sentiment-style questions intentionally removed from both sets.
-// Lead temperature (hot/warm/cold) is now derived from the score rubric in
-// lib/scoring.js, not from Claude's gut call.
+// Sentiment-style judgment lives only on engagement (Claude's gut call).
+// Visit meetings derive hot/warm/cold from the lib/scoring.js rubric instead.
 
 export const ENGAGEMENT_QUESTIONS = [
   { key: 'key_topics', label: 'What was discussed' },
@@ -23,6 +22,7 @@ export const ENGAGEMENT_QUESTIONS = [
   { key: 'objections', label: 'Objections raised', list: true },
   { key: 'commitments', label: 'Commitments made', list: true },
   { key: 'next_action', label: 'Next action' },
+  { key: 'sentiment', label: 'Meeting sentiment', sentiment: true },
   { key: 'follow_up_date', label: 'Follow-up timeline' },
 ];
 

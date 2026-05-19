@@ -14,6 +14,8 @@ import {
   X,
   Loader2,
   AlertCircle,
+  Briefcase,
+  Home,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
@@ -258,8 +260,11 @@ function DesktopRow({ m, showRM, cols, onClick }) {
       style={{ gridTemplateColumns: cols }}
     >
       <div>
-        <div style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
-          {m.cp_code}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
+            {m.cp_code}
+          </span>
+          <MeetingTypePill type={m.meeting_type} />
         </div>
         {m.cp_name && (
           <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>
@@ -294,6 +299,7 @@ function MobileCard({ m, showRM, onClick }) {
         <div className="code">
           {m.cp_code}
           {m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
+          <MeetingTypePill type={m.meeting_type} small />
         </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
@@ -362,5 +368,54 @@ function getSentVisuals(sent) {
 // New-shape summaries put the temperature under summary.score.classification.
 // Legacy summaries had it at summary.sentiment.
 function getSentiment(meeting) {
-  return meeting.summary?.score?.classification || meeting.summary?.sentiment || null;
+  return (
+    meeting.summary?.score?.classification ||
+    meeting.summary?.engagement?.sentiment ||
+    meeting.summary?.sentiment ||
+    null
+  );
+}
+
+// Small chip rendered next to the CP code so admins/RMs can tell at a glance
+// which question set/scoring logic drove each row.
+function MeetingTypePill({ type, small = false }) {
+  const t = type === 'visit' ? 'visit' : 'engagement';
+  const isVisit = t === 'visit';
+  return (
+    <span className={`oh-mtype-pill ${isVisit ? 'visit' : 'engagement'} ${small ? 'small' : ''}`}>
+      {isVisit ? <Home size={10} /> : <Briefcase size={10} />}
+      {t}
+      <style jsx>{`
+        .oh-mtype-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 10.5px;
+          padding: 2px 7px;
+          border-radius: 999px;
+          border: 1px solid;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          line-height: 1.4;
+          white-space: nowrap;
+        }
+        .oh-mtype-pill.engagement {
+          color: #4a6b7a;
+          background: rgba(74, 107, 122, 0.08);
+          border-color: rgba(74, 107, 122, 0.22);
+        }
+        .oh-mtype-pill.visit {
+          color: #b97417;
+          background: rgba(196, 122, 26, 0.08);
+          border-color: rgba(196, 122, 26, 0.25);
+        }
+        .oh-mtype-pill.small {
+          font-size: 9.5px;
+          padding: 1px 6px;
+          margin-left: 6px;
+        }
+      `}</style>
+    </span>
+  );
 }

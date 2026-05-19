@@ -23,44 +23,40 @@ import {
   Home,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
-import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS } from './questions';
+import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, MEETING_TYPES } from './questions';
 import { SCORE_PARAMETERS, SCORE_TOTAL_POSSIBLE } from '@/lib/scoring';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
   const router = useRouter();
-  const [tab, setTab] = useState('engagement');
+  const [tab, setTab] = useState('summary');
   const [resumming, setResumming] = useState(false);
   const [resumMsg, setResumMsg] = useState(null);
   const [localMeeting, setLocalMeeting] = useState(meeting);
   const turns = buildSpeakerTurns(localMeeting.transcript_words || []);
   const fallbackText = !turns.length ? localMeeting.transcript_text || '' : '';
 
-  // Normalize the summary into the new shape regardless of when it was saved.
-  // Old summaries are a flat object of engagement keys — promote them into
-  // the `engagement` slot, leave `visit` empty, and let the UI prompt for
-  // regeneration.
-  const summary = normalizeSummary(localMeeting.summary);
+  const meetingType = localMeeting.meeting_type || 'engagement';
+  const view = pickSummaryView(localMeeting.summary, meetingType);
 
-  // Prevent body scroll while open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, []);
 
-  async function resummarize() {
+  async function resummarize(forceType) {
     setResumming(true);
     setResumMsg(null);
     try {
       const r = await fetch(`/api/meetings/${localMeeting.id}/resummarize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(forceType ? { meeting_type: forceType } : {}),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || 'Re-summarize failed');
-      setLocalMeeting((m) => ({ ...m, summary: j.summary }));
-      setResumMsg('Summary regenerated.');
+      setLocalMeeting((m) => ({ ...m, summary: j.summary, meeting_type: j.meeting_type }));
+      setResumMsg(`Regenerated as ${j.meeting_type}.`);
       router.refresh();
     } catch (e) {
       setResumMsg('Error: ' + e.message);
@@ -86,6 +82,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               {localMeeting.cp_city && <span><MapPin size={12} /> {localMeeting.cp_city}</span>}
               <span><Clock size={12} /> {fmtDuration(localMeeting.duration_seconds)}</span>
               {localMeeting.language && <span>· {localMeeting.language}</span>}
+              <MeetingTypeBadge type={meetingType} />
             </div>
           </div>
           <button className="oh-btn ghost oh-close-btn" onClick={onClose} aria-label="Close">
@@ -110,39 +107,30 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
             </div>
           )}
 
-          {summary.score && <ScorePanel score={summary.score} />}
+          {/* Score panel only renders for visit meetings. Engagement meetings
+              use Claude's gut-call sentiment shown inline in the summary. */}
+          {meetingType === 'visit' && view.score && <ScorePanel score={view.score} />}
 
           <div className="oh-tabs">
-            <TabBtn active={tab === 'engagement'} onClick={() => setTab('engagement')}>
-              <Briefcase size={13} /> Engagement summary
-            </TabBtn>
-            <TabBtn active={tab === 'visit'} onClick={() => setTab('visit')}>
-              <Home size={13} /> Visit summary
+            <TabBtn active={tab === 'summary'} onClick={() => setTab('summary')}>
+              {meetingType === 'visit'
+                ? <><Home size={13} /> Visit summary</>
+                : <><Briefcase size={13} /> Engagement summary</>
+              }
             </TabBtn>
             <TabBtn active={tab === 'transcript'} onClick={() => setTab('transcript')}>
               <FileText size={13} /> Transcript
             </TabBtn>
           </div>
 
-          {tab === 'engagement' && (
+          {tab === 'summary' && (
             <SummaryView
-              answers={summary.engagement}
-              questions={ENGAGEMENT_QUESTIONS}
+              answers={view.answers}
+              questions={meetingType === 'visit' ? VISIT_QUESTIONS : ENGAGEMENT_QUESTIONS}
+              grouped={meetingType === 'visit'}
               emptyHint={
-                summary.legacy
-                  ? 'This meeting was summarized before the visit/engagement split. Tap "Regenerate" below to refresh both summaries.'
-                  : null
-              }
-            />
-          )}
-          {tab === 'visit' && (
-            <SummaryView
-              answers={summary.visit}
-              questions={VISIT_QUESTIONS}
-              grouped
-              emptyHint={
-                summary.legacy
-                  ? 'No visit summary on file — this meeting predates the visit summary feature. Tap "Regenerate" below.'
+                view.missing
+                  ? `No ${meetingType} summary on file — this meeting predates the current logic. Tap "Regenerate" below.`
                   : null
               }
             />
@@ -168,17 +156,28 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
             </div>
           )}
 
-          {tab !== 'transcript' && (
+          {tab === 'summary' && (
             <div className="oh-resum-row">
               <button
                 className="oh-btn ghost"
-                onClick={resummarize}
+                onClick={() => resummarize(null)}
                 disabled={resumming}
-                title="Re-run Claude against the saved transcript to refresh both summaries and the score"
+                title="Re-run Claude against the saved transcript using the current meeting type"
               >
                 {resumming ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
-                {resumming ? 'Regenerating…' : 'Regenerate summary'}
+                {resumming ? 'Regenerating…' : 'Regenerate'}
               </button>
+              <span className="oh-resum-label">Or reclassify as:</span>
+              {MEETING_TYPES.filter((t) => t.value !== meetingType).map((t) => (
+                <button
+                  key={t.value}
+                  className="oh-btn ghost"
+                  onClick={() => resummarize(t.value)}
+                  disabled={resumming}
+                >
+                  {t.label}
+                </button>
+              ))}
               {resumMsg && <span className="oh-resum-msg">{resumMsg}</span>}
             </div>
           )}
@@ -241,11 +240,15 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
         .oh-resum-row {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           flex-wrap: wrap;
           margin-top: 18px;
           padding-top: 14px;
           border-top: 1px dashed var(--border);
+        }
+        .oh-resum-label {
+          font-size: 12px;
+          color: var(--ink-3);
         }
         .oh-resum-msg {
           font-size: 13px;
@@ -266,6 +269,40 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
         }
       `}</style>
     </div>
+  );
+}
+
+function MeetingTypeBadge({ type }) {
+  const isVisit = type === 'visit';
+  return (
+    <span className={`oh-type-badge ${isVisit ? 'visit' : 'engagement'}`}>
+      {isVisit ? <Home size={11} /> : <Briefcase size={11} />}
+      {isVisit ? 'visit' : 'engagement'}
+      <style jsx>{`
+        .oh-type-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          border: 1px solid;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .oh-type-badge.engagement {
+          color: #4a6b7a;
+          background: rgba(74, 107, 122, 0.08);
+          border-color: rgba(74, 107, 122, 0.25);
+        }
+        .oh-type-badge.visit {
+          color: #b97417;
+          background: rgba(196, 122, 26, 0.08);
+          border-color: rgba(196, 122, 26, 0.25);
+        }
+      `}</style>
+    </span>
   );
 }
 
@@ -299,6 +336,36 @@ function TabBtn({ active, onClick, children }) {
       `}</style>
     </button>
   );
+}
+
+// Recordings produced by MediaRecorder don't have a duration in the WebM
+// header, so audio.duration is Infinity until the browser scans the file.
+// Trigger that scan on mount so the seek bar tracks correctly.
+function WebmAudio({ src }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let cancelled = false;
+    function onMeta() {
+      if (cancelled) return;
+      if (!isFinite(el.duration)) {
+        const onDurationChange = () => {
+          if (cancelled) return;
+          if (isFinite(el.duration)) {
+            el.removeEventListener('durationchange', onDurationChange);
+            try { el.currentTime = 0; } catch {}
+          }
+        };
+        el.addEventListener('durationchange', onDurationChange);
+        try { el.currentTime = 1e101; } catch {}
+      }
+    }
+    if (el.readyState >= 1) onMeta();
+    else el.addEventListener('loadedmetadata', onMeta, { once: true });
+    return () => { cancelled = true; };
+  }, [src]);
+  return <audio ref={ref} controls src={src} preload="metadata" style={{ width: '100%' }} />;
 }
 
 function ScorePanel({ score }) {
@@ -463,6 +530,19 @@ function SummaryView({ answers, questions, grouped = false, emptyHint = null }) 
         </ul>
       );
     }
+    if (q.sentiment) {
+      return (
+        <span
+          className={`oh-pill ${val === 'hot' ? 'hot' : val === 'warm' ? 'warm' : 'cold'}`}
+          style={{ fontSize: 13, padding: '4px 12px' }}
+        >
+          {val === 'hot' && <Flame size={12} />}
+          {val === 'warm' && <TrendingUp size={12} />}
+          {val === 'cold' && <Snowflake size={12} />}
+          {val}
+        </span>
+      );
+    }
     return String(val);
   }
 
@@ -500,63 +580,27 @@ function SummaryView({ answers, questions, grouped = false, emptyHint = null }) 
   );
 }
 
-// Recordings produced by MediaRecorder don't have a duration in the WebM
-// header, so audio.duration is Infinity until the browser scans the file.
-// Trigger that scan on mount: seek to a huge time, wait for durationchange,
-// then seek back to 0 — the seek bar now tracks correctly.
-function WebmAudio({ src }) {
-  const ref = useRef(null);
+// Given the saved `summary` JSONB and the chosen meeting_type, return the
+// right answer set + score (visits only) for the active tab.
+// Tolerates THREE historical shapes:
+//   1. Flat (very old): { key_topics: ..., sentiment: 'warm', ... }
+//   2. Combined (the 50 we resummarized): { engagement, visit, signals, score }
+//   3. Branched (current): { meeting_type, engagement } or { meeting_type, visit, signals, score }
+function pickSummaryView(summary, meetingType) {
+  if (!summary) return { answers: null, score: null, missing: true };
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let cancelled = false;
-
-    function onMeta() {
-      if (cancelled) return;
-      if (!isFinite(el.duration)) {
-        const onDurationChange = () => {
-          if (cancelled) return;
-          if (isFinite(el.duration)) {
-            el.removeEventListener('durationchange', onDurationChange);
-            try { el.currentTime = 0; } catch {}
-          }
-        };
-        el.addEventListener('durationchange', onDurationChange);
-        try { el.currentTime = 1e101; } catch {}
-      }
+  if (meetingType === 'visit') {
+    if (summary.visit) {
+      return { answers: summary.visit, score: summary.score || null, missing: false };
     }
-
-    if (el.readyState >= 1) onMeta();
-    else el.addEventListener('loadedmetadata', onMeta, { once: true });
-
-    return () => { cancelled = true; };
-  }, [src]);
-
-  return (
-    <audio
-      ref={ref}
-      controls
-      src={src}
-      preload="metadata"
-      style={{ width: '100%' }}
-    />
-  );
-}
-
-// Old summaries were flat: { key_topics: ..., cp_requirements: ..., sentiment: ... }.
-// New shape: { engagement: {...}, visit: {...}, signals: {...}, score: {...} }.
-function normalizeSummary(raw) {
-  if (!raw) return { engagement: null, visit: null, score: null, legacy: false };
-  if (raw.engagement || raw.visit || raw.score) {
-    return {
-      engagement: raw.engagement || null,
-      visit: raw.visit || null,
-      signals: raw.signals || null,
-      score: raw.score || null,
-      legacy: false,
-    };
+    // Flat-engagement-shape saved under a visit row → no visit data on file.
+    return { answers: null, score: null, missing: true };
   }
-  // Legacy: treat the whole blob as the engagement answers.
-  return { engagement: raw, visit: null, score: null, legacy: true };
+
+  // engagement view
+  if (summary.engagement) {
+    return { answers: summary.engagement, score: null, missing: false };
+  }
+  // Flat shape — treat the whole blob as engagement answers.
+  return { answers: summary, score: null, missing: false };
 }

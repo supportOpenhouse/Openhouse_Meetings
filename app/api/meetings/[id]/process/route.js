@@ -44,13 +44,17 @@ export async function POST(request, { params }) {
       process.env.ELEVENLABS_LANGUAGE || ''
     );
 
-    const summary = await summarizeWithClaude(transcript.text || '', {
-      rm_name: session.user.name,
-      cp_code: meeting.cp_code,
-      cp_mobile: meeting.cp_mobile,
-      purpose: meeting.purpose,
-      duration_seconds: meeting.duration_seconds,
-    });
+    const summary = await summarizeWithClaude(
+      transcript.text || '',
+      {
+        rm_name: session.user.name,
+        cp_code: meeting.cp_code,
+        cp_mobile: meeting.cp_mobile,
+        purpose: meeting.purpose,
+        duration_seconds: meeting.duration_seconds,
+      },
+      meeting.meeting_type || 'engagement'
+    );
 
     const updated = await updateMeeting(meeting.id, {
       language: transcript.language_code || null,

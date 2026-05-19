@@ -4,14 +4,14 @@ import { getMeetingForProcessing, updateMeeting } from '@/lib/queries';
 import { summarizeWithClaude } from '@/lib/claude';
 
 export const runtime = 'nodejs';
-// Summarization-only re-run uses the existing transcript_text. No fresh
-// transcription is needed, so this is much faster than /process.
 export const maxDuration = 120;
 
 // POST /api/meetings/[id]/resummarize
-// Re-runs Claude against the EXISTING transcript_text and rebuilds the
-// combined { engagement, visit, signals, score } summary. Owner or admin only.
-export async function POST(_request, { params }) {
+// Body: { meeting_type?: 'engagement' | 'visit' }
+// Re-runs Claude against the EXISTING transcript_text. If meeting_type is
+// passed it overrides what's on the row (and the meeting is reclassified).
+// Owner-or-admin only.
+export async function POST(request, { params }) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,22 +30,39 @@ export async function POST(_request, { params }) {
     );
   }
 
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const requested = body?.meeting_type;
+  const newType =
+    requested === 'engagement' || requested === 'visit'
+      ? requested
+      : meeting.meeting_type || 'engagement';
+
   try {
-    const summary = await summarizeWithClaude(meeting.transcript_text, {
-      rm_name: session.user.name,
-      cp_code: meeting.cp_code,
-      cp_mobile: meeting.cp_mobile,
-      purpose: meeting.purpose,
-      duration_seconds: meeting.duration_seconds,
-    });
+    const summary = await summarizeWithClaude(
+      meeting.transcript_text,
+      {
+        rm_name: session.user.name,
+        cp_code: meeting.cp_code,
+        cp_mobile: meeting.cp_mobile,
+        purpose: meeting.purpose,
+        duration_seconds: meeting.duration_seconds,
+      },
+      newType
+    );
 
     const updated = await updateMeeting(meeting.id, {
       summary,
+      meeting_type: newType,
       status: 'ready',
       error_message: null,
     });
 
-    return NextResponse.json({ ok: true, summary: updated.summary });
+    return NextResponse.json({
+      ok: true,
+      meeting_type: updated.meeting_type,
+      summary: updated.summary,
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e?.message || 'Re-summarize failed' },
