@@ -11,6 +11,10 @@
 //
 // Add new keys at the END to keep older saved summaries renderable.
 
+// NOTE: sentiment-style questions intentionally removed from both sets.
+// Lead temperature (hot/warm/cold) is now derived from the score rubric in
+// lib/scoring.js, not from Claude's gut call.
+
 export const ENGAGEMENT_QUESTIONS = [
   { key: 'key_topics', label: 'What was discussed' },
   { key: 'cp_requirements', label: 'CP requirements' },
@@ -19,7 +23,6 @@ export const ENGAGEMENT_QUESTIONS = [
   { key: 'objections', label: 'Objections raised', list: true },
   { key: 'commitments', label: 'Commitments made', list: true },
   { key: 'next_action', label: 'Next action' },
-  { key: 'sentiment', label: 'Meeting sentiment', sentiment: true },
   { key: 'follow_up_date', label: 'Follow-up timeline' },
 ];
 
@@ -67,7 +70,6 @@ export const VISIT_QUESTIONS = [
 
   // Outcome
   { key: 'next_action', label: 'Next action', group: 'Outcome' },
-  { key: 'lead_temperature', label: 'Lead temperature', sentiment: true, group: 'Outcome' },
 ];
 
 // Legacy export — defaults to the engagement set so any old import keeps

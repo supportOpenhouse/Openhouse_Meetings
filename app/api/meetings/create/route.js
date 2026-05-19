@@ -28,18 +28,11 @@ export async function POST(request) {
     purpose,
     duration_seconds,
     started_at,
-    meeting_type,
   } = body;
 
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
   if (!cp_code || !cp_mobile) {
     return NextResponse.json({ error: 'cp_code and cp_mobile required' }, { status: 400 });
-  }
-  if (meeting_type !== 'engagement' && meeting_type !== 'visit') {
-    return NextResponse.json(
-      { error: "meeting_type must be 'engagement' or 'visit'" },
-      { status: 400 }
-    );
   }
 
   // Same SSRF guard the old endpoint had — only accept our own Blob host.
@@ -67,7 +60,6 @@ export async function POST(request) {
     duration_seconds: parseInt(duration_seconds || 0, 10),
     audio_url,
     status: 'processing',
-    meeting_type,
   });
 
   return NextResponse.json({ id: meeting.id });
