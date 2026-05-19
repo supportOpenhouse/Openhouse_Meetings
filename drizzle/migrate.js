@@ -62,6 +62,11 @@ async function run() {
   await sql`CREATE INDEX IF NOT EXISTS meetings_started_at_idx ON meetings(started_at)`;
   await sql`CREATE INDEX IF NOT EXISTS meetings_cp_code_idx ON meetings(cp_code)`;
 
+  // Idempotent add for the engagement-vs-visit classification. Existing rows
+  // back-fill to 'engagement' (their summaries were generated against the
+  // original question set).
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS meeting_type text NOT NULL DEFAULT 'engagement'`;
+
   console.log('Creating cp_assignments table...');
   await sql`
     CREATE TABLE IF NOT EXISTS cp_assignments (

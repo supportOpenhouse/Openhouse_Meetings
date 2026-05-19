@@ -21,6 +21,7 @@ import {
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
 import { fmtDuration } from '@/lib/utils';
+import { MEETING_TYPES } from '@/components/questions';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -40,6 +41,7 @@ export default function NewMeetingClient({ user }) {
     cp_name: '',
     cp_city: '',
     purpose: '',
+    meeting_type: '',
   });
   // Tracks the most recent lookup so the UI can show "✓ matched" / "not found" / "looking up…".
   // shape: { state: 'idle'|'loading'|'matched'|'unmatched'|'error', byField: 'cp_code'|'phone', cp?: {...}, message?: string }
@@ -204,6 +206,7 @@ export default function NewMeetingClient({ user }) {
           cp_name: form.cp_name,
           cp_city: form.cp_city,
           purpose: form.purpose,
+          meeting_type: form.meeting_type,
           duration_seconds: durSec,
           started_at: new Date(startedAt).toISOString(),
         }),
@@ -325,7 +328,7 @@ export default function NewMeetingClient({ user }) {
     setCpLookup({ state: 'idle' });
   }
 
-  const canStart = form.cp_code.trim() && form.cp_mobile.trim();
+  const canStart = form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type;
 
   return (
     <div className="oh-page">
@@ -412,6 +415,25 @@ export default function NewMeetingClient({ user }) {
                 value={form.purpose}
                 onChange={(e) => setForm({ ...form, purpose: e.target.value })}
               />
+            </div>
+
+            <div className="oh-field">
+              <label>
+                Meeting type <span className="oh-req">*</span>
+              </label>
+              <div className="oh-mtype-grid">
+                {MEETING_TYPES.map((t) => (
+                  <button
+                    type="button"
+                    key={t.value}
+                    className={`oh-mtype-card ${form.meeting_type === t.value ? 'selected' : ''}`}
+                    onClick={() => setForm({ ...form, meeting_type: t.value })}
+                  >
+                    <div className="oh-mtype-label">{t.label}</div>
+                    <div className="oh-mtype-desc">{t.description}</div>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="oh-form-actions">
@@ -590,6 +612,43 @@ export default function NewMeetingClient({ user }) {
           display: flex;
           gap: 10px;
           margin-top: 8px;
+        }
+        .oh-mtype-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .oh-mtype-card {
+          all: unset;
+          box-sizing: border-box;
+          cursor: pointer;
+          padding: 14px 16px;
+          border: 1.5px solid var(--border);
+          border-radius: 10px;
+          background: var(--paper);
+          transition: all 0.15s ease;
+        }
+        .oh-mtype-card:hover {
+          border-color: var(--ink-2);
+          background: var(--paper-2);
+        }
+        .oh-mtype-card.selected {
+          border-color: var(--accent);
+          background: rgba(184, 52, 28, 0.04);
+        }
+        .oh-mtype-label {
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--ink);
+          margin-bottom: 3px;
+        }
+        .oh-mtype-desc {
+          font-size: 12px;
+          color: var(--ink-2);
+          line-height: 1.35;
+        }
+        @media (max-width: 768px) {
+          .oh-mtype-grid { grid-template-columns: 1fr; }
         }
         .oh-error-box {
           background: var(--paper);

@@ -44,6 +44,9 @@ export const meetings = pgTable(
     cp_name: text('cp_name'),
     cp_city: text('cp_city'),
     purpose: text('purpose'),
+    // 'engagement' (default — original meeting style) or 'visit' (site visit
+    // assessment, drives a different summarization question set).
+    meeting_type: text('meeting_type').notNull().default('engagement'),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),
     language: text('language'),

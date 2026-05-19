@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   X,
   Phone,
@@ -14,14 +15,41 @@ import {
   Trash2,
   User,
   MapPin,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
-import { DEFAULT_QUESTIONS } from './questions';
+import { getQuestionsForType, MEETING_TYPES } from './questions';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
+  const router = useRouter();
   const [tab, setTab] = useState('summary');
-  const turns = buildSpeakerTurns(meeting.transcript_words || []);
-  const fallbackText = !turns.length ? meeting.transcript_text || '' : '';
+  const [resumming, setResumming] = useState(false);
+  const [resumMsg, setResumMsg] = useState(null);
+  const [localMeeting, setLocalMeeting] = useState(meeting);
+  const turns = buildSpeakerTurns(localMeeting.transcript_words || []);
+  const fallbackText = !turns.length ? localMeeting.transcript_text || '' : '';
+
+  async function resummarize(newType) {
+    setResumming(true);
+    setResumMsg(null);
+    try {
+      const r = await fetch(`/api/meetings/${localMeeting.id}/resummarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meeting_type: newType }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Re-summarize failed');
+      setLocalMeeting((m) => ({ ...m, summary: j.summary, meeting_type: j.meeting_type }));
+      setResumMsg(`Regenerated as ${j.meeting_type}.`);
+      router.refresh();
+    } catch (e) {
+      setResumMsg('Error: ' + e.message);
+    } finally {
+      setResumming(false);
+    }
+  }
 
   // Prevent body scroll while open
   useEffect(() => {
@@ -38,17 +66,17 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
         <div className="oh-modal-header">
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="oh-eyebrow oh-truncate">
-              {meeting.rm_name || meeting.rm_email} · {fmtDate(meeting.started_at)}
+              {localMeeting.rm_name || localMeeting.rm_email} · {fmtDate(localMeeting.started_at)}
             </div>
             <h2 className="oh-detail-title">
-              CP <span className="oh-mono">{meeting.cp_code}</span>
+              CP <span className="oh-mono">{localMeeting.cp_code}</span>
             </h2>
             <div className="oh-detail-meta">
-              {meeting.cp_name && <span><User size={12} /> {meeting.cp_name}</span>}
-              <span><Phone size={12} /> {meeting.cp_mobile}</span>
-              {meeting.cp_city && <span><MapPin size={12} /> {meeting.cp_city}</span>}
-              <span><Clock size={12} /> {fmtDuration(meeting.duration_seconds)}</span>
-              {meeting.language && <span>· {meeting.language}</span>}
+              {localMeeting.cp_name && <span><User size={12} /> {localMeeting.cp_name}</span>}
+              <span><Phone size={12} /> {localMeeting.cp_mobile}</span>
+              {localMeeting.cp_city && <span><MapPin size={12} /> {localMeeting.cp_city}</span>}
+              <span><Clock size={12} /> {fmtDuration(localMeeting.duration_seconds)}</span>
+              {localMeeting.language && <span>· {localMeeting.language}</span>}
             </div>
           </div>
           <button
@@ -61,19 +89,19 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
         </div>
 
         <div className="oh-modal-body">
-          {meeting.purpose && (
+          {localMeeting.purpose && (
             <div className="oh-purpose">
-              <strong>Purpose:</strong> {meeting.purpose}
+              <strong>Purpose:</strong> {localMeeting.purpose}
             </div>
           )}
 
-          {meeting.audio_url && (
+          {localMeeting.audio_url && (
             <div style={{ marginBottom: 24 }}>
               <div className="oh-eyebrow" style={{ marginBottom: 8 }}>
                 <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
                 Recording
               </div>
-              <audio controls src={meeting.audio_url} style={{ width: '100%' }} />
+              <audio controls src={localMeeting.audio_url} style={{ width: '100%' }} />
             </div>
           )}
 
@@ -86,7 +114,39 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
             </TabBtn>
           </div>
 
-          {tab === 'summary' && <SummaryView summary={meeting.summary} />}
+          {tab === 'summary' && (
+            <>
+              <SummaryView
+                summary={localMeeting.summary}
+                meetingType={localMeeting.meeting_type || 'engagement'}
+              />
+              <div className="oh-resum-row">
+                <span className="oh-eyebrow" style={{ marginRight: 8 }}>Regenerate as:</span>
+                {MEETING_TYPES.map((t) => {
+                  const current = (localMeeting.meeting_type || 'engagement') === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      className={`oh-btn ghost oh-resum-btn ${current ? 'current' : ''}`}
+                      onClick={() => resummarize(t.value)}
+                      disabled={resumming}
+                      title={
+                        current
+                          ? `Re-run Claude over the same transcript using ${t.label}`
+                          : `Reclassify as ${t.label} and regenerate the summary`
+                      }
+                    >
+                      {resumming ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {resumMsg && (
+                <div className="oh-resum-msg">{resumMsg}</div>
+              )}
+            </>
+          )}
           {tab === 'transcript' && (
             <div>
               {turns.length > 0 ? (
@@ -169,6 +229,27 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
           display: flex;
           justify-content: flex-end;
         }
+        .oh-resum-row {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 24px;
+          padding-top: 16px;
+          border-top: 1px dashed var(--border);
+        }
+        .oh-resum-btn.current {
+          background: var(--paper-2);
+          opacity: 0.7;
+        }
+        .oh-resum-msg {
+          font-size: 13px;
+          color: var(--ink-2);
+          background: var(--paper-2);
+          padding: 8px 12px;
+          border-radius: 8px;
+          margin-top: 8px;
+        }
         @media (max-width: 768px) {
           .oh-detail-title { font-size: 22px; }
           .oh-detail-title :global(.oh-mono) { font-size: 18px; }
@@ -214,48 +295,104 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function SummaryView({ summary }) {
+function SummaryView({ summary, meetingType }) {
   if (!summary)
     return <div style={{ color: 'var(--ink-3)' }}>No summary available.</div>;
 
+  const questions = getQuestionsForType(meetingType);
+  const typeMeta = MEETING_TYPES.find((t) => t.value === meetingType);
+
+  // Group visit questions by their `group` property; engagement is flat.
+  const groups = [];
+  {
+    const byGroup = new Map();
+    for (const q of questions) {
+      const g = q.group || '__default__';
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g).push(q);
+    }
+    for (const [name, items] of byGroup) {
+      groups.push({ name: name === '__default__' ? null : name, items });
+    }
+  }
+
+  function renderAnswer(q, val) {
+    if (q.list && Array.isArray(val)) {
+      if (val.length === 0) return <em style={{ color: 'var(--ink-3)' }}>None</em>;
+      return (
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {val.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+      );
+    }
+    if (q.sentiment) {
+      return (
+        <span
+          className={`oh-pill ${val === 'hot' ? 'hot' : val === 'warm' ? 'warm' : 'cold'}`}
+          style={{ fontSize: 13, padding: '4px 12px' }}
+        >
+          {val === 'hot' && <Flame size={12} />}
+          {val === 'warm' && <TrendingUp size={12} />}
+          {val === 'cold' && <Snowflake size={12} />}
+          {val}
+        </span>
+      );
+    }
+    return String(val);
+  }
+
   return (
     <div>
-      {DEFAULT_QUESTIONS.map((q) => {
-        const val = summary[q.key];
-        if (val === undefined || val === null) return null;
-        return (
-          <div key={q.key} className="oh-qa-card">
-            <div className="q">{q.label}</div>
-            <div className="a">
-              {q.list && Array.isArray(val) ? (
-                val.length === 0 ? (
-                  <em style={{ color: 'var(--ink-3)' }}>None</em>
-                ) : (
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {val.map((item, i) => (
-                      <li key={i}>{item}</li>
-                    ))}
-                  </ul>
-                )
-              ) : q.sentiment ? (
-                <span
-                  className={`oh-pill ${
-                    val === 'hot' ? 'hot' : val === 'warm' ? 'warm' : 'cold'
-                  }`}
-                  style={{ fontSize: 13, padding: '4px 12px' }}
-                >
-                  {val === 'hot' && <Flame size={12} />}
-                  {val === 'warm' && <TrendingUp size={12} />}
-                  {val === 'cold' && <Snowflake size={12} />}
-                  {val}
-                </span>
-              ) : (
-                String(val)
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {typeMeta && (
+        <div className="oh-summary-type-tag">
+          {typeMeta.label}
+        </div>
+      )}
+      {groups.map((g, gi) => (
+        <div key={gi}>
+          {g.name && <div className="oh-summary-group-head">{g.name}</div>}
+          {g.items.map((q) => {
+            const val = summary[q.key];
+            if (val === undefined || val === null) return null;
+            return (
+              <div key={q.key} className="oh-qa-card">
+                <div className="q">{q.label}</div>
+                <div className="a">{renderAnswer(q, val)}</div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <style jsx>{`
+        .oh-summary-type-tag {
+          display: inline-block;
+          font-size: 11px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          font-weight: 500;
+          color: var(--ink-2);
+          background: var(--paper-2);
+          border: 1px solid var(--border);
+          padding: 3px 10px;
+          border-radius: 999px;
+          margin-bottom: 14px;
+        }
+        .oh-summary-group-head {
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          font-weight: 600;
+          color: var(--ink-3);
+          margin: 18px 0 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px dashed var(--border);
+        }
+        .oh-summary-group-head:first-of-type {
+          margin-top: 4px;
+        }
+      `}</style>
     </div>
   );
 }
