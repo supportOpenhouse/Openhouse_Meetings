@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   X,
@@ -106,7 +106,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
                 <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
                 Recording
               </div>
-              <audio controls src={localMeeting.audio_url} style={{ width: '100%' }} />
+              <WebmAudio src={localMeeting.audio_url} />
             </div>
           )}
 
@@ -497,6 +497,50 @@ function SummaryView({ answers, questions, grouped = false, emptyHint = null }) 
         .oh-summary-group-head:first-of-type { margin-top: 0; }
       `}</style>
     </div>
+  );
+}
+
+// Recordings produced by MediaRecorder don't have a duration in the WebM
+// header, so audio.duration is Infinity until the browser scans the file.
+// Trigger that scan on mount: seek to a huge time, wait for durationchange,
+// then seek back to 0 — the seek bar now tracks correctly.
+function WebmAudio({ src }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let cancelled = false;
+
+    function onMeta() {
+      if (cancelled) return;
+      if (!isFinite(el.duration)) {
+        const onDurationChange = () => {
+          if (cancelled) return;
+          if (isFinite(el.duration)) {
+            el.removeEventListener('durationchange', onDurationChange);
+            try { el.currentTime = 0; } catch {}
+          }
+        };
+        el.addEventListener('durationchange', onDurationChange);
+        try { el.currentTime = 1e101; } catch {}
+      }
+    }
+
+    if (el.readyState >= 1) onMeta();
+    else el.addEventListener('loadedmetadata', onMeta, { once: true });
+
+    return () => { cancelled = true; };
+  }, [src]);
+
+  return (
+    <audio
+      ref={ref}
+      controls
+      src={src}
+      preload="metadata"
+      style={{ width: '100%' }}
+    />
   );
 }
 

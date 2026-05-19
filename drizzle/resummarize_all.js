@@ -77,6 +77,11 @@ async function pickMeetings() {
 }
 
 async function runOne(m) {
+  if (DRY) {
+    // True dry-run: don't bother Claude, just report what WOULD be processed.
+    const transcriptLen = (m.transcript_text || '').length;
+    return { ms: 0, score: '—', classification: 'dry', transcriptLen };
+  }
   const started = Date.now();
   const summary = await summarizeMeeting(m.transcript_text, {
     rm_name: m.rm_name || 'Unknown',
@@ -85,9 +90,7 @@ async function runOne(m) {
     purpose: m.purpose,
     duration_seconds: m.duration_seconds,
   });
-  if (!DRY) {
-    await sql`UPDATE meetings SET summary = ${JSON.stringify(summary)}::jsonb WHERE id = ${m.id}`;
-  }
+  await sql`UPDATE meetings SET summary = ${JSON.stringify(summary)}::jsonb WHERE id = ${m.id}`;
   const ms = Date.now() - started;
   return { ms, score: summary.score?.total, classification: summary.score?.classification };
 }
@@ -111,7 +114,11 @@ async function run() {
         runOne(m)
           .then((r) => {
             done++;
-            console.log(`  ✓ ${m.id} (${m.cp_code}) — ${r.ms}ms — ${r.classification} ${r.score}/100  [${done}/${meetings.length}]`);
+            if (DRY) {
+              console.log(`  · ${m.id} (${m.cp_code}) — would process (${r.transcriptLen} chars)  [${done}/${meetings.length}]`);
+            } else {
+              console.log(`  ✓ ${m.id} (${m.cp_code}) — ${r.ms}ms — ${r.classification} ${r.score}/100  [${done}/${meetings.length}]`);
+            }
           })
           .catch((e) => {
             failed++;

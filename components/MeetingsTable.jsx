@@ -50,7 +50,7 @@ export default function MeetingsTable({
   const filtered = meetings.filter((m) => {
     if (rmFilter !== 'all' && m.rm_id !== rmFilter) return false;
     if (cityFilter !== 'all' && m.cp_city !== cityFilter) return false;
-    if (sentimentFilter !== 'all' && (m.summary?.sentiment || 'n/a') !== sentimentFilter) return false;
+    if (sentimentFilter !== 'all' && (getSentiment(m) || 'n/a') !== sentimentFilter) return false;
 
     if (since) {
       const d = new Date(since);
@@ -261,6 +261,11 @@ function DesktopRow({ m, showRM, cols, onClick }) {
         <div style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
           {m.cp_code}
         </div>
+        {m.cp_name && (
+          <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>
+            {m.cp_name}
+          </div>
+        )}
         <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>
           {fmtDate(m.started_at)}
         </div>
@@ -286,7 +291,10 @@ function MobileCard({ m, showRM, onClick }) {
   return (
     <div className="oh-meeting-card" onClick={onClick}>
       <div className="top">
-        <div className="code">{m.cp_code}</div>
+        <div className="code">
+          {m.cp_code}
+          {m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
+        </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
       <div className="meta">
@@ -302,6 +310,15 @@ function MobileCard({ m, showRM, onClick }) {
           </>
         )}
       </div>
+      <style jsx>{`
+        .cp-name {
+          font-weight: 400;
+          color: var(--ink-2);
+          font-family: var(--font-sans, system-ui);
+          font-size: 13.5px;
+          margin-left: 2px;
+        }
+      `}</style>
     </div>
   );
 }
@@ -324,7 +341,7 @@ function StatusOrSentimentPill({ meeting }) {
       </span>
     );
   }
-  const sent = meeting.summary?.sentiment;
+  const sent = getSentiment(meeting);
   const { pillClass, SentIcon } = getSentVisuals(sent);
   return (
     <span className={`oh-pill ${pillClass}`}>
@@ -340,4 +357,10 @@ function getSentVisuals(sent) {
   const SentIcon =
     sent === 'hot' ? Flame : sent === 'warm' ? TrendingUp : sent === 'cold' ? Snowflake : Minus;
   return { pillClass, SentIcon };
+}
+
+// New-shape summaries put the temperature under summary.score.classification.
+// Legacy summaries had it at summary.sentiment.
+function getSentiment(meeting) {
+  return meeting.summary?.score?.classification || meeting.summary?.sentiment || null;
 }
