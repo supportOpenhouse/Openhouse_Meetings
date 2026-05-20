@@ -9,6 +9,7 @@ import {
   deleteLocalRecording,
 } from '@/lib/localQueue';
 import { uploadAndCreateMeeting } from '@/lib/uploadMeeting';
+import { buildRecordingLabel, buildRecordingFilename } from '@/lib/recordingName';
 import { fmtDuration } from '@/lib/utils';
 
 // Shows recordings that are saved on this device but haven't been uploaded
@@ -81,9 +82,8 @@ export default function PendingUploads({ user }) {
 
       <div className="oh-pending-list">
         {pending.map((r) => {
-          const subject = r.form?.is_onboarding
-            ? (r.form?.cp_name || 'Prospective CP')
-            : (r.form?.cp_code || r.form?.cp_name || 'Untitled');
+          const subject = buildRecordingLabel(r.form);
+          const filename = buildRecordingFilename(r.form, r.started_at, r.duration_seconds);
           const status = statusById[r.id];
           const isBusy = busyId === r.id;
           const failed = status?.startsWith?.('failed');
@@ -94,6 +94,9 @@ export default function PendingUploads({ user }) {
                 <div className="oh-pending-sub">
                   {r.form?.is_onboarding ? 'onboarding · ' : (r.form?.meeting_type ? `${r.form.meeting_type} · ` : '')}
                   {fmtDuration(r.duration_seconds || 0)} · {Math.round((r.blob_bytes || 0) / 1024)} KB · {relative(r.created_at)}
+                </div>
+                <div className="oh-pending-filename oh-mono" title="The filename this saves as">
+                  {filename}
                 </div>
                 {status && (
                   <div className={`oh-pending-status ${failed ? 'failed' : ''}`}>
@@ -170,6 +173,12 @@ export default function PendingUploads({ user }) {
           font-size: 12px;
           color: var(--ink-2);
           margin-top: 2px;
+        }
+        .oh-pending-filename {
+          font-size: 10.5px;
+          color: var(--ink-3);
+          margin-top: 3px;
+          word-break: break-all;
         }
         .oh-pending-status {
           margin-top: 4px;

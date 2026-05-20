@@ -26,6 +26,8 @@ import { fmtDuration } from '@/lib/utils';
 import { MEETING_TYPES } from '@/components/questions';
 import { logEvent } from '@/lib/clientLog';
 import { saveLocalRecording, deleteLocalRecording } from '@/lib/localQueue';
+import { buildRecordingFilename, parseRecordingFilename, triggerDownload } from '@/lib/recordingName';
+import { uploadAndCreateMeeting } from '@/lib/uploadMeeting';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -69,11 +71,22 @@ export default function NewMeetingClient({ user }) {
   const [toast, setToast] = useState(null);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordedDuration, setRecordedDuration] = useState(0);
+  // Mirror of recordedBlob in a ref — callbacks fired before a re-render (the
+  // device-download path) need the blob synchronously.
+  const recordedBlobRef = useRef(null);
   // IndexedDB id of the locally-queued copy of this recording. We save the
   // recording to the local queue immediately on finalize so it can't be lost
   // if the upload fails or the user navigates away mid-upload. On successful
   // upload we delete it.
   const [localQueueId, setLocalQueueId] = useState(null);
+  // Filename of the device copy, once downloaded — surfaced in the UI so the
+  // RM knows exactly what to look for in their Downloads folder.
+  const [downloadedName, setDownloadedName] = useState(null);
+  // True while we're uploading a file the RM picked from their device (the
+  // "Restore & upload a file" path) rather than a fresh recording. Changes
+  // which buttons the failure UI shows.
+  const [isRestoreFlow, setIsRestoreFlow] = useState(false);
+  const restoreCtxRef = useRef(null);
 
   // Refs for the stall watchdog
   const lastProgressAtRef = useRef(0);
@@ -91,6 +104,8 @@ export default function NewMeetingClient({ user }) {
 
   function startRecording() {
     setStartedAt(Date.now());
+    setIsRestoreFlow(false);
+    setDownloadedName(null);
     setStep('record');
   }
 
@@ -143,12 +158,46 @@ export default function NewMeetingClient({ user }) {
     setStep('form');
   }
 
+  // Single source of truth for the form metadata we attach to a recording,
+  // both in the IndexedDB queue and the device-download filename.
+  function meetingMeta() {
+    return {
+      cp_code: form.cp_code,
+      cp_mobile: form.cp_mobile,
+      cp_name: form.cp_name,
+      cp_city: form.cp_city,
+      purpose: form.purpose,
+      meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
+      is_onboarding: isOnboarding,
+    };
+  }
+
+  // Save a real, properly-named .webm file into the device's Downloads folder.
+  // The filename encodes all the meeting metadata so the file can be restored
+  // into the app later even if the in-browser queue is gone.
+  function downloadCopyToDevice() {
+    if (!recordedBlob && !recordedBlobRef.current) return false;
+    const b = recordedBlob || recordedBlobRef.current;
+    const name = buildRecordingFilename(
+      meetingMeta(),
+      new Date(startedAt).toISOString(),
+      recordedDuration
+    );
+    const ok = triggerDownload(b, name);
+    if (ok) {
+      setDownloadedName(name);
+      logEvent('upload.retried', { cp_code: form.cp_code, payload: { savedToDevice: name } });
+    }
+    return ok;
+  }
+
   // After finalize() the Recorder fires this with the actual webm blob. We
   // persist the recording to the IndexedDB queue BEFORE attempting upload so
   // it survives a failed/stalled network, a tab close, or a power loss. On a
   // successful upload we delete the local copy.
   async function onRecorded(blob, durSec) {
     setRecordedBlob(blob);
+    recordedBlobRef.current = blob;
     setRecordedDuration(durSec);
 
     let localId = null;
@@ -157,15 +206,7 @@ export default function NewMeetingClient({ user }) {
         blob,
         durSec,
         startedAt: new Date(startedAt).toISOString(),
-        form: {
-          cp_code: form.cp_code,
-          cp_mobile: form.cp_mobile,
-          cp_name: form.cp_name,
-          cp_city: form.cp_city,
-          purpose: form.purpose,
-          meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
-          is_onboarding: isOnboarding,
-        },
+        form: meetingMeta(),
       });
       setLocalQueueId(localId);
     } catch (e) {
@@ -228,8 +269,11 @@ export default function NewMeetingClient({ user }) {
     }, 1000);
 
     try {
-      const safeCode = (form.cp_code || 'cp').replace(/[^a-zA-Z0-9_-]/g, '');
-      const filename = `meetings/${user.id}/${Date.now()}-${safeCode}.webm`;
+      const filename = `meetings/${user.id}/${buildRecordingFilename(
+        meetingMeta(),
+        new Date(startedAt).toISOString(),
+        durSec
+      )}`;
 
       const newBlob = await upload(filename, blob, {
         access: 'public',
@@ -305,6 +349,10 @@ export default function NewMeetingClient({ user }) {
         cp_code: form.cp_code,
         payload: { reason: 'exception', message: (e?.message || '').slice(0, 300) },
       });
+      // Safety net: drop a real, properly-named .webm into the device's
+      // Downloads folder so the recording can never be lost to a flaky network
+      // or a missed pending-uploads banner.
+      downloadCopyToDevice();
       showToast(e.message, 'error');
     }
   }
@@ -315,14 +363,80 @@ export default function NewMeetingClient({ user }) {
     runUpload(recordedBlob, recordedDuration, localQueueId);
   }
 
+  // "Restore & upload a file" — the RM picks a .webm previously downloaded to
+  // their device. The meeting metadata is encoded in the filename, so this
+  // uploads with no extra input needed.
+  function onRestoreFile(e) {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    const parsed = parseRecordingFilename(file.name);
+    if (!parsed) {
+      showToast(
+        'Unrecognised file — pick a recording that was downloaded from this app.',
+        'error'
+      );
+      return;
+    }
+    restoreCtxRef.current = { file, parsed };
+    doRestoreUpload();
+  }
+
+  async function doRestoreUpload() {
+    const ctx = restoreCtxRef.current;
+    if (!ctx) return;
+    const { file, parsed } = ctx;
+    setIsRestoreFlow(true);
+    setStep('process');
+    setStage({ uploading: 'active' });
+    setUploadStatus('starting');
+    setUploadPct(0);
+    setError(null);
+    setErrorHint(null);
+    logEvent('upload.retried', {
+      cp_code: parsed.cp_code,
+      payload: { restoredFromFile: file.name },
+    });
+    try {
+      await uploadAndCreateMeeting({
+        blob: file,
+        form: {
+          cp_code: parsed.cp_code,
+          cp_mobile: parsed.cp_mobile,
+          cp_name: parsed.cp_name,
+          cp_city: '',
+          purpose: '',
+          meeting_type: parsed.meeting_type,
+          is_onboarding: parsed.is_onboarding,
+        },
+        durSec: parsed.duration_seconds,
+        userId: user.id,
+        startedAt: parsed.started_at,
+        onProgress: (pct) => {
+          setUploadStatus('progress');
+          setUploadPct(pct);
+        },
+      });
+      setStage({ uploading: 'done' });
+      showToast('Recording uploaded — processing in background', 'success');
+      router.push('/dashboard');
+      router.refresh();
+    } catch (err) {
+      setUploadStatus('failed');
+      setError(err?.message || 'Upload failed');
+      showToast(err?.message || 'Upload failed', 'error');
+    }
+  }
+
   // Bail out of a stalled or failed upload without losing the recording.
-  // The local copy is already in IndexedDB (saved in onRecorded); we just stop
-  // the in-flight upload, surface a toast, and send the RM back to the
-  // dashboard where the pending-uploads banner will let them retry.
+  // The local copy is in IndexedDB AND we also download a real file to the
+  // device's Downloads folder as a hard backup. Then send the RM to the
+  // dashboard where the pending-uploads banner lets them retry.
   function saveForLater() {
     abortedRef.current = true;
     clearWatchdog();
-    showToast('Saved on device — retry from the dashboard when online', 'success');
+    downloadCopyToDevice();
+    showToast('Saved to your device — retry from the dashboard when online', 'success');
     router.push('/dashboard');
     router.refresh();
   }
@@ -578,6 +692,21 @@ export default function NewMeetingClient({ user }) {
                 Cancel
               </button>
             </div>
+
+            <div className="oh-restore-row">
+              <span className="oh-restore-text">
+                Have a recording saved on your device that didn&rsquo;t upload?
+              </span>
+              <label className="oh-restore-btn">
+                <Save size={13} /> Restore &amp; upload a file
+                <input
+                  type="file"
+                  accept="audio/webm,audio/*,.webm"
+                  style={{ display: 'none' }}
+                  onChange={onRestoreFile}
+                />
+              </label>
+            </div>
           </div>
         </>
       )}
@@ -664,13 +793,11 @@ export default function NewMeetingClient({ user }) {
                 <strong>Upload looks stalled.</strong> No data has reached Vercel Blob in a few
                 seconds. Still retrying in the background — if this doesn't recover, you'll get
                 a clear error shortly.
-                {localQueueId && (
-                  <div style={{ marginTop: 10 }}>
-                    <button className="oh-btn ghost" onClick={saveForLater}>
-                      <Save size={13} /> Save on device & retry from dashboard
-                    </button>
-                  </div>
-                )}
+                <div style={{ marginTop: 10 }}>
+                  <button className="oh-btn ghost" onClick={saveForLater}>
+                    <Save size={13} /> Save to device & retry from dashboard
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -705,23 +832,45 @@ export default function NewMeetingClient({ user }) {
                   </div>
                 )}
 
-                {localQueueId && (
+                {isRestoreFlow ? (
                   <div className="oh-hint" style={{ borderLeft: '3px solid #2f6f2f', color: 'var(--ink)' }}>
-                    Don&rsquo;t worry — this recording is <strong>saved on your device</strong>.
-                    You can leave this page and retry from the dashboard later, or hit Retry below.
+                    The file is still safe on your device — tap Retry to try the upload again.
+                  </div>
+                ) : (
+                  <div className="oh-hint" style={{ borderLeft: '3px solid #2f6f2f', color: 'var(--ink)' }}>
+                    {downloadedName ? (
+                      <>
+                        Your recording was <strong>saved to this device&rsquo;s Downloads</strong> as:
+                        <div className="oh-mono" style={{ marginTop: 4, fontSize: 11.5, wordBreak: 'break-all' }}>
+                          {downloadedName}
+                        </div>
+                        Tap Retry upload to try again now, or it&rsquo;s safe in your files.
+                      </>
+                    ) : (
+                      <>
+                        The recording is still here. Tap <strong>Save to device</strong> below to
+                        keep a copy in your Downloads folder before leaving this page.
+                      </>
+                    )}
                   </div>
                 )}
 
                 <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {recordedBlob && (
-                    <button className="oh-btn accent" onClick={retryUpload}>
+                  {isRestoreFlow ? (
+                    <button className="oh-btn accent" onClick={doRestoreUpload}>
                       <RefreshCw size={14} /> Retry upload
                     </button>
-                  )}
-                  {localQueueId && (
-                    <button className="oh-btn" onClick={saveForLater}>
-                      <Save size={14} /> Go to dashboard (retry later)
-                    </button>
+                  ) : (
+                    <>
+                      {recordedBlob && (
+                        <button className="oh-btn accent" onClick={retryUpload}>
+                          <RefreshCw size={14} /> Retry upload
+                        </button>
+                      )}
+                      <button className="oh-btn" onClick={downloadCopyToDevice}>
+                        <Save size={14} /> {downloadedName ? 'Save to device again' : 'Save to device'}
+                      </button>
+                    </>
                   )}
                   <button
                     className="oh-btn ghost"
@@ -799,6 +948,38 @@ export default function NewMeetingClient({ user }) {
         .oh-onboard-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
         .oh-onboard-title { font-size: 14px; font-weight: 500; color: var(--ink); }
         .oh-onboard-sub { font-size: 12px; color: var(--ink-2); line-height: 1.35; }
+        .oh-restore-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-top: 18px;
+          padding-top: 16px;
+          border-top: 1px dashed var(--border);
+        }
+        .oh-restore-text {
+          font-size: 12.5px;
+          color: var(--ink-2);
+        }
+        .oh-restore-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          font-size: 12.5px;
+          font-weight: 500;
+          color: var(--ink);
+          padding: 7px 12px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--paper);
+          white-space: nowrap;
+        }
+        .oh-restore-btn:hover {
+          border-color: var(--ink-2);
+          background: var(--paper-2);
+        }
         .oh-mtype-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
