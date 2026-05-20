@@ -4,6 +4,7 @@ import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 're
 import { Mic, Pause, Play } from 'lucide-react';
 import { fmtDuration } from '@/lib/utils';
 import { logEvent } from '@/lib/clientLog';
+import { detectAudioContainer } from '@/lib/recordingName';
 
 // The recorder supports a pause→resume cycle so the parent can show a
 // "Continue / Upload / Discard" review screen between Stop and finalizing.
@@ -178,12 +179,16 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       accumRef.current = 0;
       startRef.current = Date.now();
       mr.start(1000);
+      // mr.mimeType is the format the browser ACTUALLY chose — more trustworthy
+      // than what we requested. Final word still comes from magic-byte sniffing
+      // at finalize() time.
+      if (mr.mimeType) mimeRef.current = mr.mimeType;
       setRecording(true);
       setPaused(false);
       startTimer();
       acquireWakeLock();
       startSilentAudio();
-      logEvent('recording.started', { payload: { mime: mime || 'default' } });
+      logEvent('recording.started', { payload: { mime: mimeRef.current || 'default' } });
     } catch (e) {
       setError(e.message || 'Could not access the microphone');
       logEvent('error', { payload: { where: 'recorder.start', message: e?.message } });
@@ -220,10 +225,15 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       return;
     }
     const durSec = currentElapsed();
-    const mime = mimeRef.current;
 
-    const handleStop = () => {
-      const blob = new Blob(chunksRef.current, { type: mime || 'audio/webm' });
+    const handleStop = async () => {
+      // First pass: tag with whatever the recorder reported. Then sniff the
+      // real container from the bytes and re-wrap if the browser lied (iOS).
+      let blob = new Blob(chunksRef.current, { type: mimeRef.current || 'audio/webm' });
+      const realType = await detectAudioContainer(blob);
+      if (realType && realType !== (blob.type || '').split(';')[0]) {
+        blob = new Blob(chunksRef.current, { type: realType });
+      }
       const stream = streamRef.current;
       if (stream) stream.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -234,7 +244,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       releaseWakeLock();
       stopSilentAudio();
       logEvent('recording.finalized', {
-        payload: { duration_seconds: durSec, blob_bytes: blob.size },
+        payload: { duration_seconds: durSec, blob_bytes: blob.size, mime: blob.type },
       });
       onDone(blob, durSec);
     };
