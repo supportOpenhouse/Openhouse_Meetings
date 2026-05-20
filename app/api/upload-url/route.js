@@ -124,13 +124,22 @@ export async function POST(request) {
         }
         console.log('[upload-url] generating client token', { pathname, multipart });
         return {
+          // audio/* are what we normally send. video/webm + video/mp4 are
+          // tolerated because some OS file pickers (Android) mislabel a
+          // restored .webm/.mp4 as video/* — the bytes are still our audio
+          // recording, so accept rather than block the upload.
           allowedContentTypes: [
             'audio/webm',
             'audio/webm;codecs=opus',
             'audio/mp4',
+            'audio/m4a',
+            'audio/x-m4a',
+            'audio/aac',
             'audio/ogg',
             'audio/mpeg',
             'audio/wav',
+            'video/webm',
+            'video/mp4',
           ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500 MB ceiling
           tokenPayload: JSON.stringify({

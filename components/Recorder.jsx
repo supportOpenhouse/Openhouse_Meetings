@@ -2,6 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Mic, Pause, Play } from 'lucide-react';
+import fixWebmDuration from 'fix-webm-duration';
 import { fmtDuration } from '@/lib/utils';
 import { logEvent } from '@/lib/clientLog';
 import { detectAudioContainer } from '@/lib/recordingName';
@@ -233,6 +234,21 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       const realType = await detectAudioContainer(blob);
       if (realType && realType !== (blob.type || '').split(';')[0]) {
         blob = new Blob(chunksRef.current, { type: realType });
+      }
+      // MediaRecorder writes WebM with NO duration in the header — players
+      // like WhatsApp then show ~1s instead of the real length. We know the
+      // exact duration, so patch it into the container. WebM only; MP4 (iOS)
+      // carries its own duration.
+      if ((blob.type || '').includes('webm') && durSec > 0) {
+        try {
+          const fixed = await fixWebmDuration(blob, durSec * 1000, { logger: false });
+          if (fixed && fixed.size > 0) {
+            blob = fixed.type ? fixed : new Blob([fixed], { type: blob.type });
+          }
+        } catch (err) {
+          // Patch failed — ship the original blob rather than lose the recording.
+          console.warn('[recorder] webm duration fix failed', err?.message || err);
+        }
       }
       const stream = streamRef.current;
       if (stream) stream.getTracks().forEach((t) => t.stop());
