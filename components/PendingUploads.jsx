@@ -83,7 +83,7 @@ export default function PendingUploads({ user }) {
       <div className="oh-pending-list">
         {pending.map((r) => {
           const subject = buildRecordingLabel(r.form);
-          const filename = buildRecordingFilename(r.form, r.started_at, r.duration_seconds);
+          const filename = buildRecordingFilename(r.form, r.started_at, r.duration_seconds, r.mime);
           const status = statusById[r.id];
           const isBusy = busyId === r.id;
           const failed = status?.startsWith?.('failed');

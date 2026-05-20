@@ -181,7 +181,8 @@ export default function NewMeetingClient({ user }) {
     const name = buildRecordingFilename(
       meetingMeta(),
       new Date(startedAt).toISOString(),
-      recordedDuration
+      recordedDuration,
+      b.type
     );
     const ok = triggerDownload(b, name);
     if (ok) {
@@ -234,9 +235,24 @@ export default function NewMeetingClient({ user }) {
     const pre = await preflightToken();
     if (!pre.ok) {
       setUploadStatus('failed');
-      setError(pre.reason);
-      setErrorHint('upload-config');
-      showToast('Upload not configured', 'error');
+      // Distinguish "no internet" from a real server-config problem so the RM
+      // isn't told to "ask an admin to fix an env var" when they just have no
+      // signal. preflight is a fetch — offline makes it throw "Failed to fetch".
+      const offline =
+        (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+        /failed to fetch|network|load failed/i.test(pre.reason || '');
+      if (offline) {
+        setError('No internet connection. Your recording is safe — retry when you’re back online.');
+        setErrorHint('offline');
+      } else {
+        setError(pre.reason);
+        setErrorHint('upload-config');
+      }
+      logEvent('upload.failed', {
+        cp_code: form.cp_code,
+        payload: { reason: offline ? 'offline-preflight' : 'preflight', message: (pre.reason || '').slice(0, 200) },
+      });
+      showToast(offline ? 'No internet — recording saved' : 'Upload not configured', offline ? 'error' : 'error');
       return;
     }
 
@@ -272,7 +288,8 @@ export default function NewMeetingClient({ user }) {
       const filename = `meetings/${user.id}/${buildRecordingFilename(
         meetingMeta(),
         new Date(startedAt).toISOString(),
-        durSec
+        durSec,
+        blob.type
       )}`;
 
       const newBlob = await upload(filename, blob, {
@@ -340,19 +357,30 @@ export default function NewMeetingClient({ user }) {
       clearWatchdog();
       console.error(e);
       setUploadStatus('failed');
-      setError(e.message);
-      // Heuristic: CORS / network errors from @vercel/blob almost always mean a token/store problem.
-      if (/cors|failed to fetch|network|400/i.test(e.message || '')) {
-        setErrorHint('upload-token');
+      // Offline beats every other diagnosis — if the phone has no signal,
+      // don't blame the token or the deployment.
+      const offline =
+        (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+        /failed to fetch|networkerror|load failed|err_internet/i.test(e.message || '');
+      if (offline) {
+        setError('No internet connection. Your recording is safe — retry when you’re back online.');
+        setErrorHint('offline');
+      } else {
+        setError(e.message);
+        // Heuristic: CORS / 400 from @vercel/blob almost always mean a token/store problem.
+        if (/cors|400/i.test(e.message || '')) {
+          setErrorHint('upload-token');
+        }
       }
       logEvent('upload.failed', {
         cp_code: form.cp_code,
-        payload: { reason: 'exception', message: (e?.message || '').slice(0, 300) },
+        payload: { reason: offline ? 'offline' : 'exception', message: (e?.message || '').slice(0, 300) },
       });
-      // Safety net: drop a real, properly-named .webm into the device's
-      // Downloads folder so the recording can never be lost to a flaky network
-      // or a missed pending-uploads banner.
-      downloadCopyToDevice();
+      // NOTE: we deliberately do NOT auto-download here. iOS Safari blocks
+      // downloads that aren't triggered by a direct user tap, so an automatic
+      // download would silently fail on iPhone. The failure UI surfaces a
+      // prominent "Save to device" button instead — a real tap, which works
+      // on both iOS and Android.
       showToast(e.message, 'error');
     }
   }
@@ -429,16 +457,23 @@ export default function NewMeetingClient({ user }) {
   }
 
   // Bail out of a stalled or failed upload without losing the recording.
-  // The local copy is in IndexedDB AND we also download a real file to the
-  // device's Downloads folder as a hard backup. Then send the RM to the
-  // dashboard where the pending-uploads banner lets them retry.
+  // This runs inside a user-tap handler, so the device download IS allowed on
+  // iOS Safari. We let it commit before navigating away.
   function saveForLater() {
     abortedRef.current = true;
     clearWatchdog();
-    downloadCopyToDevice();
-    showToast('Saved to your device — retry from the dashboard when online', 'success');
-    router.push('/dashboard');
-    router.refresh();
+    const ok = downloadCopyToDevice();
+    showToast(
+      ok ? 'Saved to your device — retry from the dashboard when online'
+         : 'Couldn’t save the file — retry from the dashboard',
+      ok ? 'success' : 'error'
+    );
+    // Brief delay so the browser finishes writing the file before the page
+    // unloads (the blob URL is revoked on navigation).
+    setTimeout(() => {
+      router.push('/dashboard');
+      router.refresh();
+    }, 700);
   }
 
   // Debounced lookup against /api/cp/lookup whenever the user finishes typing
@@ -701,7 +736,7 @@ export default function NewMeetingClient({ user }) {
                 <Save size={13} /> Restore &amp; upload a file
                 <input
                   type="file"
-                  accept="audio/webm,audio/*,.webm"
+                  accept="audio/*,.webm,.m4a,.mp4,.ogg,.mp3"
                   style={{ display: 'none' }}
                   onChange={onRestoreFile}
                 />
@@ -806,9 +841,17 @@ export default function NewMeetingClient({ user }) {
             <div className="oh-error-box">
               <AlertCircle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
-                <strong>Upload failed.</strong>
+                <strong>{errorHint === 'offline' ? 'No internet connection' : 'Upload failed.'}</strong>
                 <div style={{ marginTop: 4 }}>{error}</div>
 
+                {errorHint === 'offline' && (
+                  <div className="oh-hint">
+                    This isn’t an app problem — your phone has no signal. Nothing is lost. Either
+                    wait for signal and tap <strong>Retry</strong>, or tap <strong>Save to
+                    device</strong> and upload later from the dashboard / “Restore &amp; upload a
+                    file”.
+                  </div>
+                )}
                 {errorHint === 'upload-token' && (
                   <div className="oh-hint">
                     The browser saw a CORS / 400 from <code>vercel.com/api/blob</code>. That
