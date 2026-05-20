@@ -17,6 +17,7 @@ import {
   XCircle,
   FileText,
   Activity,
+  Sparkles,
 } from 'lucide-react';
 import { fmtDate } from '@/lib/utils';
 
@@ -27,6 +28,7 @@ const EVENT_GROUPS = [
   { key: 'upload.', label: 'Upload events' },
   { key: 'meeting.', label: 'Meeting processing' },
   { key: 'cp.', label: 'CP feature' },
+  { key: 'insight.', label: 'Insights' },
   { key: 'error', label: 'Errors' },
 ];
 
@@ -52,6 +54,7 @@ const EVENT_META = {
   'cp.assignment_changed': { Icon: Users, tone: 'neutral', label: 'CP reassigned' },
   'cp.sync_triggered': { Icon: RefreshCw, tone: 'ok', label: 'CP sync triggered' },
   'cp.sync_failed': { Icon: XCircle, tone: 'bad', label: 'CP sync failed' },
+  'insight.generated': { Icon: Sparkles, tone: 'ok', label: 'Insight generated' },
   'error': { Icon: AlertCircle, tone: 'bad', label: 'Error' },
 };
 

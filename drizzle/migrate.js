@@ -95,6 +95,24 @@ async function run() {
   await sql`CREATE INDEX IF NOT EXISTS activity_logs_created_at_idx ON activity_logs(created_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS activity_logs_meeting_idx ON activity_logs(meeting_id)`;
 
+  console.log('Creating insights table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS insights (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      scope text NOT NULL,
+      insight_key text NOT NULL,
+      title text,
+      question text,
+      result jsonb,
+      meeting_count integer,
+      period_days integer,
+      generated_at timestamptz NOT NULL DEFAULT now(),
+      generated_by uuid REFERENCES users(id) ON DELETE SET NULL
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS insights_scope_key_idx ON insights(scope, insight_key)`;
+  await sql`CREATE INDEX IF NOT EXISTS insights_generated_at_idx ON insights(generated_at DESC)`;
+
   console.log('Creating cp_assignments table...');
   await sql`
     CREATE TABLE IF NOT EXISTS cp_assignments (

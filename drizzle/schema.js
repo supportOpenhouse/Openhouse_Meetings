@@ -123,6 +123,30 @@ export const cpSyncState = pgTable('cp_sync_state', {
   in_progress: boolean('in_progress').notNull().default(false),
 });
 
+// Cached Claude-synthesized insights for the admin analytics dashboard. Each
+// row is one generated insight; the dashboard shows the most recent row per
+// (scope, insight_key). Custom questions are stored with insight_key='custom'.
+// Generation is on-demand (a button) — re-viewing a cached row costs nothing.
+export const insights = pgTable(
+  'insights',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    scope: text('scope').notNull(), // 'visit' | 'engagement' | 'onboarding' | 'cross_cut'
+    insight_key: text('insight_key').notNull(), // stable id, or 'custom'
+    title: text('title'),
+    question: text('question'), // the user's text for custom questions
+    result: jsonb('result'), // { headline, items:[{label,value,note}], narrative }
+    meeting_count: integer('meeting_count'),
+    period_days: integer('period_days'), // window the corpus was drawn from (0 = all time)
+    generated_at: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+    generated_by: uuid('generated_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => ({
+    scopeKeyIdx: index('insights_scope_key_idx').on(t.scope, t.insight_key),
+    generatedAtIdx: index('insights_generated_at_idx').on(t.generated_at),
+  })
+);
+
 // Append-only activity feed visible to admins. Records auth events, recording
 // lifecycle, uploads, processing, CP assignment changes, and errors. Heartbeat
 // pings do NOT land here — they only touch users.last_seen_at to avoid spam.
