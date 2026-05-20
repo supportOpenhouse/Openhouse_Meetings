@@ -126,7 +126,12 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   }));
 
   function currentElapsed() {
-    if (paused || !startRef.current) return accumRef.current;
+    // Don't read the `paused` React state here — it gets captured by stale
+    // closures inside the setInterval callback after a resume, freezing the
+    // displayed timer until the NEXT pause. startRef.current is null whenever
+    // we're not actively running (pause() nulls it, resume() restores it),
+    // so it's the only signal we need.
+    if (!startRef.current) return accumRef.current;
     return accumRef.current + Math.round((Date.now() - startRef.current) / 1000);
   }
 
