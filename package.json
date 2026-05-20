@@ -13,6 +13,7 @@
     "db:seed-cp-assignments": "node --env-file=.env.local drizzle/seed_cp_assignments.js",
     "db:cleanup-non-completed-visits": "node --env-file=.env.local drizzle/cleanup_non_completed_visits.js",
     "db:resummarize-all": "node --env-file=.env.local drizzle/resummarize_all.js",
+    "db:reclassify-legacy": "node --env-file=.env.local drizzle/reclassify_legacy.js",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
