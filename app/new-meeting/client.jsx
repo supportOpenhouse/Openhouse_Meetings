@@ -383,11 +383,9 @@ export default function NewMeetingClient({ user }) {
             >
               <span className="check">{isOnboarding ? <CheckCircle2 size={16} /> : <Handshake size={16} />}</span>
               <span className="oh-onboard-text">
-                <span className="oh-onboard-title">Is this a CP onboarding meeting (no CP code)?</span>
+                <span className="oh-onboard-title">NEW CP</span>
                 <span className="oh-onboard-sub">
-                  {isOnboarding
-                    ? 'On — only name is required, phone optional. Everything else hidden.'
-                    : 'Tap if you’re pitching Openhouse to a prospective CP who isn’t signed up yet.'}
+                  Is this a CP onboarding meeting (no CP code)?
                 </span>
               </span>
             </button>
