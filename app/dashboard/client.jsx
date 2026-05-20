@@ -5,6 +5,7 @@ import { Mic } from 'lucide-react';
 import Link from 'next/link';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
+import PendingUploads from '@/components/PendingUploads';
 import Toast from '@/components/Toast';
 import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
 
@@ -81,6 +82,8 @@ export default function RMDashboardClient({ initialMeetings, user }) {
         <Stat label="This week" value={weekCount} />
         <Stat label="Total minutes" value={Math.round(totalMin)} />
       </div>
+
+      <PendingUploads user={user} />
 
       <h2 className="oh-h2">All meetings</h2>
       <MeetingsTable

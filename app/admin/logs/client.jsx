@@ -203,7 +203,7 @@ function OnlinePanel({ online }) {
   return (
     <div className="oh-online-panel">
       <div className="oh-online-head">
-        <div className="oh-eyebrow">Online now</div>
+        <div className="oh-eyebrow">Online recently</div>
         <span className="oh-online-count">{online.length}</span>
       </div>
       {online.length === 0 ? (

@@ -18,12 +18,14 @@ import {
   Search,
   X,
   Handshake,
+  Save,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
 import { fmtDuration } from '@/lib/utils';
 import { MEETING_TYPES } from '@/components/questions';
 import { logEvent } from '@/lib/clientLog';
+import { saveLocalRecording, deleteLocalRecording } from '@/lib/localQueue';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -67,6 +69,11 @@ export default function NewMeetingClient({ user }) {
   const [toast, setToast] = useState(null);
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [recordedDuration, setRecordedDuration] = useState(0);
+  // IndexedDB id of the locally-queued copy of this recording. We save the
+  // recording to the local queue immediately on finalize so it can't be lost
+  // if the upload fails or the user navigates away mid-upload. On successful
+  // upload we delete it.
+  const [localQueueId, setLocalQueueId] = useState(null);
 
   // Refs for the stall watchdog
   const lastProgressAtRef = useRef(0);
@@ -136,14 +143,41 @@ export default function NewMeetingClient({ user }) {
     setStep('form');
   }
 
-  // After finalize() the Recorder fires this with the actual webm blob.
+  // After finalize() the Recorder fires this with the actual webm blob. We
+  // persist the recording to the IndexedDB queue BEFORE attempting upload so
+  // it survives a failed/stalled network, a tab close, or a power loss. On a
+  // successful upload we delete the local copy.
   async function onRecorded(blob, durSec) {
     setRecordedBlob(blob);
     setRecordedDuration(durSec);
-    runUpload(blob, durSec);
+
+    let localId = null;
+    try {
+      localId = await saveLocalRecording({
+        blob,
+        durSec,
+        startedAt: new Date(startedAt).toISOString(),
+        form: {
+          cp_code: form.cp_code,
+          cp_mobile: form.cp_mobile,
+          cp_name: form.cp_name,
+          cp_city: form.cp_city,
+          purpose: form.purpose,
+          meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
+          is_onboarding: isOnboarding,
+        },
+      });
+      setLocalQueueId(localId);
+    } catch (e) {
+      // Quota exceeded / IndexedDB blocked. Fall back to in-memory only —
+      // the user can still upload, but loses the safety net.
+      console.warn('Local queue save failed:', e?.message || e);
+    }
+    runUpload(blob, durSec, localId);
   }
 
-  async function runUpload(blob, durSec) {
+  async function runUpload(blob, durSec, localIdArg) {
+    const localId = localIdArg ?? localQueueId;
     abortedRef.current = false;
     setStep('process');
     setStage({ uploading: 'active' });
@@ -246,6 +280,12 @@ export default function NewMeetingClient({ user }) {
         // Even if the fetch synchronously throws, the row exists and an admin can retry.
       }
 
+      // Upload + create both succeeded — drop the local safety copy.
+      if (localId) {
+        deleteLocalRecording(localId).catch(() => {});
+        setLocalQueueId(null);
+      }
+
       showToast('Recording saved — processing in background', 'success');
       router.push('/dashboard');
       // Force a fresh server fetch so the new row (still status='processing') is in
@@ -272,7 +312,19 @@ export default function NewMeetingClient({ user }) {
   function retryUpload() {
     if (!recordedBlob) return;
     logEvent('upload.retried', { cp_code: form.cp_code });
-    runUpload(recordedBlob, recordedDuration);
+    runUpload(recordedBlob, recordedDuration, localQueueId);
+  }
+
+  // Bail out of a stalled or failed upload without losing the recording.
+  // The local copy is already in IndexedDB (saved in onRecorded); we just stop
+  // the in-flight upload, surface a toast, and send the RM back to the
+  // dashboard where the pending-uploads banner will let them retry.
+  function saveForLater() {
+    abortedRef.current = true;
+    clearWatchdog();
+    showToast('Saved on device — retry from the dashboard when online', 'success');
+    router.push('/dashboard');
+    router.refresh();
   }
 
   // Debounced lookup against /api/cp/lookup whenever the user finishes typing
@@ -612,6 +664,13 @@ export default function NewMeetingClient({ user }) {
                 <strong>Upload looks stalled.</strong> No data has reached Vercel Blob in a few
                 seconds. Still retrying in the background — if this doesn't recover, you'll get
                 a clear error shortly.
+                {localQueueId && (
+                  <div style={{ marginTop: 10 }}>
+                    <button className="oh-btn ghost" onClick={saveForLater}>
+                      <Save size={13} /> Save on device & retry from dashboard
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -646,10 +705,22 @@ export default function NewMeetingClient({ user }) {
                   </div>
                 )}
 
+                {localQueueId && (
+                  <div className="oh-hint" style={{ borderLeft: '3px solid #2f6f2f', color: 'var(--ink)' }}>
+                    Don&rsquo;t worry — this recording is <strong>saved on your device</strong>.
+                    You can leave this page and retry from the dashboard later, or hit Retry below.
+                  </div>
+                )}
+
                 <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {recordedBlob && (
                     <button className="oh-btn accent" onClick={retryUpload}>
                       <RefreshCw size={14} /> Retry upload
+                    </button>
+                  )}
+                  {localQueueId && (
+                    <button className="oh-btn" onClick={saveForLater}>
+                      <Save size={14} /> Go to dashboard (retry later)
                     </button>
                   )}
                   <button
