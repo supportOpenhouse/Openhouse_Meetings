@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Briefcase,
   Home,
+  Handshake,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
@@ -261,12 +262,18 @@ function DesktopRow({ m, showRM, cols, onClick }) {
     >
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
-            {m.cp_code}
-          </span>
+          {m.cp_code ? (
+            <span style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
+              {m.cp_code}
+            </span>
+          ) : (
+            <span style={{ fontWeight: 500, fontSize: 13.5 }}>
+              {m.cp_name || <em style={{ color: 'var(--ink-3)' }}>no name</em>}
+            </span>
+          )}
           <MeetingTypePill type={m.meeting_type} />
         </div>
-        {m.cp_name && (
+        {m.cp_code && m.cp_name && (
           <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>
             {m.cp_name}
           </div>
@@ -279,7 +286,7 @@ function DesktopRow({ m, showRM, cols, onClick }) {
         <div style={{ fontSize: 13.5 }}>{m.rm_name || m.rm_email || '—'}</div>
       )}
       <div className="oh-mono" style={{ fontSize: 13 }}>
-        {m.cp_mobile}
+        {m.cp_mobile || <span style={{ color: 'var(--ink-3)' }}>—</span>}
       </div>
       <div className="oh-mono" style={{ fontSize: 13 }}>
         {fmtDuration(m.duration_seconds)}
@@ -297,16 +304,20 @@ function MobileCard({ m, showRM, onClick }) {
     <div className="oh-meeting-card" onClick={onClick}>
       <div className="top">
         <div className="code">
-          {m.cp_code}
-          {m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
+          {m.cp_code || m.cp_name || 'No name'}
+          {m.cp_code && m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
           <MeetingTypePill type={m.meeting_type} small />
         </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
       <div className="meta">
         <span>{fmtDate(m.started_at)}</span>
-        <span className="dot">·</span>
-        <span><Phone size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.cp_mobile}</span>
+        {m.cp_mobile && (
+          <>
+            <span className="dot">·</span>
+            <span><Phone size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{m.cp_mobile}</span>
+          </>
+        )}
         <span className="dot">·</span>
         <span><Clock size={11} style={{ verticalAlign: 'middle', marginRight: 3 }} />{fmtDuration(m.duration_seconds)}</span>
         {showRM && (m.rm_name || m.rm_email) && (
@@ -366,11 +377,13 @@ function getSentVisuals(sent) {
 }
 
 // New-shape summaries put the temperature under summary.score.classification.
-// Legacy summaries had it at summary.sentiment.
+// Legacy summaries had it at summary.sentiment. Onboarding summaries put it
+// under summary.onboarding.sentiment.
 function getSentiment(meeting) {
   return (
     meeting.summary?.score?.classification ||
     meeting.summary?.engagement?.sentiment ||
+    meeting.summary?.onboarding?.sentiment ||
     meeting.summary?.sentiment ||
     null
   );
@@ -379,12 +392,12 @@ function getSentiment(meeting) {
 // Small chip rendered next to the CP code so admins/RMs can tell at a glance
 // which question set/scoring logic drove each row.
 function MeetingTypePill({ type, small = false }) {
-  const t = type === 'visit' ? 'visit' : 'engagement';
-  const isVisit = t === 'visit';
+  const cls = type === 'visit' ? 'visit' : type === 'onboarding' ? 'onboarding' : 'engagement';
+  const Icon = cls === 'visit' ? Home : cls === 'onboarding' ? Handshake : Briefcase;
   return (
-    <span className={`oh-mtype-pill ${isVisit ? 'visit' : 'engagement'} ${small ? 'small' : ''}`}>
-      {isVisit ? <Home size={10} /> : <Briefcase size={10} />}
-      {t}
+    <span className={`oh-mtype-pill ${cls} ${small ? 'small' : ''}`}>
+      <Icon size={10} />
+      {cls}
       <style jsx>{`
         .oh-mtype-pill {
           display: inline-flex;
@@ -409,6 +422,11 @@ function MeetingTypePill({ type, small = false }) {
           color: #b97417;
           background: rgba(196, 122, 26, 0.08);
           border-color: rgba(196, 122, 26, 0.25);
+        }
+        .oh-mtype-pill.onboarding {
+          color: #6b46a3;
+          background: rgba(107, 70, 163, 0.08);
+          border-color: rgba(107, 70, 163, 0.25);
         }
         .oh-mtype-pill.small {
           font-size: 9.5px;

@@ -21,9 +21,10 @@ import {
   Minus,
   Briefcase,
   Home,
+  Handshake,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
-import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, MEETING_TYPES } from './questions';
+import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, MEETING_TYPES } from './questions';
 import { SCORE_PARAMETERS, SCORE_TOTAL_POSSIBLE } from '@/lib/scoring';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
@@ -74,11 +75,17 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               {localMeeting.rm_name || localMeeting.rm_email} · {fmtDate(localMeeting.started_at)}
             </div>
             <h2 className="oh-detail-title">
-              CP <span className="oh-mono">{localMeeting.cp_code}</span>
+              {localMeeting.cp_code ? (
+                <>CP <span className="oh-mono">{localMeeting.cp_code}</span></>
+              ) : (
+                <>{localMeeting.cp_name || 'Prospective CP'}</>
+              )}
             </h2>
             <div className="oh-detail-meta">
-              {localMeeting.cp_name && <span><User size={12} /> {localMeeting.cp_name}</span>}
-              <span><Phone size={12} /> {localMeeting.cp_mobile}</span>
+              {localMeeting.cp_code && localMeeting.cp_name && (
+                <span><User size={12} /> {localMeeting.cp_name}</span>
+              )}
+              {localMeeting.cp_mobile && <span><Phone size={12} /> {localMeeting.cp_mobile}</span>}
               {localMeeting.cp_city && <span><MapPin size={12} /> {localMeeting.cp_city}</span>}
               <span><Clock size={12} /> {fmtDuration(localMeeting.duration_seconds)}</span>
               {localMeeting.language && <span>· {localMeeting.language}</span>}
@@ -113,10 +120,9 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 
           <div className="oh-tabs">
             <TabBtn active={tab === 'summary'} onClick={() => setTab('summary')}>
-              {meetingType === 'visit'
-                ? <><Home size={13} /> Visit summary</>
-                : <><Briefcase size={13} /> Engagement summary</>
-              }
+              {meetingType === 'visit' && <><Home size={13} /> Visit summary</>}
+              {meetingType === 'onboarding' && <><Handshake size={13} /> Onboarding summary</>}
+              {meetingType === 'engagement' && <><Briefcase size={13} /> Engagement summary</>}
             </TabBtn>
             <TabBtn active={tab === 'transcript'} onClick={() => setTab('transcript')}>
               <FileText size={13} /> Transcript
@@ -126,7 +132,13 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
           {tab === 'summary' && (
             <SummaryView
               answers={view.answers}
-              questions={meetingType === 'visit' ? VISIT_QUESTIONS : ENGAGEMENT_QUESTIONS}
+              questions={
+                meetingType === 'visit'
+                  ? VISIT_QUESTIONS
+                  : meetingType === 'onboarding'
+                  ? ONBOARDING_QUESTIONS
+                  : ENGAGEMENT_QUESTIONS
+              }
               grouped={meetingType === 'visit'}
               emptyHint={
                 view.missing
@@ -273,11 +285,15 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 }
 
 function MeetingTypeBadge({ type }) {
-  const isVisit = type === 'visit';
+  const meta = {
+    visit:       { Icon: Home,      label: 'visit',       cls: 'visit' },
+    onboarding:  { Icon: Handshake, label: 'onboarding',  cls: 'onboarding' },
+    engagement:  { Icon: Briefcase, label: 'engagement',  cls: 'engagement' },
+  }[type] || { Icon: Briefcase, label: 'engagement', cls: 'engagement' };
+  const Icon = meta.Icon;
   return (
-    <span className={`oh-type-badge ${isVisit ? 'visit' : 'engagement'}`}>
-      {isVisit ? <Home size={11} /> : <Briefcase size={11} />}
-      {isVisit ? 'visit' : 'engagement'}
+    <span className={`oh-type-badge ${meta.cls}`}>
+      <Icon size={11} /> {meta.label}
       <style jsx>{`
         .oh-type-badge {
           display: inline-flex;
@@ -300,6 +316,11 @@ function MeetingTypeBadge({ type }) {
           color: #b97417;
           background: rgba(196, 122, 26, 0.08);
           border-color: rgba(196, 122, 26, 0.25);
+        }
+        .oh-type-badge.onboarding {
+          color: #6b46a3;
+          background: rgba(107, 70, 163, 0.08);
+          border-color: rgba(107, 70, 163, 0.25);
         }
       `}</style>
     </span>
@@ -593,7 +614,13 @@ function pickSummaryView(summary, meetingType) {
     if (summary.visit) {
       return { answers: summary.visit, score: summary.score || null, missing: false };
     }
-    // Flat-engagement-shape saved under a visit row → no visit data on file.
+    return { answers: null, score: null, missing: true };
+  }
+
+  if (meetingType === 'onboarding') {
+    if (summary.onboarding) {
+      return { answers: summary.onboarding, score: null, missing: false };
+    }
     return { answers: null, score: null, missing: true };
   }
 

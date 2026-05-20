@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { insertMeeting } from '@/lib/queries';
+import { logActivity } from '@/lib/activityLog';
 
 export const runtime = 'nodejs';
 
@@ -32,14 +33,24 @@ export async function POST(request) {
   } = body;
 
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
-  if (!cp_code || !cp_mobile) {
-    return NextResponse.json({ error: 'cp_code and cp_mobile required' }, { status: 400 });
-  }
-  if (meeting_type !== 'engagement' && meeting_type !== 'visit') {
+
+  if (meeting_type !== 'engagement' && meeting_type !== 'visit' && meeting_type !== 'onboarding') {
     return NextResponse.json(
-      { error: "meeting_type must be 'engagement' or 'visit'" },
+      { error: "meeting_type must be 'engagement', 'visit', or 'onboarding'" },
       { status: 400 }
     );
+  }
+  // Onboarding meetings legitimately have no cp_code (the CP isn't onboarded
+  // yet) and phone is optional. They DO require a name.
+  if (meeting_type === 'onboarding') {
+    if (!cp_name || !String(cp_name).trim()) {
+      return NextResponse.json(
+        { error: 'cp_name required for onboarding meetings' },
+        { status: 400 }
+      );
+    }
+  } else if (!cp_code || !cp_mobile) {
+    return NextResponse.json({ error: 'cp_code and cp_mobile required' }, { status: 400 });
   }
 
   // Same SSRF guard the old endpoint had — only accept our own Blob host.
@@ -58,8 +69,8 @@ export async function POST(request) {
 
   const meeting = await insertMeeting({
     rm_id: session.user.id,
-    cp_code: cp_code.trim(),
-    cp_mobile: cp_mobile.trim(),
+    cp_code: cp_code ? String(cp_code).trim() : null,
+    cp_mobile: cp_mobile ? String(cp_mobile).trim() : null,
     cp_name: cp_name?.trim() || null,
     cp_city: cp_city?.trim() || null,
     purpose: purpose?.trim() || null,
@@ -68,6 +79,19 @@ export async function POST(request) {
     audio_url,
     status: 'processing',
     meeting_type,
+  });
+
+  logActivity({
+    userId: session.user.id,
+    eventType: 'meeting.created',
+    meetingId: meeting.id,
+    cpCode: meeting.cp_code,
+    payload: {
+      meeting_type,
+      duration_seconds: meeting.duration_seconds,
+      cp_name: meeting.cp_name,
+    },
+    request,
   });
 
   return NextResponse.json({ id: meeting.id });

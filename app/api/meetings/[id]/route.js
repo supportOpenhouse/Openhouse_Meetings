@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getMeetingById, deleteMeeting } from '@/lib/queries';
 import { del } from '@vercel/blob';
+import { logActivity } from '@/lib/activityLog';
 
 export const runtime = 'nodejs';
 
@@ -42,5 +43,15 @@ export async function DELETE(req, { params }) {
   }
 
   await deleteMeeting(id);
+
+  logActivity({
+    userId: session.user.id,
+    eventType: 'meeting.deleted',
+    meetingId: id,
+    cpCode: m.cp_code,
+    payload: { owner_rm_id: m.rm_id, by_role: session.user.role },
+    request: req,
+  });
+
   return NextResponse.json({ ok: true });
 }

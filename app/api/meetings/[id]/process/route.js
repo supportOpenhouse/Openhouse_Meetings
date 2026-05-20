@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { getMeetingForProcessing, updateMeeting } from '@/lib/queries';
 import { transcribeWithElevenLabs } from '@/lib/elevenlabs';
 import { summarizeWithClaude } from '@/lib/claude';
+import { logActivity } from '@/lib/activityLog';
 
 export const runtime = 'nodejs';
 // I/O wait (ElevenLabs, Claude) doesn't count as active CPU on Fluid Compute,
@@ -31,6 +32,15 @@ export async function POST(request, { params }) {
   if (!meeting.audio_url) {
     return NextResponse.json({ error: 'Meeting has no audio_url' }, { status: 400 });
   }
+
+  logActivity({
+    userId: session.user.id,
+    eventType: 'meeting.processing.started',
+    meetingId: meeting.id,
+    cpCode: meeting.cp_code,
+    payload: { meeting_type: meeting.meeting_type || 'engagement' },
+    request,
+  });
 
   try {
     const audioRes = await fetch(meeting.audio_url);
@@ -65,9 +75,31 @@ export async function POST(request, { params }) {
       error_message: null,
     });
 
+    logActivity({
+      userId: session.user.id,
+      eventType: 'meeting.processing.succeeded',
+      meetingId: meeting.id,
+      cpCode: meeting.cp_code,
+      payload: {
+        meeting_type: meeting.meeting_type || 'engagement',
+        transcript_length: (transcript.text || '').length,
+        score: summary?.score?.total ?? null,
+        classification: summary?.score?.classification || summary?.engagement?.sentiment || null,
+      },
+      request,
+    });
+
     return NextResponse.json({ ok: true, status: updated.status });
   } catch (e) {
     console.error('[meetings/process] failed', { id, message: e?.message });
+    logActivity({
+      userId: session.user.id,
+      eventType: 'meeting.processing.failed',
+      meetingId: meeting.id,
+      cpCode: meeting.cp_code,
+      payload: { error: (e?.message || 'Processing failed').slice(0, 500) },
+      request,
+    });
 
     // Mark the row failed so the UI can surface it (and admins can retry/clean up).
     try {

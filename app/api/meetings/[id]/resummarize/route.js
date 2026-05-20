@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getMeetingForProcessing, updateMeeting } from '@/lib/queries';
 import { summarizeWithClaude } from '@/lib/claude';
+import { logActivity } from '@/lib/activityLog';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -58,12 +59,34 @@ export async function POST(request, { params }) {
       error_message: null,
     });
 
+    logActivity({
+      userId: session.user.id,
+      eventType: 'meeting.resummarized',
+      meetingId: meeting.id,
+      cpCode: meeting.cp_code,
+      payload: {
+        from_type: meeting.meeting_type || 'engagement',
+        to_type: newType,
+        score: summary?.score?.total ?? null,
+        classification: summary?.score?.classification || summary?.engagement?.sentiment || null,
+      },
+      request,
+    });
+
     return NextResponse.json({
       ok: true,
       meeting_type: updated.meeting_type,
       summary: updated.summary,
     });
   } catch (e) {
+    logActivity({
+      userId: session.user.id,
+      eventType: 'error',
+      meetingId: meeting.id,
+      cpCode: meeting.cp_code,
+      payload: { where: 'resummarize', error: (e?.message || '').slice(0, 500) },
+      request,
+    });
     return NextResponse.json(
       { error: e?.message || 'Re-summarize failed' },
       { status: 500 }

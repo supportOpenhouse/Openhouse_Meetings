@@ -3,6 +3,7 @@
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Mic, Pause, Play } from 'lucide-react';
 import { fmtDuration } from '@/lib/utils';
+import { logEvent } from '@/lib/clientLog';
 
 // The recorder supports a pause→resume cycle so the parent can show a
 // "Continue / Upload / Discard" review screen between Stop and finalizing.
@@ -177,8 +178,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       startTimer();
       acquireWakeLock();
       startSilentAudio();
+      logEvent('recording.started', { payload: { mime: mime || 'default' } });
     } catch (e) {
       setError(e.message || 'Could not access the microphone');
+      logEvent('error', { payload: { where: 'recorder.start', message: e?.message } });
     }
   }
 
@@ -192,6 +195,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     stopTimer();
     setElapsed(accumRef.current);
     releaseWakeLock();
+    logEvent('recording.paused', { payload: { elapsed_seconds: accumRef.current } });
     onPause && onPause(accumRef.current);
   }
 
@@ -202,6 +206,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     setPaused(false);
     startTimer();
     acquireWakeLock();
+    logEvent('recording.resumed', { payload: { elapsed_seconds: accumRef.current } });
   }
 
   function finalize() {
@@ -223,6 +228,9 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       setPaused(false);
       releaseWakeLock();
       stopSilentAudio();
+      logEvent('recording.finalized', {
+        payload: { duration_seconds: durSec, blob_bytes: blob.size },
+      });
       onDone(blob, durSec);
     };
 
@@ -235,7 +243,8 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
   }
 
   function discard() {
-    if (mrRef.current && mrRef.current.state !== 'inactive') {
+    const wasActive = mrRef.current && mrRef.current.state !== 'inactive';
+    if (wasActive) {
       mrRef.current.onstop = null;
       try { mrRef.current.stop(); } catch {}
     }
@@ -243,6 +252,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    const accumAtDiscard = accumRef.current;
     chunksRef.current = [];
     accumRef.current = 0;
     startRef.current = null;
@@ -253,6 +263,9 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     setElapsed(0);
     releaseWakeLock();
     stopSilentAudio();
+    if (wasActive) {
+      logEvent('recording.discarded', { payload: { elapsed_seconds: accumAtDiscard } });
+    }
     onCancel && onCancel();
   }
 

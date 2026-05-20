@@ -3,6 +3,7 @@ import Google from 'next-auth/providers/google';
 import { db } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { logActivity } from '@/lib/activityLog';
 
 const adminEmails = (process.env.ADMIN_EMAILS || '')
   .split(',')
@@ -73,6 +74,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token?.id) session.user.id = token.id;
       if (token?.role) session.user.role = token.role;
       return session;
+    },
+  },
+  events: {
+    // NextAuth events fire AFTER the callback flow so we have the resolved
+    // user. We re-fetch by email because the `user` passed in is the raw
+    // Google profile (no id).
+    async signIn({ user }) {
+      try {
+        const email = user?.email?.toLowerCase();
+        if (!email) return;
+        const [u] = await db.select().from(users).where(eq(users.email, email));
+        if (!u) return;
+        await logActivity({
+          userId: u.id,
+          eventType: 'auth.login',
+          payload: { email: u.email, role: u.role },
+        });
+      } catch (e) {
+        console.error('[auth events.signIn] log failed', e?.message);
+      }
+    },
+    async signOut({ token }) {
+      try {
+        if (!token?.id) return;
+        await logActivity({
+          userId: token.id,
+          eventType: 'auth.logout',
+          payload: { email: token.email || null },
+        });
+      } catch (e) {
+        console.error('[auth events.signOut] log failed', e?.message);
+      }
     },
   },
 });

@@ -17,11 +17,13 @@ import {
   MapPin,
   Search,
   X,
+  Handshake,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
 import { fmtDuration } from '@/lib/utils';
 import { MEETING_TYPES } from '@/components/questions';
+import { logEvent } from '@/lib/clientLog';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -43,6 +45,10 @@ export default function NewMeetingClient({ user }) {
     purpose: '',
     meeting_type: '',
   });
+  // Onboarding flow toggle. When true, the prospective CP has no cp_code yet:
+  // the form collapses to just name (mandatory) + phone (optional) and the
+  // meeting_type is locked to 'onboarding'. Lookups + everything else hide.
+  const [isOnboarding, setIsOnboarding] = useState(false);
   // Tracks the most recent lookup so the UI can show "✓ matched" / "not found" / "looking up…".
   // shape: { state: 'idle'|'loading'|'matched'|'unmatched'|'error', byField: 'cp_code'|'phone', cp?: {...}, message?: string }
   const [cpLookup, setCpLookup] = useState({ state: 'idle' });
@@ -145,6 +151,10 @@ export default function NewMeetingClient({ user }) {
     setUploadStatus('starting');
     setError(null);
     setErrorHint(null);
+    logEvent('upload.started', {
+      cp_code: form.cp_code,
+      payload: { duration_seconds: durSec, blob_bytes: blob.size, meeting_type: form.meeting_type },
+    });
 
     const pre = await preflightToken();
     if (!pre.ok) {
@@ -170,8 +180,16 @@ export default function NewMeetingClient({ user }) {
             's. The browser is being blocked by Vercel Blob (likely an invalid BLOB_READ_WRITE_TOKEN or a deleted/disconnected blob store).'
         );
         setErrorHint('upload-stalled');
+        logEvent('upload.failed', {
+          cp_code: form.cp_code,
+          payload: { reason: 'no-progress-watchdog', percentage: uploadPct },
+        });
       } else if (since > STALL_WARN_MS && uploadStatus !== 'stalled') {
         setUploadStatus('stalled');
+        logEvent('upload.stalled', {
+          cp_code: form.cp_code,
+          payload: { percentage: uploadPct, since_ms: since },
+        });
       }
     }, 1000);
 
@@ -201,12 +219,12 @@ export default function NewMeetingClient({ user }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audio_url: newBlob.url,
-          cp_code: form.cp_code,
-          cp_mobile: form.cp_mobile,
+          cp_code: isOnboarding ? null : form.cp_code,
+          cp_mobile: isOnboarding ? (form.cp_mobile || null) : form.cp_mobile,
           cp_name: form.cp_name,
-          cp_city: form.cp_city,
-          purpose: form.purpose,
-          meeting_type: form.meeting_type,
+          cp_city: isOnboarding ? null : form.cp_city,
+          purpose: isOnboarding ? null : form.purpose,
+          meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
           duration_seconds: durSec,
           started_at: new Date(startedAt).toISOString(),
         }),
@@ -243,12 +261,17 @@ export default function NewMeetingClient({ user }) {
       if (/cors|failed to fetch|network|400/i.test(e.message || '')) {
         setErrorHint('upload-token');
       }
+      logEvent('upload.failed', {
+        cp_code: form.cp_code,
+        payload: { reason: 'exception', message: (e?.message || '').slice(0, 300) },
+      });
       showToast(e.message, 'error');
     }
   }
 
   function retryUpload() {
     if (!recordedBlob) return;
+    logEvent('upload.retried', { cp_code: form.cp_code });
     runUpload(recordedBlob, recordedDuration);
   }
 
@@ -328,7 +351,9 @@ export default function NewMeetingClient({ user }) {
     setCpLookup({ state: 'idle' });
   }
 
-  const canStart = form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type;
+  const canStart = isOnboarding
+    ? !!form.cp_name.trim()
+    : form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type;
 
   return (
     <div className="oh-page">
@@ -350,91 +375,143 @@ export default function NewMeetingClient({ user }) {
           </p>
 
           <div className="oh-form">
-            <div className="oh-form-row-2">
-              <div className="oh-field">
-                <label>
-                  <Hash size={11} style={{ display: 'inline', marginRight: 4 }} /> CP code <span className="oh-req">*</span>
-                </label>
-                <input
-                  className="oh-input"
-                  placeholder="e.g. CP00670"
-                  value={form.cp_code}
-                  onChange={(e) => onCpCodeChange(e.target.value)}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="oh-field">
-                <label>
-                  <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> CP mobile <span className="oh-req">*</span>
-                </label>
-                <input
-                  className="oh-input"
-                  placeholder="98XXXXXXXX"
-                  value={form.cp_mobile}
-                  onChange={(e) => onCpMobileChange(e.target.value)}
-                  inputMode="tel"
-                  autoComplete="off"
-                />
-              </div>
-            </div>
+            <button
+              type="button"
+              className={`oh-onboard-toggle ${isOnboarding ? 'on' : ''}`}
+              onClick={() => setIsOnboarding((v) => !v)}
+              title="Toggle if this is a pitch to a prospective CP who isn't onboarded yet"
+            >
+              <span className="check">{isOnboarding ? <CheckCircle2 size={16} /> : <Handshake size={16} />}</span>
+              <span className="oh-onboard-text">
+                <span className="oh-onboard-title">Is this a CP onboarding meeting (no CP code)?</span>
+                <span className="oh-onboard-sub">
+                  {isOnboarding
+                    ? 'On — only name is required, phone optional. Everything else hidden.'
+                    : 'Tap if you’re pitching Openhouse to a prospective CP who isn’t signed up yet.'}
+                </span>
+              </span>
+            </button>
 
-            <CpLookupStatus lookup={cpLookup} onClear={clearCpFill} />
+            {isOnboarding ? (
+              <>
+                <div className="oh-form-row-2">
+                  <div className="oh-field">
+                    <label>
+                      <User size={11} style={{ display: 'inline', marginRight: 4 }} /> Prospective CP name <span className="oh-req">*</span>
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="Their name"
+                      value={form.cp_name}
+                      onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
+                      autoComplete="off"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="oh-field">
+                    <label>
+                      <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> Mobile (optional)
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="98XXXXXXXX"
+                      value={form.cp_mobile}
+                      onChange={(e) => setForm({ ...form, cp_mobile: e.target.value })}
+                      inputMode="tel"
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="oh-form-row-2">
+                  <div className="oh-field">
+                    <label>
+                      <Hash size={11} style={{ display: 'inline', marginRight: 4 }} /> CP code <span className="oh-req">*</span>
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="e.g. CP00670"
+                      value={form.cp_code}
+                      onChange={(e) => onCpCodeChange(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="oh-field">
+                    <label>
+                      <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> CP mobile <span className="oh-req">*</span>
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="98XXXXXXXX"
+                      value={form.cp_mobile}
+                      onChange={(e) => onCpMobileChange(e.target.value)}
+                      inputMode="tel"
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
 
-            <div className="oh-form-row-2">
-              <div className="oh-field">
-                <label>
-                  <User size={11} style={{ display: 'inline', marginRight: 4 }} /> CP name (optional)
-                </label>
-                <input
-                  className="oh-input"
-                  placeholder="Channel partner's name"
-                  value={form.cp_name}
-                  onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
-                />
-              </div>
-              <div className="oh-field">
-                <label>
-                  <MapPin size={11} style={{ display: 'inline', marginRight: 4 }} /> City (optional)
-                </label>
-                <input
-                  className="oh-input"
-                  placeholder="e.g. Gurugram"
-                  value={form.cp_city}
-                  onChange={(e) => setForm({ ...form, cp_city: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="oh-field">
-              <label>
-                <Briefcase size={11} style={{ display: 'inline', marginRight: 4 }} /> Meeting
-                purpose (optional)
-              </label>
-              <textarea
-                className="oh-textarea"
-                placeholder="e.g. inventory walkthrough for Sector 62 project"
-                value={form.purpose}
-                onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-              />
-            </div>
+                <CpLookupStatus lookup={cpLookup} onClear={clearCpFill} />
 
-            <div className="oh-field">
-              <label>
-                Meeting type <span className="oh-req">*</span>
-              </label>
-              <div className="oh-mtype-grid">
-                {MEETING_TYPES.map((t) => (
-                  <button
-                    type="button"
-                    key={t.value}
-                    className={`oh-mtype-card ${form.meeting_type === t.value ? 'selected' : ''}`}
-                    onClick={() => setForm({ ...form, meeting_type: t.value })}
-                  >
-                    <div className="oh-mtype-label">{t.label}</div>
-                    <div className="oh-mtype-desc">{t.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="oh-form-row-2">
+                  <div className="oh-field">
+                    <label>
+                      <User size={11} style={{ display: 'inline', marginRight: 4 }} /> CP name (optional)
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="Channel partner's name"
+                      value={form.cp_name}
+                      onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="oh-field">
+                    <label>
+                      <MapPin size={11} style={{ display: 'inline', marginRight: 4 }} /> City (optional)
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="e.g. Gurugram"
+                      value={form.cp_city}
+                      onChange={(e) => setForm({ ...form, cp_city: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="oh-field">
+                  <label>
+                    <Briefcase size={11} style={{ display: 'inline', marginRight: 4 }} /> Meeting
+                    purpose (optional)
+                  </label>
+                  <textarea
+                    className="oh-textarea"
+                    placeholder="e.g. inventory walkthrough for Sector 62 project"
+                    value={form.purpose}
+                    onChange={(e) => setForm({ ...form, purpose: e.target.value })}
+                  />
+                </div>
+
+                <div className="oh-field">
+                  <label>
+                    Meeting type <span className="oh-req">*</span>
+                  </label>
+                  <div className="oh-mtype-grid">
+                    {MEETING_TYPES.filter((t) => t.value !== 'onboarding').map((t) => (
+                      <button
+                        type="button"
+                        key={t.value}
+                        className={`oh-mtype-card ${form.meeting_type === t.value ? 'selected' : ''}`}
+                        onClick={() => setForm({ ...form, meeting_type: t.value })}
+                      >
+                        <div className="oh-mtype-label">{t.label}</div>
+                        <div className="oh-mtype-desc">{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="oh-form-actions">
               <button
@@ -613,43 +690,46 @@ export default function NewMeetingClient({ user }) {
           gap: 10px;
           margin-top: 8px;
         }
-        .oh-mtype-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-        }
-        .oh-mtype-card {
+        .oh-onboard-toggle {
           all: unset;
           box-sizing: border-box;
           cursor: pointer;
-          padding: 14px 16px;
-          border: 1.5px solid var(--border);
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 14px;
+          border: 1.5px dashed var(--border);
           border-radius: 10px;
           background: var(--paper);
           transition: all 0.15s ease;
         }
-        .oh-mtype-card:hover {
-          border-color: var(--ink-2);
-          background: var(--paper-2);
-        }
-        .oh-mtype-card.selected {
+        .oh-onboard-toggle:hover {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.04);
+          background: rgba(184, 52, 28, 0.03);
         }
-        .oh-mtype-label {
-          font-size: 14px;
-          font-weight: 500;
-          color: var(--ink);
-          margin-bottom: 3px;
+        .oh-onboard-toggle.on {
+          border-style: solid;
+          border-color: var(--accent);
+          background: rgba(184, 52, 28, 0.06);
         }
-        .oh-mtype-desc {
-          font-size: 12px;
+        .oh-onboard-toggle .check {
+          flex-shrink: 0;
           color: var(--ink-2);
-          line-height: 1.35;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: var(--paper-2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
-        @media (max-width: 768px) {
-          .oh-mtype-grid { grid-template-columns: 1fr; }
+        .oh-onboard-toggle.on .check {
+          color: var(--accent);
+          background: rgba(184, 52, 28, 0.1);
         }
+        .oh-onboard-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .oh-onboard-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+        .oh-onboard-sub { font-size: 12px; color: var(--ink-2); line-height: 1.35; }
         .oh-mtype-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;

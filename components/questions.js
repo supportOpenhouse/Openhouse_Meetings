@@ -72,15 +72,37 @@ export const VISIT_QUESTIONS = [
   { key: 'next_action', label: 'Next action', group: 'Outcome' },
 ];
 
+// CP onboarding pitch — used when the RM is talking to a prospective channel
+// partner who is NOT yet onboarded. Optimised around capturing pitch quality,
+// CP profile, objections, and onboarding likelihood. No score rubric (the
+// 100-pt visit rubric doesn't apply); sentiment is Claude's gut call.
+export const ONBOARDING_QUESTIONS = [
+  { key: 'cp_profile', label: 'CP profile (business size, location, years in industry)' },
+  { key: 'existing_partnerships', label: 'Platforms / developers the CP already works with', list: true },
+  { key: 'pitch_points_covered', label: 'Openhouse pitch points the RM covered', list: true },
+  { key: 'cp_interest_signals', label: 'Signals of CP interest', list: true },
+  { key: 'objections_raised', label: 'Objections or concerns raised by the CP', list: true },
+  { key: 'competitor_mentions', label: 'Competitors / alternative platforms the CP mentioned', list: true },
+  { key: 'commercials_discussed', label: 'Commercials discussed (commission split, payout terms)' },
+  { key: 'commitments_made', label: 'Commitments made by the CP', list: true },
+  { key: 'onboarding_status', label: 'Onboarding status (will join / undecided / declined)' },
+  { key: 'next_action', label: 'Next action the RM committed to' },
+  { key: 'sentiment', label: 'Likelihood the CP will onboard', sentiment: true },
+  { key: 'follow_up_date', label: 'Follow-up timeline' },
+];
+
 // Legacy export — defaults to the engagement set so any old import keeps
 // working without behavioural change.
 export const DEFAULT_QUESTIONS = ENGAGEMENT_QUESTIONS;
 
 export function getQuestionsForType(type) {
-  return type === 'visit' ? VISIT_QUESTIONS : ENGAGEMENT_QUESTIONS;
+  if (type === 'visit') return VISIT_QUESTIONS;
+  if (type === 'onboarding') return ONBOARDING_QUESTIONS;
+  return ENGAGEMENT_QUESTIONS;
 }
 
 export const MEETING_TYPES = [
   { value: 'engagement', label: 'Engagement meeting', description: 'CP working-relationship conversation' },
   { value: 'visit', label: 'Site visit assessment', description: 'Buyer at-site qualification (BVA)' },
+  { value: 'onboarding', label: 'CP onboarding pitch', description: 'Pitch to a prospective CP (not yet onboarded)' },
 ];

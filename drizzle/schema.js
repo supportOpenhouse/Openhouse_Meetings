@@ -25,6 +25,10 @@ export const users = pgTable(
     is_active: boolean('is_active').notNull().default(true),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     created_by: uuid('created_by'),
+    // Touched by the heartbeat endpoint. "Online" = last_seen_at within the
+    // recent window (see admin logs page). Nullable for users who have never
+    // signed in.
+    last_seen_at: timestamp('last_seen_at', { withTimezone: true }),
   },
   (t) => ({
     emailIdx: index('users_email_idx').on(t.email),
@@ -39,8 +43,10 @@ export const meetings = pgTable(
     rm_id: uuid('rm_id')
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
-    cp_code: text('cp_code').notNull(),
-    cp_mobile: text('cp_mobile').notNull(),
+    // Nullable to accommodate onboarding meetings — a prospective CP doesn't
+    // have a cp_code yet, and their phone is optional.
+    cp_code: text('cp_code'),
+    cp_mobile: text('cp_mobile'),
     cp_name: text('cp_name'),
     cp_city: text('cp_city'),
     purpose: text('purpose'),
@@ -116,3 +122,27 @@ export const cpSyncState = pgTable('cp_sync_state', {
   last_error: text('last_error'),
   in_progress: boolean('in_progress').notNull().default(false),
 });
+
+// Append-only activity feed visible to admins. Records auth events, recording
+// lifecycle, uploads, processing, CP assignment changes, and errors. Heartbeat
+// pings do NOT land here — they only touch users.last_seen_at to avoid spam.
+export const activityLogs = pgTable(
+  'activity_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    user_id: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    event_type: text('event_type').notNull(),
+    meeting_id: uuid('meeting_id').references(() => meetings.id, { onDelete: 'set null' }),
+    cp_code: text('cp_code'),
+    payload: jsonb('payload'),
+    ip: text('ip'),
+    user_agent: text('user_agent'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userIdx: index('activity_logs_user_idx').on(t.user_id),
+    eventIdx: index('activity_logs_event_idx').on(t.event_type),
+    createdAtIdx: index('activity_logs_created_at_idx').on(t.created_at),
+    meetingIdx: index('activity_logs_meeting_idx').on(t.meeting_id),
+  })
+);

@@ -67,6 +67,34 @@ async function run() {
   // original question set).
   await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS meeting_type text NOT NULL DEFAULT 'engagement'`;
 
+  // For the admin activity feed: an append-only event log + a per-user
+  // last_seen timestamp powering the "online now" view.
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at timestamptz`;
+
+  // Onboarding meetings don't have a cp_code (the CP isn't onboarded yet) and
+  // phone is optional. Drop NOT NULL on both — existing rows are unaffected.
+  await sql`ALTER TABLE meetings ALTER COLUMN cp_code DROP NOT NULL`;
+  await sql`ALTER TABLE meetings ALTER COLUMN cp_mobile DROP NOT NULL`;
+
+  console.log('Creating activity_logs table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+      event_type text NOT NULL,
+      meeting_id uuid REFERENCES meetings(id) ON DELETE SET NULL,
+      cp_code text,
+      payload jsonb,
+      ip text,
+      user_agent text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS activity_logs_user_idx ON activity_logs(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS activity_logs_event_idx ON activity_logs(event_type)`;
+  await sql`CREATE INDEX IF NOT EXISTS activity_logs_created_at_idx ON activity_logs(created_at DESC)`;
+  await sql`CREATE INDEX IF NOT EXISTS activity_logs_meeting_idx ON activity_logs(meeting_id)`;
+
   console.log('Creating cp_assignments table...');
   await sql`
     CREATE TABLE IF NOT EXISTS cp_assignments (
