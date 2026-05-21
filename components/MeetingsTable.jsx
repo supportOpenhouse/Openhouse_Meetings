@@ -56,16 +56,14 @@ export default function MeetingsTable({
     if (sentimentFilter !== 'all' && (getSentiment(m) || 'n/a') !== sentimentFilter) return false;
 
     if (since) {
-      const d = new Date(since);
+      // Append a local time — a bare 'YYYY-MM-DD' parses as UTC midnight.
+      const d = new Date(`${since}T00:00:00`);
       if (!isNaN(d) && new Date(m.started_at) < d) return false;
     }
     if (until) {
-      // Treat "until" as inclusive end-of-day.
-      const d = new Date(until);
-      if (!isNaN(d)) {
-        const end = new Date(d.getTime() + 24 * 60 * 60 * 1000 - 1);
-        if (new Date(m.started_at) > end) return false;
-      }
+      // Inclusive end-of-day, in the user's local timezone.
+      const d = new Date(`${until}T23:59:59.999`);
+      if (!isNaN(d) && new Date(m.started_at) > d) return false;
     }
 
     if (search) {
@@ -253,10 +251,16 @@ export default function MeetingsTable({
   );
 }
 
+// A meeting whose transcript came out under 100 words — almost always an
+// accidental or cut-short recording. Flagged with a red row tint.
+function isShortTranscript(m) {
+  return (m.status || 'ready') === 'ready' && (m.transcript_word_count ?? 0) < 100;
+}
+
 function DesktopRow({ m, showRM, cols, onClick }) {
   return (
     <div
-      className="oh-meeting-row"
+      className={`oh-meeting-row ${isShortTranscript(m) ? 'short-transcript' : ''}`}
       onClick={onClick}
       style={{ gridTemplateColumns: cols }}
     >
@@ -301,7 +305,10 @@ function DesktopRow({ m, showRM, cols, onClick }) {
 
 function MobileCard({ m, showRM, onClick }) {
   return (
-    <div className="oh-meeting-card" onClick={onClick}>
+    <div
+      className={`oh-meeting-card ${isShortTranscript(m) ? 'short-transcript' : ''}`}
+      onClick={onClick}
+    >
       <div className="top">
         <div className="code">
           {m.cp_code || m.cp_name || 'No name'}

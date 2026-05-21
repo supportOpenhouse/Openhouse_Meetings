@@ -86,16 +86,19 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
   }, [since, until]);
 
   // Filtered meeting list — single source of truth for stats + table.
+  // since/until are YYYY-MM-DD. We append an explicit local time so the
+  // browser parses them in the user's timezone — `new Date('2026-05-21')`
+  // alone is parsed as UTC midnight, which made "Today" start 5.5h late
+  // for IST and drop early-morning meetings.
   const filteredMeetings = useMemo(() => {
     return meetings.filter((m) => {
       const t = new Date(m.started_at);
       if (since) {
-        const start = new Date(since);
+        const start = new Date(`${since}T00:00:00`);
         if (t < start) return false;
       }
       if (until) {
-        const end = new Date(until);
-        end.setHours(23, 59, 59, 999);
+        const end = new Date(`${until}T23:59:59.999`);
         if (t > end) return false;
       }
       return true;
