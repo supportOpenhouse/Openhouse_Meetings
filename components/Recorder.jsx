@@ -24,9 +24,18 @@ import { detectAudioContainer } from '@/lib/recordingName';
 // We deliberately do NOT try to auto-pause on phone-call interruptions: the
 // signal Android Chrome surfaces is unreliable (track.muted toggles or stream
 // ends inconsistently across OEMs), and false positives froze the UI when a
-// call came in. The recording will continue through a call; the RM trims or
-// re-records as needed.
-const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref) {
+// call came in. The recording continues through a call; the RM trims or
+// re-records as needed. We DO, however, passively *log* mic interruptions and
+// app-backgrounding so admins can see when a recording was disturbed.
+//
+// Props (added):
+//   cpCode              — tags the activity-log events for correlation
+//   onLocation(loc)     — fires once with { lat, lng, accuracy } when the
+//                         device geolocation resolves (best-effort)
+const Recorder = forwardRef(function Recorder(
+  { onPause, onDone, onCancel, cpCode, onLocation },
+  ref
+) {
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -60,18 +69,26 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     []
   );
 
-  // Re-acquire wake lock when the tab comes back to the foreground — the
-  // browser auto-releases it on hide, but we want it back if we're still
-  // actively recording.
+  // Re-acquire wake lock when the tab returns to the foreground, and log
+  // background/foreground transitions that happen mid-recording — those are
+  // the "some activity disturbed the recording" events admins want visibility
+  // into (screen lock, app switch, an incoming call's UI taking over).
   useEffect(() => {
     function onVis() {
-      if (document.visibilityState === 'visible' && recording && !paused) {
-        acquireWakeLock();
+      if (document.visibilityState === 'visible') {
+        if (recording && !paused) {
+          acquireWakeLock();
+          logEvent('recording.foregrounded', { cp_code: cpCode || undefined });
+        }
+      } else if (document.visibilityState === 'hidden') {
+        if (recording && !paused) {
+          logEvent('recording.backgrounded', { cp_code: cpCode || undefined });
+        }
       }
     }
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [recording, paused]);
+  }, [recording, paused, cpCode]);
 
   async function acquireWakeLock() {
     if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
@@ -151,12 +168,40 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     }
   }
 
+  // Best-effort device location, requested alongside the mic. Non-blocking —
+  // recording never waits on it. Reports back via onLocation when it resolves.
+  function captureLocation() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        onLocation &&
+          onLocation({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          });
+      },
+      (err) => {
+        // Denied / unavailable / timed out — meeting just has no location.
+        logEvent('recording.location_denied', {
+          cp_code: cpCode || undefined,
+          payload: { code: err?.code, message: err?.message },
+        });
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  }
+
   async function start() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
       });
       streamRef.current = stream;
+
+      // Ask for location at the same moment as the mic — runs in parallel,
+      // doesn't hold up the recording.
+      captureLocation();
 
       const mimes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
       const mime = mimes.find((m) => MediaRecorder.isTypeSupported(m)) || '';
@@ -173,6 +218,23 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
+
+      // Passive mic-interruption telemetry — log only, never change state.
+      // (Auto-pausing on these signals froze the UI; we removed that.)
+      const [audioTrack] = stream.getAudioTracks();
+      if (audioTrack) {
+        audioTrack.onmute = () =>
+          logEvent('recording.mic_muted', { cp_code: cpCode || undefined });
+        audioTrack.onunmute = () =>
+          logEvent('recording.mic_unmuted', { cp_code: cpCode || undefined });
+        audioTrack.onended = () =>
+          logEvent('recording.mic_ended', { cp_code: cpCode || undefined });
+      }
+      mr.onerror = (e) =>
+        logEvent('recording.error', {
+          cp_code: cpCode || undefined,
+          payload: { message: e?.error?.name || e?.error?.message || 'MediaRecorder error' },
+        });
       // We intentionally don't fire onDone from onstop — finalize() handles
       // that explicitly, since the user might pause-then-continue several
       // times before committing to upload.
@@ -189,7 +251,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       startTimer();
       acquireWakeLock();
       startSilentAudio();
-      logEvent('recording.started', { payload: { mime: mimeRef.current || 'default' } });
+      logEvent('recording.started', {
+        cp_code: cpCode || undefined,
+        payload: { mime: mimeRef.current || 'default' },
+      });
     } catch (e) {
       setError(e.message || 'Could not access the microphone');
       logEvent('error', { payload: { where: 'recorder.start', message: e?.message } });
@@ -206,7 +271,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     stopTimer();
     setElapsed(accumRef.current);
     releaseWakeLock();
-    logEvent('recording.paused', { payload: { elapsed_seconds: accumRef.current } });
+    logEvent('recording.paused', {
+      cp_code: cpCode || undefined,
+      payload: { elapsed_seconds: accumRef.current },
+    });
     onPause && onPause(accumRef.current);
   }
 
@@ -217,7 +285,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     setPaused(false);
     startTimer();
     acquireWakeLock();
-    logEvent('recording.resumed', { payload: { elapsed_seconds: accumRef.current } });
+    logEvent('recording.resumed', {
+      cp_code: cpCode || undefined,
+      payload: { elapsed_seconds: accumRef.current },
+    });
   }
 
   function finalize() {
@@ -260,6 +331,7 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
       releaseWakeLock();
       stopSilentAudio();
       logEvent('recording.finalized', {
+        cp_code: cpCode || undefined,
         payload: { duration_seconds: durSec, blob_bytes: blob.size, mime: blob.type },
       });
       onDone(blob, durSec);
@@ -295,7 +367,10 @@ const Recorder = forwardRef(function Recorder({ onPause, onDone, onCancel }, ref
     releaseWakeLock();
     stopSilentAudio();
     if (wasActive) {
-      logEvent('recording.discarded', { payload: { elapsed_seconds: accumAtDiscard } });
+      logEvent('recording.discarded', {
+        cp_code: cpCode || undefined,
+        payload: { elapsed_seconds: accumAtDiscard },
+      });
     }
     onCancel && onCancel();
   }

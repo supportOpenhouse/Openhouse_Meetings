@@ -30,6 +30,9 @@ export async function POST(request) {
     duration_seconds,
     started_at,
     meeting_type,
+    location_lat,
+    location_lng,
+    location_accuracy,
   } = body;
 
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
@@ -67,6 +70,9 @@ export async function POST(request) {
     return NextResponse.json({ error: 'audio_url must be a Vercel Blob URL' }, { status: 400 });
   }
 
+  // Geolocation is best-effort — only persist finite numbers.
+  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+
   const meeting = await insertMeeting({
     rm_id: session.user.id,
     cp_code: cp_code ? String(cp_code).trim() : null,
@@ -79,6 +85,9 @@ export async function POST(request) {
     audio_url,
     status: 'processing',
     meeting_type,
+    location_lat: num(location_lat),
+    location_lng: num(location_lng),
+    location_accuracy: num(location_accuracy),
   });
 
   logActivity({

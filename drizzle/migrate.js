@@ -5,6 +5,12 @@
 // (npm script passes --env-file=.env.local)
 
 import { neon } from '@neondatabase/serverless';
+import dns from 'node:dns';
+
+// Many ISPs (common in India) have flaky IPv6 routing to AWS — Node's fetch
+// tries IPv6 first and the TCP connect times out before falling back. Force
+// IPv4-first DNS resolution so connections to Neon are reliable.
+dns.setDefaultResultOrder('ipv4first');
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL not set. Did you copy .env.example to .env.local?');
@@ -75,6 +81,11 @@ async function run() {
   // phone is optional. Drop NOT NULL on both — existing rows are unaffected.
   await sql`ALTER TABLE meetings ALTER COLUMN cp_code DROP NOT NULL`;
   await sql`ALTER TABLE meetings ALTER COLUMN cp_mobile DROP NOT NULL`;
+
+  // Device geolocation captured when recording starts.
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS location_lat double precision`;
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS location_lng double precision`;
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS location_accuracy double precision`;
 
   console.log('Creating activity_logs table...');
   await sql`

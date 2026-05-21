@@ -91,6 +91,21 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               <span><Clock size={12} /> {fmtDuration(localMeeting.duration_seconds)}</span>
               {localMeeting.language && <span>· {localMeeting.language}</span>}
               <MeetingTypeBadge type={meetingType} />
+              {localMeeting.location_lat != null && localMeeting.location_lng != null && (
+                <a
+                  className="oh-detail-loc"
+                  href={`https://www.google.com/maps?q=${localMeeting.location_lat},${localMeeting.location_lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={
+                    localMeeting.location_accuracy
+                      ? `Recorded here — accuracy ±${Math.round(localMeeting.location_accuracy)} m`
+                      : 'Recording location'
+                  }
+                >
+                  <MapPin size={12} /> View location
+                </a>
+              )}
             </div>
           </div>
           <button className="oh-btn ghost oh-close-btn" onClick={onClose} aria-label="Close">
@@ -228,6 +243,15 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
           align-items: center;
           gap: 5px;
         }
+        .oh-detail-loc {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: var(--accent);
+          text-decoration: none;
+          border-bottom: 1px dashed currentColor;
+        }
+        .oh-detail-loc:hover { opacity: 0.75; }
         .oh-close-btn { padding: 8px; flex-shrink: 0; }
         .oh-truncate {
           overflow: hidden;

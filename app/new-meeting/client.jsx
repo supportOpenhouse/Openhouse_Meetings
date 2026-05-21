@@ -87,6 +87,8 @@ export default function NewMeetingClient({ user }) {
   // which buttons the failure UI shows.
   const [isRestoreFlow, setIsRestoreFlow] = useState(false);
   const restoreCtxRef = useRef(null);
+  // Device geolocation captured when recording starts — { lat, lng, accuracy }.
+  const [location, setLocation] = useState(null);
 
   // Refs for the stall watchdog
   const lastProgressAtRef = useRef(0);
@@ -169,6 +171,9 @@ export default function NewMeetingClient({ user }) {
       purpose: form.purpose,
       meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
       is_onboarding: isOnboarding,
+      location_lat: location?.lat ?? null,
+      location_lng: location?.lng ?? null,
+      location_accuracy: location?.accuracy ?? null,
     };
   }
 
@@ -322,6 +327,9 @@ export default function NewMeetingClient({ user }) {
           meeting_type: isOnboarding ? 'onboarding' : form.meeting_type,
           duration_seconds: durSec,
           started_at: new Date(startedAt).toISOString(),
+          location_lat: location?.lat ?? null,
+          location_lng: location?.lng ?? null,
+          location_accuracy: location?.accuracy ?? null,
         }),
       });
       if (!createRes.ok) {
@@ -773,6 +781,8 @@ export default function NewMeetingClient({ user }) {
           <div style={{ display: step === 'record' ? 'block' : 'none' }}>
             <Recorder
               ref={recorderRef}
+              cpCode={form.cp_code || form.cp_name || ''}
+              onLocation={setLocation}
               onPause={onRecorderPaused}
               onDone={onRecorded}
               onCancel={() => setStep('form')}

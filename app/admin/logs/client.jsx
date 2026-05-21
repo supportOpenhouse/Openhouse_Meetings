@@ -18,6 +18,8 @@ import {
   FileText,
   Activity,
   Sparkles,
+  MicOff,
+  MapPinOff,
 } from 'lucide-react';
 import { fmtDate } from '@/lib/utils';
 
@@ -47,6 +49,13 @@ const EVENT_META = {
   'recording.resumed': { Icon: Play, tone: 'neutral', label: 'Recording resumed' },
   'recording.discarded': { Icon: Trash2, tone: 'bad', label: 'Recording discarded' },
   'recording.finalized': { Icon: CheckCircle2, tone: 'ok', label: 'Recording finalized' },
+  'recording.mic_muted': { Icon: MicOff, tone: 'warn', label: 'Mic interrupted (muted)' },
+  'recording.mic_unmuted': { Icon: Mic, tone: 'neutral', label: 'Mic restored' },
+  'recording.mic_ended': { Icon: MicOff, tone: 'bad', label: 'Mic cut off by system' },
+  'recording.backgrounded': { Icon: AlertCircle, tone: 'warn', label: 'App left during recording' },
+  'recording.foregrounded': { Icon: Activity, tone: 'neutral', label: 'Returned to recording' },
+  'recording.error': { Icon: XCircle, tone: 'bad', label: 'Recorder error' },
+  'recording.location_denied': { Icon: MapPinOff, tone: 'neutral', label: 'Location not shared' },
   'upload.started': { Icon: Upload, tone: 'neutral', label: 'Upload started' },
   'upload.failed': { Icon: XCircle, tone: 'bad', label: 'Upload failed' },
   'upload.stalled': { Icon: AlertCircle, tone: 'warn', label: 'Upload stalled' },

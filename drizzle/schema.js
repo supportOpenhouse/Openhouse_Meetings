@@ -10,6 +10,7 @@ import {
   index,
   date,
   uniqueIndex,
+  doublePrecision,
 } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('role', ['admin', 'rm']);
@@ -53,6 +54,11 @@ export const meetings = pgTable(
     // 'engagement' (default — original meeting style) or 'visit' (site visit
     // assessment, drives a different summarization question set).
     meeting_type: text('meeting_type').notNull().default('engagement'),
+    // Captured from the device when recording starts (alongside the mic
+    // permission). Nullable — geolocation can be denied or unavailable.
+    location_lat: doublePrecision('location_lat'),
+    location_lng: doublePrecision('location_lng'),
+    location_accuracy: doublePrecision('location_accuracy'),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),
     language: text('language'),
