@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   X,
@@ -26,6 +26,7 @@ import {
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
 import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, MEETING_TYPES } from './questions';
 import { SCORE_PARAMETERS, SCORE_TOTAL_POSSIBLE } from '@/lib/scoring';
+import WebmAudio from './WebmAudio';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
   const router = useRouter();
@@ -357,36 +358,6 @@ function TabBtn({ active, onClick, children }) {
       `}</style>
     </button>
   );
-}
-
-// Recordings produced by MediaRecorder don't have a duration in the WebM
-// header, so audio.duration is Infinity until the browser scans the file.
-// Trigger that scan on mount so the seek bar tracks correctly.
-function WebmAudio({ src }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let cancelled = false;
-    function onMeta() {
-      if (cancelled) return;
-      if (!isFinite(el.duration)) {
-        const onDurationChange = () => {
-          if (cancelled) return;
-          if (isFinite(el.duration)) {
-            el.removeEventListener('durationchange', onDurationChange);
-            try { el.currentTime = 0; } catch {}
-          }
-        };
-        el.addEventListener('durationchange', onDurationChange);
-        try { el.currentTime = 1e101; } catch {}
-      }
-    }
-    if (el.readyState >= 1) onMeta();
-    else el.addEventListener('loadedmetadata', onMeta, { once: true });
-    return () => { cancelled = true; };
-  }, [src]);
-  return <audio ref={ref} controls src={src} preload="metadata" style={{ width: '100%' }} />;
 }
 
 function ScorePanel({ score }) {

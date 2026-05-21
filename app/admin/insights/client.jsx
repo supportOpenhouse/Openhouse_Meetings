@@ -18,6 +18,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
+import WebmAudio from '@/components/WebmAudio';
 
 const PERIODS = [
   { value: 30, label: 'Last 30 days' },
@@ -712,12 +713,9 @@ function MentionsModal({ label, ids, onClose }) {
                   {m.rm_name ? ` · ${m.rm_name}` : ''}
                 </div>
                 {m.audio_url ? (
-                  <audio
-                    controls
-                    preload="metadata"
-                    src={m.audio_url}
-                    style={{ width: '100%', marginTop: 8, height: 38 }}
-                  />
+                  <div style={{ marginTop: 8 }}>
+                    <WebmAudio src={m.audio_url} />
+                  </div>
                 ) : (
                   <div className="oh-mention-noaudio">No audio on file for this meeting.</div>
                 )}
