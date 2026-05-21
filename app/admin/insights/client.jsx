@@ -17,8 +17,9 @@ import {
   X,
   Volume2,
 } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
-import WebmAudio from '@/components/WebmAudio';
+import MeetingDetail from '@/components/MeetingDetail';
 
 const PERIODS = [
   { value: 30, label: 'Last 30 days' },
@@ -652,6 +653,8 @@ function InsightBody({ result }) {
 function MentionsModal({ label, ids, onClose }) {
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState(null);
+  const [detail, setDetail] = useState(null);       // full meeting object
+  const [detailLoadingId, setDetailLoadingId] = useState(null);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -666,109 +669,156 @@ function MentionsModal({ label, ids, onClose }) {
     };
   }, [ids]);
 
+  // Fetch the full meeting (transcript, summary, score, audio) and open the
+  // same detailed view used on the dashboard.
+  async function openDetail(id) {
+    setDetailLoadingId(id);
+    try {
+      const r = await fetch(`/api/meetings/${id}`);
+      const j = await r.json();
+      if (r.ok && j.meeting) setDetail(j.meeting);
+      else setError('Could not open that meeting.');
+    } catch {
+      setError('Could not open that meeting.');
+    } finally {
+      setDetailLoadingId(null);
+    }
+  }
+
   return (
-    <div className="oh-modal-bg" onClick={onClose}>
-      <div className="oh-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
-        <div className="oh-modal-header">
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="oh-eyebrow">
-              <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
-              Source recordings
-            </div>
-            <h2 className="oh-mention-title">{label}</h2>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-              {ids.length} {ids.length === 1 ? 'recording' : 'recordings'} behind this insight
-            </div>
-          </div>
-          <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
-            <X size={16} />
-          </button>
-        </div>
-        <div className="oh-modal-body">
-          {!meetings && !error && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-3)', padding: 16 }}>
-              <Loader2 size={15} className="oh-spin" /> Loading recordings…
-            </div>
-          )}
-          {error && <div style={{ color: 'var(--danger, #b03021)', padding: 12 }}>{error}</div>}
-          {meetings && meetings.length === 0 && (
-            <div style={{ color: 'var(--ink-3)', padding: 12 }}>
-              No recordings found — they may have been deleted.
-            </div>
-          )}
-          {meetings &&
-            meetings.map((m) => (
-              <div key={m.id} className="oh-mention-row">
-                <div className="oh-mention-head">
-                  <span className="oh-mono" style={{ fontWeight: 600 }}>
-                    {m.cp_code || m.cp_name || 'CP'}
-                  </span>
-                  {m.cp_code && m.cp_name && (
-                    <span style={{ color: 'var(--ink-2)' }}> · {m.cp_name}</span>
-                  )}
-                  <span className="oh-mention-type">{m.meeting_type}</span>
-                </div>
-                <div className="oh-mention-meta">
-                  {fmtDate(m.started_at)} · {fmtDuration(m.duration_seconds)}
-                  {m.rm_name ? ` · ${m.rm_name}` : ''}
-                </div>
-                {m.audio_url ? (
-                  <div style={{ marginTop: 8 }}>
-                    <WebmAudio src={m.audio_url} />
-                  </div>
-                ) : (
-                  <div className="oh-mention-noaudio">No audio on file for this meeting.</div>
-                )}
+    <>
+      <div className="oh-modal-bg" onClick={onClose}>
+        <div className="oh-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+          <div className="oh-modal-header">
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="oh-eyebrow">
+                <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
+                Source recordings
               </div>
-            ))}
+              <h2 className="oh-mention-title">{label}</h2>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+                {ids.length} {ids.length === 1 ? 'recording' : 'recordings'} behind this insight —
+                tap one to see its transcript &amp; summary
+              </div>
+            </div>
+            <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
+              <X size={16} />
+            </button>
+          </div>
+          <div className="oh-modal-body">
+            {!meetings && !error && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-3)', padding: 16 }}>
+                <Loader2 size={15} className="oh-spin" /> Loading recordings…
+              </div>
+            )}
+            {error && <div style={{ color: 'var(--danger, #b03021)', padding: 12 }}>{error}</div>}
+            {meetings && meetings.length === 0 && (
+              <div style={{ color: 'var(--ink-3)', padding: 12 }}>
+                No recordings found — they may have been deleted.
+              </div>
+            )}
+            {meetings &&
+              meetings.map((m) => (
+                <button
+                  key={m.id}
+                  className="oh-mention-row"
+                  onClick={() => openDetail(m.id)}
+                  disabled={detailLoadingId === m.id}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="oh-mention-head">
+                      <span className="oh-mono" style={{ fontWeight: 600 }}>
+                        {m.cp_code || m.cp_name || 'CP'}
+                      </span>
+                      {m.cp_code && m.cp_name && (
+                        <span style={{ color: 'var(--ink-2)' }}> · {m.cp_name}</span>
+                      )}
+                      <span className="oh-mention-type">{m.meeting_type}</span>
+                    </div>
+                    <div className="oh-mention-meta">
+                      {fmtDate(m.started_at)} · {fmtDuration(m.duration_seconds)}
+                      {m.rm_name ? ` · ${m.rm_name}` : ''}
+                    </div>
+                  </div>
+                  <span className="oh-mention-go">
+                    {detailLoadingId === m.id ? (
+                      <Loader2 size={15} className="oh-spin" />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                  </span>
+                </button>
+              ))}
+          </div>
         </div>
+
+        <style jsx>{`
+          .oh-mention-title {
+            font-family: 'Instrument Serif', serif;
+            font-size: 22px;
+            margin: 4px 0 4px;
+            line-height: 1.2;
+          }
+          .oh-mention-row {
+            all: unset;
+            box-sizing: border-box;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 13px;
+            margin-bottom: 9px;
+            background: var(--paper);
+            transition: border-color 0.12s, background 0.12s;
+          }
+          .oh-mention-row:hover {
+            border-color: var(--ink-2);
+            background: var(--paper-2);
+          }
+          .oh-mention-row:disabled { opacity: 0.6; cursor: default; }
+          .oh-mention-head {
+            font-size: 14px;
+            color: var(--ink);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+          }
+          .oh-mention-type {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--ink-3);
+            background: var(--paper-2);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 1px 7px;
+          }
+          .oh-mention-meta {
+            font-size: 12px;
+            color: var(--ink-3);
+            margin-top: 2px;
+          }
+          .oh-mention-go {
+            color: var(--ink-3);
+            flex-shrink: 0;
+            display: inline-flex;
+          }
+        `}</style>
       </div>
 
-      <style jsx>{`
-        .oh-mention-title {
-          font-family: 'Instrument Serif', serif;
-          font-size: 22px;
-          margin: 4px 0 4px;
-          line-height: 1.2;
-        }
-        .oh-mention-row {
-          border: 1px solid var(--border);
-          border-radius: 10px;
-          padding: 11px 13px;
-          margin-bottom: 9px;
-          background: var(--paper);
-        }
-        .oh-mention-head {
-          font-size: 14px;
-          color: var(--ink);
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex-wrap: wrap;
-        }
-        .oh-mention-type {
-          font-size: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--ink-3);
-          background: var(--paper-2);
-          border: 1px solid var(--border);
-          border-radius: 999px;
-          padding: 1px 7px;
-        }
-        .oh-mention-meta {
-          font-size: 12px;
-          color: var(--ink-3);
-          margin-top: 2px;
-        }
-        .oh-mention-noaudio {
-          font-size: 12px;
-          color: var(--ink-3);
-          font-style: italic;
-          margin-top: 8px;
-        }
-      `}</style>
-    </div>
+      {detail && (
+        <MeetingDetail
+          meeting={detail}
+          onClose={() => setDetail(null)}
+          onDelete={() => {}}
+          canDelete={false}
+        />
+      )}
+    </>
   );
 }
 
