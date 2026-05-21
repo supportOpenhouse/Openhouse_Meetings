@@ -297,7 +297,12 @@ function VisitTab({ m }) {
         </Panel>
       </div>
       <style jsx>{`
-        .oh-ins-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .oh-ins-2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          align-items: start;
+        }
         @media (max-width: 760px) { .oh-ins-2col { grid-template-columns: 1fr; } }
       `}</style>
     </div>
@@ -323,7 +328,12 @@ function EngagementTab({ m }) {
         </Panel>
       </div>
       <style jsx>{`
-        .oh-ins-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .oh-ins-2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          align-items: start;
+        }
         @media (max-width: 760px) { .oh-ins-2col { grid-template-columns: 1fr; } }
       `}</style>
     </div>
@@ -705,19 +715,51 @@ function BarRow({ label, pct, caption, tone }) {
 function Sparkbars({ data }) {
   if (!data || data.length === 0) return <Empty text="No data in range." />;
   const max = Math.max(...data.map((d) => d.n), 1);
+  const BAR_ZONE = 110; // px — tallest bar
   return (
     <div className="oh-spark">
       {data.map((d, i) => (
         <div key={i} className="oh-spark-col" title={`${d.week}: ${d.n}`}>
-          <div className="oh-spark-bar" style={{ height: `${Math.max(4, (d.n / max) * 60)}px` }} />
           <div className="oh-spark-n">{d.n}</div>
+          <div
+            className="oh-spark-bar"
+            style={{ height: `${Math.max(3, Math.round((d.n / max) * BAR_ZONE))}px` }}
+          />
+          <div className="oh-spark-week">{shortWeek(d.week)}</div>
         </div>
       ))}
       <style jsx>{`
-        .oh-spark { display: flex; gap: 4px; align-items: flex-end; }
-        .oh-spark-col { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
-        .oh-spark-bar { width: 100%; max-width: 26px; background: var(--accent); border-radius: 3px 3px 0 0; }
-        .oh-spark-n { font-size: 10px; font-family: 'Geist Mono', monospace; color: var(--ink-3); }
+        .oh-spark {
+          display: flex;
+          gap: 8px;
+          align-items: flex-end;
+          justify-content: flex-start;
+        }
+        .oh-spark-col {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          flex: 1 1 0;
+          max-width: 54px;
+          min-width: 0;
+        }
+        .oh-spark-n {
+          font-size: 11px;
+          font-family: 'Geist Mono', monospace;
+          color: var(--ink-2);
+          margin-bottom: 3px;
+        }
+        .oh-spark-bar {
+          width: 100%;
+          background: var(--accent);
+          border-radius: 3px 3px 0 0;
+        }
+        .oh-spark-week {
+          font-size: 9px;
+          color: var(--ink-3);
+          margin-top: 5px;
+          white-space: nowrap;
+        }
       `}</style>
     </div>
   );
@@ -761,4 +803,11 @@ function relative(iso) {
   if (d < 3600) return `${Math.round(d / 60)}m ago`;
   if (d < 86400) return `${Math.round(d / 3600)}h ago`;
   return `${Math.round(d / 86400)}d ago`;
+}
+
+// '2026-05-04' (week-start date) → '4 May' for the bar-chart x-axis.
+function shortWeek(week) {
+  const d = new Date(week);
+  if (isNaN(d)) return week;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
