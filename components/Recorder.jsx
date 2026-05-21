@@ -182,13 +182,17 @@ const Recorder = forwardRef(function Recorder(
           });
       },
       (err) => {
-        // Denied / unavailable / timed out — meeting just has no location.
-        logEvent('recording.location_denied', {
+        // code 1 = permission denied, 2 = position unavailable, 3 = timeout.
+        logEvent('recording.location_unavailable', {
           cp_code: cpCode || undefined,
           payload: { code: err?.code, message: err?.message },
         });
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      // Network-based location (no GPS): resolves in a few seconds and works
+      // indoors, where a high-accuracy GPS fix routinely times out. Accuracy
+      // of ~20-500m is plenty to know which site a meeting happened at. A
+      // generous timeout + cached-fix allowance make it reliable.
+      { enableHighAccuracy: false, timeout: 25000, maximumAge: 300000 }
     );
   }
 

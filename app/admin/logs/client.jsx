@@ -55,7 +55,7 @@ const EVENT_META = {
   'recording.backgrounded': { Icon: AlertCircle, tone: 'warn', label: 'App left during recording' },
   'recording.foregrounded': { Icon: Activity, tone: 'neutral', label: 'Returned to recording' },
   'recording.error': { Icon: XCircle, tone: 'bad', label: 'Recorder error' },
-  'recording.location_denied': { Icon: MapPinOff, tone: 'neutral', label: 'Location not shared' },
+  'recording.location_unavailable': { Icon: MapPinOff, tone: 'neutral', label: 'Location unavailable' },
   'upload.started': { Icon: Upload, tone: 'neutral', label: 'Upload started' },
   'upload.failed': { Icon: XCircle, tone: 'bad', label: 'Upload failed' },
   'upload.stalled': { Icon: AlertCircle, tone: 'warn', label: 'Upload stalled' },
