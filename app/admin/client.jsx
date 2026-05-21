@@ -353,11 +353,16 @@ function Preset({ label, stat, active, onClick }) {
 // ---------- Pure derivations ----------
 
 function computeWindowStats(meetings) {
-  const now = Date.now();
-  const day = now - 24 * 60 * 60 * 1000;
-  const week = now - 7 * 24 * 60 * 60 * 1000;
-  const month = now - 30 * 24 * 60 * 60 * 1000;
-  const ninety = now - 90 * 24 * 60 * 60 * 1000;
+  // Calendar-aligned windows (local timezone), so the cards match the date
+  // presets exactly. "Today" = since local midnight — NOT a rolling 24h
+  // window, which previously over-counted by pulling in late-yesterday.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const todayCut = startOfToday.getTime();
+  const week = todayCut - 6 * dayMs; // 7 calendar days incl. today
+  const month = todayCut - 29 * dayMs; // 30 calendar days
+  const ninety = todayCut - 89 * dayMs; // 90 calendar days
 
   const acc = (cutoff) => {
     let count = 0;
@@ -373,7 +378,7 @@ function computeWindowStats(meetings) {
   };
 
   return {
-    day: acc(day),
+    day: acc(todayCut),
     week: acc(week),
     month: acc(month),
     ninety: acc(ninety),
