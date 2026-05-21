@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Sparkles,
   RefreshCw,
@@ -14,7 +14,10 @@ import {
   Target,
   Send,
   AlertCircle,
+  X,
+  Volume2,
 } from 'lucide-react';
+import { fmtDate, fmtDuration } from '@/lib/utils';
 
 const PERIODS = [
   { value: 30, label: 'Last 30 days' },
@@ -537,27 +540,49 @@ function InsightCard({ insightKey, title, cached, generating, error, onGenerate 
 }
 
 function InsightBody({ result }) {
+  const [openItem, setOpenItem] = useState(null);
   if (!result) return null;
   return (
     <div className="oh-ins-body">
       {result.headline && <div className="oh-ins-headline">{result.headline}</div>}
       {Array.isArray(result.items) && result.items.length > 0 && (
         <div className="oh-ins-items">
-          {result.items.map((it, i) => (
-            <div key={i} className="oh-ins-item">
-              <span className="oh-ins-item-rank">{i + 1}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="oh-ins-item-top">
-                  <span className="oh-ins-item-label">{it.label}</span>
-                  {it.value && <span className="oh-ins-item-value">{it.value}</span>}
+          {result.items.map((it, i) => {
+            const ids = Array.isArray(it.meeting_ids) ? it.meeting_ids : [];
+            return (
+              <div key={i} className="oh-ins-item">
+                <span className="oh-ins-item-rank">{i + 1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="oh-ins-item-top">
+                    <span className="oh-ins-item-label">{it.label}</span>
+                    {it.value &&
+                      (ids.length > 0 ? (
+                        <button
+                          className="oh-ins-item-value clickable"
+                          onClick={() => setOpenItem({ label: it.label, ids })}
+                          title="Listen to the source recordings"
+                        >
+                          {it.value} ›
+                        </button>
+                      ) : (
+                        <span className="oh-ins-item-value">{it.value}</span>
+                      ))}
+                  </div>
+                  {it.note && <div className="oh-ins-item-note">{it.note}</div>}
                 </div>
-                {it.note && <div className="oh-ins-item-note">{it.note}</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {result.narrative && <div className="oh-ins-narrative">{result.narrative}</div>}
+      {openItem && (
+        <MentionsModal
+          label={openItem.label}
+          ids={openItem.ids}
+          onClose={() => setOpenItem(null)}
+        />
+      )}
       <style jsx>{`
         .oh-ins-body { margin-top: 10px; }
         .oh-ins-headline {
@@ -596,6 +621,17 @@ function InsightBody({ result }) {
           color: var(--accent);
           flex-shrink: 0;
         }
+        .oh-ins-item-value.clickable {
+          all: unset;
+          font-family: 'Geist Mono', monospace;
+          font-size: 11.5px;
+          color: var(--accent);
+          flex-shrink: 0;
+          cursor: pointer;
+          border-bottom: 1px dashed currentColor;
+          white-space: nowrap;
+        }
+        .oh-ins-item-value.clickable:hover { opacity: 0.7; }
         .oh-ins-item-note { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
         .oh-ins-narrative {
           font-size: 13.5px;
@@ -604,6 +640,134 @@ function InsightBody({ result }) {
           margin-top: 12px;
           padding-top: 10px;
           border-top: 1px dashed var(--border);
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ---- mentions modal: the recordings behind an insight item ---- */
+
+function MentionsModal({ label, ids, onClose }) {
+  const [meetings, setMeetings] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    let cancelled = false;
+    fetch(`/api/admin/insights/meetings?ids=${encodeURIComponent(ids.join(','))}`)
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setMeetings(j.meetings || []); })
+      .catch(() => { if (!cancelled) setError('Could not load the recordings.'); });
+    return () => {
+      cancelled = true;
+      document.body.style.overflow = '';
+    };
+  }, [ids]);
+
+  return (
+    <div className="oh-modal-bg" onClick={onClose}>
+      <div className="oh-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
+        <div className="oh-modal-header">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="oh-eyebrow">
+              <Volume2 size={11} style={{ display: 'inline', marginRight: 4 }} />
+              Source recordings
+            </div>
+            <h2 className="oh-mention-title">{label}</h2>
+            <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
+              {ids.length} {ids.length === 1 ? 'recording' : 'recordings'} behind this insight
+            </div>
+          </div>
+          <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="oh-modal-body">
+          {!meetings && !error && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-3)', padding: 16 }}>
+              <Loader2 size={15} className="oh-spin" /> Loading recordings…
+            </div>
+          )}
+          {error && <div style={{ color: 'var(--danger, #b03021)', padding: 12 }}>{error}</div>}
+          {meetings && meetings.length === 0 && (
+            <div style={{ color: 'var(--ink-3)', padding: 12 }}>
+              No recordings found — they may have been deleted.
+            </div>
+          )}
+          {meetings &&
+            meetings.map((m) => (
+              <div key={m.id} className="oh-mention-row">
+                <div className="oh-mention-head">
+                  <span className="oh-mono" style={{ fontWeight: 600 }}>
+                    {m.cp_code || m.cp_name || 'CP'}
+                  </span>
+                  {m.cp_code && m.cp_name && (
+                    <span style={{ color: 'var(--ink-2)' }}> · {m.cp_name}</span>
+                  )}
+                  <span className="oh-mention-type">{m.meeting_type}</span>
+                </div>
+                <div className="oh-mention-meta">
+                  {fmtDate(m.started_at)} · {fmtDuration(m.duration_seconds)}
+                  {m.rm_name ? ` · ${m.rm_name}` : ''}
+                </div>
+                {m.audio_url ? (
+                  <audio
+                    controls
+                    preload="metadata"
+                    src={m.audio_url}
+                    style={{ width: '100%', marginTop: 8, height: 38 }}
+                  />
+                ) : (
+                  <div className="oh-mention-noaudio">No audio on file for this meeting.</div>
+                )}
+              </div>
+            ))}
+        </div>
+      </div>
+
+      <style jsx>{`
+        .oh-mention-title {
+          font-family: 'Instrument Serif', serif;
+          font-size: 22px;
+          margin: 4px 0 4px;
+          line-height: 1.2;
+        }
+        .oh-mention-row {
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 11px 13px;
+          margin-bottom: 9px;
+          background: var(--paper);
+        }
+        .oh-mention-head {
+          font-size: 14px;
+          color: var(--ink);
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .oh-mention-type {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--ink-3);
+          background: var(--paper-2);
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          padding: 1px 7px;
+        }
+        .oh-mention-meta {
+          font-size: 12px;
+          color: var(--ink-3);
+          margin-top: 2px;
+        }
+        .oh-mention-noaudio {
+          font-size: 12px;
+          color: var(--ink-3);
+          font-style: italic;
+          margin-top: 8px;
         }
       `}</style>
     </div>
@@ -717,50 +881,107 @@ function BarRow({ label, pct, caption, tone }) {
 function Sparkbars({ data }) {
   if (!data || data.length === 0) return <Empty text="No data in range." />;
   const max = Math.max(...data.map((d) => d.n), 1);
-  const BAR_ZONE = 110; // px — tallest bar
+  const PLOT_H = 132; // px — the plotting area height
+  const total = data.reduce((s, d) => s + d.n, 0);
+  const avg = data.length ? total / data.length : 0;
+
   return (
-    <div className="oh-spark">
-      {data.map((d, i) => (
-        <div key={i} className="oh-spark-col" title={`${d.week}: ${d.n}`}>
-          <div className="oh-spark-n">{d.n}</div>
+    <div className="oh-chart">
+      <div className="oh-chart-plot" style={{ height: PLOT_H }}>
+        {/* faint average reference line */}
+        {avg > 0 && (
           <div
-            className="oh-spark-bar"
-            style={{ height: `${Math.max(3, Math.round((d.n / max) * BAR_ZONE))}px` }}
+            className="oh-chart-avg"
+            style={{ bottom: `${Math.round((avg / max) * PLOT_H)}px` }}
+            title={`Average ${avg.toFixed(1)} / week`}
           />
-          <div className="oh-spark-week">{shortWeek(d.week)}</div>
-        </div>
-      ))}
+        )}
+        {data.map((d, i) => {
+          const h = Math.max(2, Math.round((d.n / max) * PLOT_H));
+          return (
+            <div key={i} className="oh-chart-col" title={`${d.week}: ${d.n}`}>
+              <span className="oh-chart-val">{d.n}</span>
+              <div className="oh-chart-bar" style={{ height: `${h}px` }} />
+            </div>
+          );
+        })}
+      </div>
+      <div className="oh-chart-axis" />
+      <div className="oh-chart-labels">
+        {data.map((d, i) => (
+          <div key={i} className="oh-chart-label">{shortWeek(d.week)}</div>
+        ))}
+      </div>
+      <div className="oh-chart-foot">
+        Peak {max}/wk · avg {avg.toFixed(1)}/wk · {total} total
+      </div>
+
       <style jsx>{`
-        .oh-spark {
+        .oh-chart { width: 100%; }
+        .oh-chart-plot {
           display: flex;
-          gap: 8px;
           align-items: flex-end;
-          justify-content: flex-start;
+          justify-content: center;
+          gap: 14px;
+          position: relative;
+          padding: 0 4px;
         }
-        .oh-spark-col {
+        .oh-chart-avg {
+          position: absolute;
+          left: 0;
+          right: 0;
+          border-top: 1px dashed var(--border-strong, #c8bda0);
+          pointer-events: none;
+        }
+        .oh-chart-col {
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: flex-end;
           flex: 1 1 0;
-          max-width: 54px;
+          max-width: 46px;
           min-width: 0;
+          height: 100%;
         }
-        .oh-spark-n {
+        .oh-chart-val {
           font-size: 11px;
           font-family: 'Geist Mono', monospace;
           color: var(--ink-2);
-          margin-bottom: 3px;
+          margin-bottom: 4px;
         }
-        .oh-spark-bar {
+        .oh-chart-bar {
           width: 100%;
-          background: var(--accent);
-          border-radius: 3px 3px 0 0;
+          background: linear-gradient(180deg, var(--accent), rgba(184, 52, 28, 0.78));
+          border-radius: 4px 4px 0 0;
+          transition: opacity 0.12s;
         }
-        .oh-spark-week {
-          font-size: 9px;
+        .oh-chart-col:hover .oh-chart-bar { opacity: 0.8; }
+        .oh-chart-axis {
+          height: 2px;
+          background: var(--border-strong, #c8bda0);
+          border-radius: 1px;
+        }
+        .oh-chart-labels {
+          display: flex;
+          justify-content: center;
+          gap: 14px;
+          padding: 0 4px;
+          margin-top: 6px;
+        }
+        .oh-chart-label {
+          flex: 1 1 0;
+          max-width: 46px;
+          min-width: 0;
+          text-align: center;
+          font-size: 9.5px;
           color: var(--ink-3);
-          margin-top: 5px;
           white-space: nowrap;
+        }
+        .oh-chart-foot {
+          margin-top: 8px;
+          font-size: 11px;
+          color: var(--ink-3);
+          text-align: center;
         }
       `}</style>
     </div>
