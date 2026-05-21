@@ -299,7 +299,7 @@ function VisitTab({ m }) {
       <style jsx>{`
         .oh-ins-2col {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           gap: 14px;
           align-items: start;
         }
@@ -330,7 +330,7 @@ function EngagementTab({ m }) {
       <style jsx>{`
         .oh-ins-2col {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           gap: 14px;
           align-items: start;
         }
@@ -671,6 +671,8 @@ function Panel({ title, children }) {
           border-radius: 12px;
           padding: 14px 16px;
           margin-top: 14px;
+          min-width: 0;
+          overflow: hidden;
         }
         .oh-ins-panel-title {
           font-size: 13px;
@@ -781,9 +783,27 @@ function RankRow({ rank, name, value }) {
           font-size: 13px;
         }
         .oh-rank-row:last-child { border-bottom: none; }
-        .r { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--ink-3); width: 16px; }
-        .n { flex: 1; color: var(--ink); }
-        .v { font-family: 'Geist Mono', monospace; font-size: 12px; color: var(--ink-2); }
+        .r {
+          font-family: 'Geist Mono', monospace;
+          font-size: 11px;
+          color: var(--ink-3);
+          width: 16px;
+          flex-shrink: 0;
+        }
+        .n {
+          flex: 1;
+          min-width: 0;
+          color: var(--ink);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .v {
+          font-family: 'Geist Mono', monospace;
+          font-size: 12px;
+          color: var(--ink-2);
+          flex-shrink: 0;
+        }
       `}</style>
     </div>
   );
