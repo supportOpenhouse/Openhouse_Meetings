@@ -17,6 +17,7 @@ import {
   Briefcase,
   Home,
   Handshake,
+  PhoneCall,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
@@ -399,8 +400,16 @@ function getSentiment(meeting) {
 // Small chip rendered next to the CP code so admins/RMs can tell at a glance
 // which question set/scoring logic drove each row.
 function MeetingTypePill({ type, small = false }) {
-  const cls = type === 'visit' ? 'visit' : type === 'onboarding' ? 'onboarding' : 'engagement';
-  const Icon = cls === 'visit' ? Home : cls === 'onboarding' ? Handshake : Briefcase;
+  const cls =
+    type === 'visit' ? 'visit'
+    : type === 'onboarding' ? 'onboarding'
+    : type === 'call' ? 'call'
+    : 'engagement';
+  const Icon =
+    cls === 'visit' ? Home
+    : cls === 'onboarding' ? Handshake
+    : cls === 'call' ? PhoneCall
+    : Briefcase;
   return (
     <span className={`oh-mtype-pill ${cls} ${small ? 'small' : ''}`}>
       <Icon size={10} />
@@ -434,6 +443,11 @@ function MeetingTypePill({ type, small = false }) {
           color: #6b46a3;
           background: rgba(107, 70, 163, 0.08);
           border-color: rgba(107, 70, 163, 0.25);
+        }
+        .oh-mtype-pill.call {
+          color: #2f6f6f;
+          background: rgba(47, 111, 111, 0.08);
+          border-color: rgba(47, 111, 111, 0.25);
         }
         .oh-mtype-pill.small {
           font-size: 9.5px;

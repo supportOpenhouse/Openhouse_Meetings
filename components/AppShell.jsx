@@ -6,20 +6,31 @@ import Heartbeat from './Heartbeat';
 export default function AppShell({ user, current, children }) {
   const isAdmin = user.role === 'admin';
 
-  const navItems = isAdmin
-    ? [
-        { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard },
-        { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3 },
-        { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
-        { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users },
-        { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: Users },
-        { href: '/admin/logs', key: 'logs', label: 'Activity logs', icon: Activity },
-      ]
-    : [
-        { href: '/dashboard', key: 'dashboard', label: 'My meetings', icon: LayoutDashboard },
-        { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
-        { href: '/new-meeting', key: 'new', label: 'New meeting', icon: Plus },
-      ];
+  const isDirectRm = user.role === 'direct_rm';
+
+  let navItems;
+  if (isAdmin) {
+    navItems = [
+      { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard },
+      { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3 },
+      { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
+      { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users },
+      { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: Users },
+      { href: '/admin/logs', key: 'logs', label: 'Activity logs', icon: Activity },
+    ];
+  } else if (isDirectRm) {
+    // Direct RMs only upload phone call recordings — a stripped-down shell.
+    // The page itself has the "My recordings" / "Upload" tabs.
+    navItems = [
+      { href: '/direct', key: 'direct', label: 'Recordings', icon: LayoutDashboard },
+    ];
+  } else {
+    navItems = [
+      { href: '/dashboard', key: 'dashboard', label: 'My meetings', icon: LayoutDashboard },
+      { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
+      { href: '/new-meeting', key: 'new', label: 'New meeting', icon: Plus },
+    ];
+  }
 
   return (
     <div className="oh-shell">
@@ -60,7 +71,7 @@ export default function AppShell({ user, current, children }) {
             >
               {user.name || user.email}
             </div>
-            <div className="role">{isAdmin ? 'Admin' : 'RM'}</div>
+            <div className="role">{isAdmin ? 'Admin' : isDirectRm ? 'Direct RM' : 'RM'}</div>
           </div>
           <form
             action={async () => {

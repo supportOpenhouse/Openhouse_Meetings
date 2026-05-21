@@ -23,11 +23,13 @@ async function run() {
   console.log('Connecting to Neon...');
   console.log('Creating role enum...');
   try {
-    await sql`CREATE TYPE role AS ENUM ('admin', 'rm')`;
+    await sql`CREATE TYPE role AS ENUM ('admin', 'rm', 'direct_rm')`;
   } catch (e) {
     if (!e.message.includes('already exists')) throw e;
     console.log('  enum already exists, skipping');
   }
+  // Idempotently ensure the direct_rm value exists on an older enum.
+  await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'direct_rm'`;
 
   console.log('Creating users table...');
   await sql`

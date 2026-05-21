@@ -13,7 +13,9 @@ import {
   doublePrecision,
 } from 'drizzle-orm/pg-core';
 
-export const roleEnum = pgEnum('role', ['admin', 'rm']);
+// 'direct_rm' — a lightweight RM who only uploads phone call recordings
+// (MP3s) and sees a stripped-down dashboard. No live recording, no CP tools.
+export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm']);
 
 export const users = pgTable(
   'users',

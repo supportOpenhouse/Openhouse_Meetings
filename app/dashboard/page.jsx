@@ -8,6 +8,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.role === 'admin') redirect('/admin');
+  if (session.user.role === 'direct_rm') redirect('/direct');
 
   const meetings = await listMeetingsForRM(session.user.id);
 

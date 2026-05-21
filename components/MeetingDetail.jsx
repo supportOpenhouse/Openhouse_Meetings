@@ -30,7 +30,8 @@ import WebmAudio from './WebmAudio';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
   const router = useRouter();
-  const [tab, setTab] = useState('summary');
+  // Call recordings are transcript-only — open straight to the transcript.
+  const [tab, setTab] = useState(meeting?.meeting_type === 'call' ? 'transcript' : 'summary');
   const [resumming, setResumming] = useState(false);
   const [resumMsg, setResumMsg] = useState(null);
   const [localMeeting, setLocalMeeting] = useState(meeting);
@@ -139,13 +140,21 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               {meetingType === 'visit' && <><Home size={13} /> Visit summary</>}
               {meetingType === 'onboarding' && <><Handshake size={13} /> Onboarding summary</>}
               {meetingType === 'engagement' && <><Briefcase size={13} /> Engagement summary</>}
+              {meetingType === 'call' && <><Sparkles size={13} /> Summary</>}
             </TabBtn>
             <TabBtn active={tab === 'transcript'} onClick={() => setTab('transcript')}>
               <FileText size={13} /> Transcript
             </TabBtn>
           </div>
 
-          {tab === 'summary' && (
+          {tab === 'summary' && meetingType === 'call' && (
+            <div style={{ color: 'var(--ink-3)', padding: '14px 0', fontSize: 13.5 }}>
+              This is an uploaded phone call recording. A transcript is generated automatically —
+              see the <strong>Transcript</strong> tab. A smart summary for call recordings is
+              coming later.
+            </div>
+          )}
+          {tab === 'summary' && meetingType !== 'call' && (
             <SummaryView
               answers={view.answers}
               questions={
@@ -184,7 +193,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
             </div>
           )}
 
-          {tab === 'summary' && (
+          {tab === 'summary' && meetingType !== 'call' && (
             <div className="oh-resum-row">
               <button
                 className="oh-btn ghost"
@@ -314,6 +323,7 @@ function MeetingTypeBadge({ type }) {
     visit:       { Icon: Home,      label: 'visit',       cls: 'visit' },
     onboarding:  { Icon: Handshake, label: 'onboarding',  cls: 'onboarding' },
     engagement:  { Icon: Briefcase, label: 'engagement',  cls: 'engagement' },
+    call:        { Icon: Phone,     label: 'call',        cls: 'call' },
   }[type] || { Icon: Briefcase, label: 'engagement', cls: 'engagement' };
   const Icon = meta.Icon;
   return (
@@ -346,6 +356,11 @@ function MeetingTypeBadge({ type }) {
           color: #6b46a3;
           background: rgba(107, 70, 163, 0.08);
           border-color: rgba(107, 70, 163, 0.25);
+        }
+        .oh-type-badge.call {
+          color: #2f6f6f;
+          background: rgba(47, 111, 111, 0.08);
+          border-color: rgba(47, 111, 111, 0.25);
         }
       `}</style>
     </span>

@@ -17,6 +17,11 @@ export default function RMsClient({ initialRMs, currentUserId }) {
     setTimeout(() => setToast(null), 4000);
   }
 
+  function roleLabel(role) {
+    if (role === 'direct_rm') return 'Direct RM';
+    return role;
+  }
+
   async function addRM() {
     if (!newRM.email.trim() || !newRM.email.includes('@')) {
       showToast('Valid email required', 'error');
@@ -176,6 +181,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
                 onChange={(e) => setNewRM({ ...newRM, role: e.target.value })}
               >
                 <option value="rm">RM</option>
+                <option value="direct_rm">Direct RM (upload only)</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -269,7 +275,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
                 {rm.id === currentUserId ? (
                   <span className={`oh-pill ${rm.role === 'admin' ? 'admin' : 'rm'}`}>
                     {rm.role === 'admin' && <Shield size={11} />}
-                    {rm.role} (you)
+                    {roleLabel(rm.role)} (you)
                   </span>
                 ) : (
                   <select
@@ -279,6 +285,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
                     style={{ padding: '6px 10px', fontSize: 12 }}
                   >
                     <option value="rm">RM</option>
+                    <option value="direct_rm">Direct RM</option>
                     <option value="admin">Admin</option>
                   </select>
                 )}
