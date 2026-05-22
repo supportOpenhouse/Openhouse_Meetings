@@ -19,30 +19,28 @@ import { logActivity } from '@/lib/activityLog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// Transcription is I/O-bound (ElevenLabs, Claude) — a generous ceiling so a
-// batch with a few long recordings still finishes in one run.
 export const maxDuration = 800;
 
 const DAY_MS = 86400000;
 const BACKFILL_DAYS = 90; // first run reaches this far back
-const WINDOW_DAYS = 14; // max createdAt span scanned per run (bounds payload)
+const WINDOW_DAYS = 14; // max createdAt span scanned per Phase-A pass
 const OVERLAP_DAYS = 2; // re-scan margin for late-arriving Salestrail records
 const MAX_ATTEMPTS = 5; // give up on a call after this many failed fetches
 const INSERT_CHUNK = 500; // rows per INSERT (stay under the Postgres param cap)
-// Recordings transcribed per run, in parallel. Each holds an audio buffer in
-// memory + one ElevenLabs + one Claude call — keep this modest.
-const BATCH = parseInt(process.env.SALESTRAIL_BATCH || '8', 10) || 8;
+// Recordings transcribed per batch, in parallel. Each holds an audio buffer in
+// memory + one ElevenLabs + one Claude call.
+const BATCH = parseInt(process.env.SALESTRAIL_BATCH || '12', 10) || 12;
+// One invocation keeps processing batches for up to this long, then self-chains
+// a fresh invocation — so a single "Sync now" drains the whole backlog hands-free.
+const RUN_BUDGET_MS = 450_000;
 
 function isCronRequest(request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return request.headers.get('authorization') === `Bearer ${secret}`;
+  return !!secret && request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-// GET — invoked by Vercel Cron (Authorization: Bearer CRON_SECRET) or by an
-// admin. POST — the admin "Sync now" button; an optional { rescanDays } rewinds
-// the cursor so the next runs re-scan that range (picks up calls missed earlier,
-// e.g. for an RM added after the fact).
+// GET — Vercel Cron, or the self-chain (both carry Bearer CRON_SECRET), or an
+// admin hitting the URL directly.
 export async function GET(request) {
   if (!isCronRequest(request)) {
     const session = await auth();
@@ -53,6 +51,10 @@ export async function GET(request) {
   return runSync(request);
 }
 
+// POST — the admin Call-sync page.
+//   { action: 'pause' }  → stop the continuous drain
+//   { rescanDays: 30|90 }→ rewind the cursor, then run
+//   (anything else)      → resume (unpause) + run
 export async function POST(request) {
   const session = await auth();
   if (session?.user?.role !== 'admin') {
@@ -60,12 +62,21 @@ export async function POST(request) {
   }
   let body = {};
   try { body = await request.json(); } catch {}
-  const rescanDays = [30, 90].includes(body?.rescanDays) ? body.rescanDays : null;
-  if (rescanDays) {
-    const sql = neon(process.env.DATABASE_URL);
+
+  const sql = neon(process.env.DATABASE_URL);
+  await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+
+  if (body?.action === 'pause') {
+    await sql`UPDATE salestrail_sync_state SET paused = true WHERE id = 1`;
+    return NextResponse.json({ ok: true, paused: true });
+  }
+
+  // Any other manual trigger clears the pause flag.
+  await sql`UPDATE salestrail_sync_state SET paused = false WHERE id = 1`;
+  if ([30, 90].includes(body?.rescanDays)) {
     await sql`
       UPDATE salestrail_sync_state
-      SET cursor_at = now() - (${String(rescanDays)} || ' days')::interval
+      SET cursor_at = now() - (${String(body.rescanDays)} || ' days')::interval
       WHERE id = 1
     `;
   }
@@ -80,123 +91,67 @@ async function runSync(request) {
     );
   }
   const sql = neon(process.env.DATABASE_URL);
-
-  // Self-heal the singleton row in case only the table creation ran.
   await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
 
-  // Concurrency guard — but a lock older than 15 min is treated as stale (the
-  // function maxDuration is 800s, so a healthy run always clears it sooner).
-  const [state] = await sql`
-    SELECT cursor_at, last_run_at, in_progress FROM salestrail_sync_state WHERE id = 1
+  // Atomic compare-and-set lock: claim the run only if not paused and not
+  // already running (a lock older than 15 min is treated as stale/crashed).
+  const [lock] = await sql`
+    UPDATE salestrail_sync_state
+    SET in_progress = true, last_run_at = now()
+    WHERE id = 1
+      AND paused = false
+      AND (in_progress = false OR last_run_at < now() - interval '15 minutes')
+    RETURNING cursor_at
   `;
-  if (
-    state?.in_progress &&
-    state.last_run_at &&
-    Date.now() - new Date(state.last_run_at).getTime() < 15 * 60 * 1000
-  ) {
-    return NextResponse.json({ skipped: true, reason: 'A sync is already running' });
+  if (!lock) {
+    const [s] = await sql`SELECT paused FROM salestrail_sync_state WHERE id = 1`;
+    return NextResponse.json({
+      skipped: true,
+      reason: s?.paused ? 'Sync is paused' : 'A sync run is already in progress',
+    });
   }
-  await sql`UPDATE salestrail_sync_state SET in_progress = true, last_run_at = now() WHERE id = 1`;
 
+  const startedAt = Date.now();
   const result = {
-    scanned: 0, // calls returned by Salestrail for the window
-    off_day: 0, // skipped — not a Monday/Friday
-    no_rm: 0, // skipped — userEmail not a known Openhouse RM
-    imported: 0, // new meeting rows created (queued for a recording fetch)
-    processed: 0, // recordings fetched + transcribed this run
-    no_recording: 0, // calls that turned out to have no recording
-    failed: 0, // recordings that errored out
-    retry: 0, // transient errors — will be retried next run
-    window: null,
+    scanned: 0, off_day: 0, no_rm: 0, imported: 0,
+    processed: 0, no_recording: 0, failed: 0, retry: 0,
+    batches: 0, pending: 0, caught_up: false, window: null,
   };
+  let caughtUp = false;
+  let cursorMs = lock.cursor_at ? new Date(lock.cursor_at).getTime() : null;
 
   try {
-    // ---- Phase A: pull call metadata, insert "fetching" rows ----
-    const now = Date.now();
-    const cursorMs = state?.cursor_at ? new Date(state.cursor_at).getTime() : null;
-    const startMs = cursorMs == null ? now - BACKFILL_DAYS * DAY_MS : cursorMs;
-    const from = new Date(Math.max(0, startMs - OVERLAP_DAYS * DAY_MS));
-    const to = new Date(Math.min(now, startMs + WINDOW_DAYS * DAY_MS));
-    result.window = { from: from.toISOString(), to: to.toISOString() };
-
-    const calls = await listCallsByCreated(from, to);
-    result.scanned = calls.length;
-
-    // Keep only Monday/Friday calls (IST).
-    const onDay = calls.filter((c) => isSyncWeekday(c.startTime));
-    result.off_day = calls.length - onDay.length;
-
-    if (onDay.length > 0) {
-      // Resolve userEmail → rm_id in a single query. direct_rm users are
-      // excluded — Salestrail sync is for regular RMs only; direct RMs keep
-      // using their own manual upload screen.
-      const emails = [...new Set(onDay.map((c) => c.userEmail).filter(Boolean))];
-      const rmRows = emails.length
-        ? await sql`
-            SELECT id, lower(email) AS email FROM users
-            WHERE lower(email) = ANY(${emails}) AND role <> 'direct_rm'
-          `
-        : [];
-      const rmByEmail = new Map(rmRows.map((r) => [r.email, r.id]));
-
-      const seen = new Set();
-      const rows = [];
-      for (const c of onDay) {
-        if (seen.has(c.callId)) continue;
-        seen.add(c.callId);
-        const rmId = c.userEmail ? rmByEmail.get(c.userEmail) : null;
-        if (!rmId) {
-          result.no_rm++;
-          continue;
-        }
-        rows.push({
-          rm_id: rmId,
-          cp_code: null,
-          cp_mobile: normalizePhone(c.contactNumber),
-          cp_name: null,
-          cp_city: null,
-          purpose: null,
-          meeting_type: 'engagement',
-          started_at: new Date(c.startTime),
-          duration_seconds: c.durationSeconds,
-          status: 'fetching',
-          salestrail_call_id: c.callId,
-        });
+    // Drain batches until the time budget runs out or there is nothing left.
+    while (Date.now() - startedAt < RUN_BUDGET_MS) {
+      // Phase A — scan one createdAt window, until the cursor catches up.
+      if (!caughtUp) {
+        const now = Date.now();
+        const startMs = cursorMs == null ? now - BACKFILL_DAYS * DAY_MS : cursorMs;
+        const from = new Date(Math.max(0, startMs - OVERLAP_DAYS * DAY_MS));
+        const to = new Date(Math.min(now, startMs + WINDOW_DAYS * DAY_MS));
+        await scanWindow(sql, from, to, result);
+        cursorMs = to.getTime();
+        result.window = { from: from.toISOString(), to: to.toISOString() };
+        await sql`UPDATE salestrail_sync_state SET cursor_at = ${to.toISOString()} WHERE id = 1`;
+        if (to.getTime() >= now - 60_000) caughtUp = true;
       }
 
-      // onConflictDoNothing makes the overlap re-scan idempotent (the unique
-      // index on salestrail_call_id rejects any already-imported call).
-      for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-        const inserted = await db
-          .insert(meetings)
-          .values(rows.slice(i, i + INSERT_CHUNK))
-          .onConflictDoNothing()
-          .returning({ id: meetings.id });
-        result.imported += inserted.length;
-      }
+      // Phase B — fetch + transcribe one batch of queued recordings.
+      const picked = await processBatch(sql, result);
+      result.batches++;
+
+      // Nothing left to scan and nothing left to process → done.
+      if (caughtUp && picked === 0) break;
     }
 
-    // Advance the cursor past this window.
-    await sql`UPDATE salestrail_sync_state SET cursor_at = ${to.toISOString()} WHERE id = 1`;
-
-    // ---- Phase B: fetch + transcribe a capped batch of queued recordings ----
-    const pending = await sql`
-      SELECT id, salestrail_call_id, cp_mobile, audio_url, duration_seconds
-      FROM meetings
-      WHERE status = 'fetching'
-        AND salestrail_call_id IS NOT NULL
+    const [pend] = await sql`
+      SELECT count(*)::int AS n FROM meetings
+      WHERE status = 'fetching' AND salestrail_call_id IS NOT NULL
         AND salestrail_fetch_attempts < ${MAX_ATTEMPTS}
-      ORDER BY created_at ASC
-      LIMIT ${BATCH}
     `;
-    const outcomes = await Promise.allSettled(pending.map((m) => processOne(sql, m)));
-    for (const o of outcomes) {
-      const v = o.status === 'fulfilled' ? o.value : 'failed';
-      if (v === 'processed') result.processed++;
-      else if (v === 'no_recording') result.no_recording++;
-      else if (v === 'failed') result.failed++;
-      else result.retry++;
-    }
+    result.pending = pend?.n || 0;
+    result.caught_up = caughtUp;
+    const moreWork = !caughtUp || result.pending > 0;
 
     await sql`
       UPDATE salestrail_sync_state
@@ -204,7 +159,12 @@ async function runSync(request) {
       WHERE id = 1
     `;
     logActivity({ eventType: 'salestrail.sync', payload: result, request });
-    return NextResponse.json({ ok: true, ...result });
+
+    // Self-chain: kick a fresh invocation so the backlog keeps draining
+    // hands-free until the queue is empty.
+    if (moreWork) await chainNextRun(request, sql);
+
+    return NextResponse.json({ ok: true, ...result, chained: moreWork });
   } catch (e) {
     const msg = e?.message || 'Salestrail sync failed';
     await sql`
@@ -218,9 +178,106 @@ async function runSync(request) {
   }
 }
 
+// Kicks the next invocation. The 5s window guarantees the request is delivered;
+// the child runs independently (Vercel doesn't kill a function when its caller
+// disconnects). Needs CRON_SECRET so the child's GET authorizes itself.
+async function chainNextRun(request, sql) {
+  const [s] = await sql`SELECT paused FROM salestrail_sync_state WHERE id = 1`;
+  if (s?.paused || !process.env.CRON_SECRET) return;
+  try {
+    const origin = new URL(request.url).origin;
+    await fetch(`${origin}/api/salestrail/sync`, {
+      headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    // Expected — the child won't respond within 5s, but it is now running.
+  }
+}
+
+// Phase A — pull one createdAt window of call metadata and insert "fetching"
+// rows for new Monday/Friday calls made by known regular RMs.
+async function scanWindow(sql, from, to, result) {
+  const calls = await listCallsByCreated(from, to);
+  result.scanned += calls.length;
+
+  const onDay = calls.filter((c) => isSyncWeekday(c.startTime));
+  result.off_day += calls.length - onDay.length;
+  if (onDay.length === 0) return;
+
+  // Resolve userEmail → rm_id. direct_rm users are excluded — Salestrail sync
+  // is for regular RMs only.
+  const emails = [...new Set(onDay.map((c) => c.userEmail).filter(Boolean))];
+  const rmRows = emails.length
+    ? await sql`
+        SELECT id, lower(email) AS email FROM users
+        WHERE lower(email) = ANY(${emails}) AND role <> 'direct_rm'
+      `
+    : [];
+  const rmByEmail = new Map(rmRows.map((r) => [r.email, r.id]));
+
+  const seen = new Set();
+  const rows = [];
+  for (const c of onDay) {
+    if (seen.has(c.callId)) continue;
+    seen.add(c.callId);
+    const rmId = c.userEmail ? rmByEmail.get(c.userEmail) : null;
+    if (!rmId) {
+      result.no_rm++;
+      continue;
+    }
+    rows.push({
+      rm_id: rmId,
+      cp_code: null,
+      cp_mobile: normalizePhone(c.contactNumber),
+      cp_name: null,
+      cp_city: null,
+      purpose: null,
+      meeting_type: 'engagement',
+      started_at: new Date(c.startTime),
+      duration_seconds: c.durationSeconds,
+      status: 'fetching',
+      salestrail_call_id: c.callId,
+    });
+  }
+
+  // onConflictDoNothing keeps the overlap re-scan idempotent.
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const inserted = await db
+      .insert(meetings)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .onConflictDoNothing()
+      .returning({ id: meetings.id });
+    result.imported += inserted.length;
+  }
+}
+
+// Phase B — fetch + transcribe one batch. Returns how many rows were picked.
+async function processBatch(sql, result) {
+  const pending = await sql`
+    SELECT id, salestrail_call_id, cp_mobile, audio_url, duration_seconds
+    FROM meetings
+    WHERE status = 'fetching' AND salestrail_call_id IS NOT NULL
+      AND salestrail_fetch_attempts < ${MAX_ATTEMPTS}
+    ORDER BY salestrail_fetch_attempts ASC, created_at ASC
+    LIMIT ${BATCH}
+  `;
+  if (pending.length === 0) return 0;
+
+  const outcomes = await Promise.allSettled(pending.map((m) => processOne(sql, m)));
+  for (const o of outcomes) {
+    const v = o.status === 'fulfilled' ? o.value : 'failed';
+    if (v === 'processed') result.processed++;
+    else if (v === 'no_recording') result.no_recording++;
+    else if (v === 'failed') result.failed++;
+    else result.retry++;
+  }
+  return pending.length;
+}
+
 // Resolves one queued meeting: CP lookup → recording fetch → re-host on Blob →
 // transcribe → summarize. Returns 'processed' | 'no_recording' | 'failed' |
-// 'retry'. Never throws (the caller treats a rejection as 'failed').
+// 'retry'. Never throws.
 async function processOne(sql, m) {
   // Count this attempt up-front so a crash mid-processing can't loop forever.
   const [bumped] = await sql`
@@ -265,8 +322,6 @@ async function processOne(sql, m) {
     } else {
       const rec = await fetchRecording(m.salestrail_call_id);
       if (!rec.ok && rec.status === 404) {
-        // No recording for this call — tombstone the row (hidden everywhere;
-        // the unique index keeps it from being re-imported).
         await sql`
           UPDATE meetings SET status = 'no_recording', cp_code = ${cpCode}, cp_name = ${cpName}
           WHERE id = ${m.id}
@@ -315,11 +370,9 @@ async function processOne(sql, m) {
   } catch (e) {
     const msg = (e?.message || 'Processing failed').slice(0, 500);
     if (attempts >= MAX_ATTEMPTS) {
-      // Out of retries — surface it as a failed meeting for the admin.
       await sql`UPDATE meetings SET status = 'failed', error_message = ${msg} WHERE id = ${m.id}`;
       return 'failed';
     }
-    // Leave it 'fetching' — the next run picks it up again.
     await sql`UPDATE meetings SET error_message = ${msg} WHERE id = ${m.id}`;
     return 'retry';
   }

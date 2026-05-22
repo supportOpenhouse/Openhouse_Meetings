@@ -25,14 +25,13 @@ import {
   Cloud,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
-import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, MEETING_TYPES } from './questions';
+import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, CALL_QUESTIONS, MEETING_TYPES } from './questions';
 import { SCORE_PARAMETERS, SCORE_TOTAL_POSSIBLE } from '@/lib/scoring';
 import WebmAudio from './WebmAudio';
 
 export default function MeetingDetail({ meeting, onClose, onDelete, canDelete }) {
   const router = useRouter();
-  // Call recordings are transcript-only — open straight to the transcript.
-  const [tab, setTab] = useState(meeting?.meeting_type === 'call' ? 'transcript' : 'summary');
+  const [tab, setTab] = useState('summary');
   const [resumming, setResumming] = useState(false);
   const [resumMsg, setResumMsg] = useState(null);
   const [localMeeting, setLocalMeeting] = useState(meeting);
@@ -142,21 +141,14 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               {meetingType === 'visit' && <><Home size={13} /> Visit summary</>}
               {meetingType === 'onboarding' && <><Handshake size={13} /> Onboarding summary</>}
               {meetingType === 'engagement' && <><Briefcase size={13} /> Engagement summary</>}
-              {meetingType === 'call' && <><Sparkles size={13} /> Summary</>}
+              {meetingType === 'call' && <><Sparkles size={13} /> Buyer survey</>}
             </TabBtn>
             <TabBtn active={tab === 'transcript'} onClick={() => setTab('transcript')}>
               <FileText size={13} /> Transcript
             </TabBtn>
           </div>
 
-          {tab === 'summary' && meetingType === 'call' && (
-            <div style={{ color: 'var(--ink-3)', padding: '14px 0', fontSize: 13.5 }}>
-              This is an uploaded phone call recording. A transcript is generated automatically —
-              see the <strong>Transcript</strong> tab. A smart summary for call recordings is
-              coming later.
-            </div>
-          )}
-          {tab === 'summary' && meetingType !== 'call' && (
+          {tab === 'summary' && (
             <SummaryView
               answers={view.answers}
               questions={
@@ -164,12 +156,16 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
                   ? VISIT_QUESTIONS
                   : meetingType === 'onboarding'
                   ? ONBOARDING_QUESTIONS
+                  : meetingType === 'call'
+                  ? CALL_QUESTIONS
                   : ENGAGEMENT_QUESTIONS
               }
               grouped={meetingType === 'visit'}
               emptyHint={
                 view.missing
-                  ? `No ${meetingType} summary on file — this meeting predates the current logic. Tap "Regenerate" below.`
+                  ? meetingType === 'call'
+                    ? 'No buyer survey on file yet — tap "Regenerate" below to build it from the transcript.'
+                    : `No ${meetingType} summary on file — this meeting predates the current logic. Tap "Regenerate" below.`
                   : null
               }
             />
@@ -195,28 +191,32 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
             </div>
           )}
 
-          {tab === 'summary' && meetingType !== 'call' && (
+          {tab === 'summary' && (
             <div className="oh-resum-row">
               <button
                 className="oh-btn ghost"
                 onClick={() => resummarize(null)}
                 disabled={resumming}
-                title="Re-run Claude against the saved transcript using the current meeting type"
+                title="Re-run Claude against the saved transcript"
               >
                 {resumming ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
                 {resumming ? 'Regenerating…' : 'Regenerate'}
               </button>
-              <span className="oh-resum-label">Or reclassify as:</span>
-              {MEETING_TYPES.filter((t) => t.value !== meetingType).map((t) => (
-                <button
-                  key={t.value}
-                  className="oh-btn ghost"
-                  onClick={() => resummarize(t.value)}
-                  disabled={resumming}
-                >
-                  {t.label}
-                </button>
-              ))}
+              {meetingType !== 'call' && (
+                <>
+                  <span className="oh-resum-label">Or reclassify as:</span>
+                  {MEETING_TYPES.filter((t) => t.value !== meetingType).map((t) => (
+                    <button
+                      key={t.value}
+                      className="oh-btn ghost"
+                      onClick={() => resummarize(t.value)}
+                      disabled={resumming}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </>
+              )}
               {resumMsg && <span className="oh-resum-msg">{resumMsg}</span>}
             </div>
           )}
@@ -658,6 +658,11 @@ function pickSummaryView(summary, meetingType) {
     if (summary.onboarding) {
       return { answers: summary.onboarding, score: null, missing: false };
     }
+    return { answers: null, score: null, missing: true };
+  }
+
+  if (meetingType === 'call') {
+    if (summary.call) return { answers: summary.call, score: null, missing: false };
     return { answers: null, score: null, missing: true };
   }
 

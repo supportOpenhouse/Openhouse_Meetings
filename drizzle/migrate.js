@@ -188,9 +188,12 @@ async function run() {
       cursor_at timestamptz,
       last_run_at timestamptz,
       last_result jsonb,
-      in_progress boolean NOT NULL DEFAULT false
+      in_progress boolean NOT NULL DEFAULT false,
+      paused boolean NOT NULL DEFAULT false
     )
   `;
+  // Idempotent add for DBs created before the pause kill-switch existed.
+  await sql`ALTER TABLE salestrail_sync_state ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false`;
   await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
 
   console.log('\n✓ Done. Schema is ready.');

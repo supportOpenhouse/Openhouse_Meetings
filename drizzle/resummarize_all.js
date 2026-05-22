@@ -8,6 +8,7 @@
 // Flags:
 //   --legacy-only   only meetings whose summary is the old flat shape
 //   --since=YYYY-MM-DD   only meetings started on/after this date
+//   --type=call     only meetings of this meeting_type (call|engagement|visit|onboarding)
 //   --limit=N       safety cap (default 1000)
 //   --concurrency=N  parallel Claude calls (default 3)
 //   --dry-run       fetch + log, don't write or call Claude
@@ -34,6 +35,7 @@ const args = Object.fromEntries(
 
 const LEGACY_ONLY = !!args['legacy-only'];
 const SINCE = args.since ? new Date(args.since) : null;
+const TYPE = args.type ? String(args.type) : null;
 const LIMIT = parseInt(args.limit || '1000', 10);
 const CONCURRENCY = Math.max(1, parseInt(args.concurrency || '3', 10));
 const DRY = !!args['dry-run'];
@@ -52,7 +54,7 @@ async function pickMeetings() {
   const rows = SINCE
     ? await sql`
         SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
-               m.transcript_text, m.summary, u.name AS rm_name
+               m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
         FROM meetings m
         LEFT JOIN users u ON u.id = m.rm_id
         WHERE m.status = 'ready'
@@ -64,7 +66,7 @@ async function pickMeetings() {
       `
     : await sql`
         SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
-               m.transcript_text, m.summary, u.name AS rm_name
+               m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
         FROM meetings m
         LEFT JOIN users u ON u.id = m.rm_id
         WHERE m.status = 'ready'
@@ -73,7 +75,9 @@ async function pickMeetings() {
         ORDER BY m.started_at DESC
         LIMIT ${LIMIT}
       `;
-  return LEGACY_ONLY ? rows.filter((r) => isLegacyShape(r.summary)) : rows;
+  let result = LEGACY_ONLY ? rows.filter((r) => isLegacyShape(r.summary)) : rows;
+  if (TYPE) result = result.filter((r) => (r.meeting_type || 'engagement') === TYPE);
+  return result;
 }
 
 async function runOne(m) {
@@ -83,22 +87,29 @@ async function runOne(m) {
     return { ms: 0, score: '—', classification: 'dry', transcriptLen };
   }
   const started = Date.now();
-  const summary = await summarizeMeeting(m.transcript_text, {
-    rm_name: m.rm_name || 'Unknown',
-    cp_code: m.cp_code,
-    cp_mobile: m.cp_mobile,
-    purpose: m.purpose,
-    duration_seconds: m.duration_seconds,
-  });
+  const summary = await summarizeMeeting(
+    m.transcript_text,
+    {
+      rm_name: m.rm_name || 'Unknown',
+      cp_code: m.cp_code,
+      cp_mobile: m.cp_mobile,
+      purpose: m.purpose,
+      duration_seconds: m.duration_seconds,
+    },
+    m.meeting_type || 'engagement'
+  );
   await sql`UPDATE meetings SET summary = ${JSON.stringify(summary)}::jsonb WHERE id = ${m.id}`;
   const ms = Date.now() - started;
-  return { ms, score: summary.score?.total, classification: summary.score?.classification };
+  const label = summary.score
+    ? `${summary.score.classification} ${summary.score.total}/100`
+    : summary.meeting_type || 'done';
+  return { ms, label };
 }
 
 async function run() {
   const meetings = await pickMeetings();
   console.log(`Found ${meetings.length} meetings to re-summarize`);
-  console.log(`Mode: ${LEGACY_ONLY ? 'legacy-only' : 'all-ready'}, since=${SINCE ? SINCE.toISOString().slice(0, 10) : 'all'}, concurrency=${CONCURRENCY}, dryRun=${DRY}`);
+  console.log(`Mode: ${LEGACY_ONLY ? 'legacy-only' : 'all-ready'}, type=${TYPE || 'all'}, since=${SINCE ? SINCE.toISOString().slice(0, 10) : 'all'}, concurrency=${CONCURRENCY}, dryRun=${DRY}`);
   if (meetings.length === 0) return;
 
   let done = 0;
@@ -117,7 +128,7 @@ async function run() {
             if (DRY) {
               console.log(`  · ${m.id} (${m.cp_code}) — would process (${r.transcriptLen} chars)  [${done}/${meetings.length}]`);
             } else {
-              console.log(`  ✓ ${m.id} (${m.cp_code}) — ${r.ms}ms — ${r.classification} ${r.score}/100  [${done}/${meetings.length}]`);
+              console.log(`  ✓ ${m.id} (${m.cp_code || m.cp_mobile || '—'}) — ${r.ms}ms — ${r.label}  [${done}/${meetings.length}]`);
             }
           })
           .catch((e) => {

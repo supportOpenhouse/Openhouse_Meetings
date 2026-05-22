@@ -91,6 +91,104 @@ export const ONBOARDING_QUESTIONS = [
   { key: 'follow_up_date', label: 'Follow-up timeline' },
 ];
 
+// Direct-RM phone-call summary — a buyer-discovery survey. Direct RMs upload
+// recordings of calls with prospective home BUYERS (Gurgaon / Haryana
+// affordable-housing market). Every choice question is answered by Claude
+// picking from the fixed `options` — when the buyer doesn't say it outright,
+// Claude infers the single most likely option from the rest of the call.
+//
+// Extra entry fields used only by this set:
+//   options — the allowed answers; Claude must pick from these verbatim
+//   list    — true → multi-select (Claude returns an array of options)
+//   (no `options` and no `list`) → free-text synthesis field
+export const CALL_QUESTIONS = [
+  {
+    key: 'journey_stage',
+    label: 'Where the buyer is in their home-buying journey',
+    options: [
+      'Just exploring — getting a sense of options',
+      'Actively searching — visiting sites, comparing',
+      'Have a shortlist — deciding between 2–3 options',
+      'Ready to book — waiting for the right project',
+    ],
+  },
+  {
+    key: 'purchase_intent',
+    label: 'Buying to live in or to invest',
+    options: [
+      'For the family to live in',
+      'Primarily as an investment',
+      'Both — live in now, sell later',
+    ],
+  },
+  {
+    key: 'budget',
+    label: 'All-in budget (flat price + GST + registration)',
+    options: ['Under ₹50 lacs', '₹50–65 lacs', '₹65–75 lacs'],
+  },
+  {
+    key: 'configuration',
+    label: 'Configuration preferred',
+    list: true,
+    options: ['1 BHK', '2 BHK', '3 BHK (compact)', 'Flexible'],
+  },
+  {
+    key: 'location_priorities',
+    label: 'What matters most about the location (up to 3)',
+    list: true,
+    options: [
+      'Close to metro / good road connectivity',
+      'Near workplace (Cyber City / Sohna / NH-48)',
+      'Good schools and hospitals nearby',
+      'Has a specific sector in mind',
+      'Open to Sohna / New Gurgaon for a better deal',
+    ],
+  },
+  {
+    key: 'affordable_housing_familiarity',
+    label: 'Familiarity with how affordable housing works in Haryana',
+    options: [
+      "Not really — has heard the term but doesn't know the rules",
+      "Somewhat — knows it's government-regulated and price-capped",
+      'Pretty well — knows AHP, the draw process, DDJAY, lock-in etc.',
+    ],
+  },
+  {
+    key: 'frustrations',
+    label: 'Biggest frustrations in the home search so far',
+    list: true,
+    options: [
+      'Builders asking for cash / undisclosed charges over the fixed price',
+      'Worried about possession delays in under-construction projects',
+      'Broker misinformation or pressure to close quickly',
+      'The draw-of-lots process feels opaque or unfair',
+      'Confusion about home-loan eligibility or down payment',
+      'Hard to compare quality and amenities across societies',
+      'Concerned about resale restrictions / lock-in period',
+    ],
+  },
+  {
+    key: 'booking_blocker',
+    label: 'The single thing stopping them from booking today',
+    options: [
+      'Still sorting out the home loan / down payment',
+      "Hasn't found the right project yet",
+      'Family / spouse not aligned yet',
+      "Doesn't fully trust any builder yet",
+      'Waiting for a specific launch or policy update',
+      'Nothing — just needs the right nudge',
+    ],
+  },
+  {
+    key: 'move_in_timeline',
+    label: 'When they hope to move in / close',
+    options: ['As soon as possible', 'Within 6 months', 'Within a year', '2+ years away'],
+  },
+  { key: 'open_feedback', label: 'Anything else notable the buyer said' },
+  { key: 'persona_summary', label: 'Buyer persona' },
+  { key: 'sales_recommendation', label: 'Recommended next step for the rep' },
+];
+
 // Legacy export — defaults to the engagement set so any old import keeps
 // working without behavioural change.
 export const DEFAULT_QUESTIONS = ENGAGEMENT_QUESTIONS;
@@ -98,6 +196,7 @@ export const DEFAULT_QUESTIONS = ENGAGEMENT_QUESTIONS;
 export function getQuestionsForType(type) {
   if (type === 'visit') return VISIT_QUESTIONS;
   if (type === 'onboarding') return ONBOARDING_QUESTIONS;
+  if (type === 'call') return CALL_QUESTIONS;
   return ENGAGEMENT_QUESTIONS;
 }
 

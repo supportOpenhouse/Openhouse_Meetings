@@ -12,7 +12,7 @@ export default async function AdminSalestrailPage() {
 
   const sql = neon(process.env.DATABASE_URL);
   const [stateRow] = await sql`
-    SELECT cursor_at, last_run_at, last_result, in_progress
+    SELECT cursor_at, last_run_at, last_result, in_progress, paused
     FROM salestrail_sync_state WHERE id = 1
   `;
   const [counts] = await sql`

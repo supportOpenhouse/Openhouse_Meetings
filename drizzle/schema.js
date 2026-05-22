@@ -152,6 +152,8 @@ export const salestrailSyncState = pgTable('salestrail_sync_state', {
   last_run_at: timestamp('last_run_at', { withTimezone: true }),
   last_result: jsonb('last_result'),
   in_progress: boolean('in_progress').notNull().default(false),
+  // Admin kill-switch for the continuous self-chaining drain.
+  paused: boolean('paused').notNull().default(false),
 });
 
 // Cached Claude-synthesized insights for the admin analytics dashboard. Each

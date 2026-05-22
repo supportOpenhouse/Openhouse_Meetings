@@ -54,22 +54,19 @@ export async function POST(request, { params }) {
       process.env.ELEVENLABS_LANGUAGE || ''
     );
 
-    // Phone call recordings (direct-RM uploads) are transcript-only for now —
-    // the smart-summary question set for calls is still TBD.
-    const summary =
-      meeting.meeting_type === 'call'
-        ? null
-        : await summarizeWithClaude(
-            transcript.text || '',
-            {
-              rm_name: session.user.name,
-              cp_code: meeting.cp_code,
-              cp_mobile: meeting.cp_mobile,
-              purpose: meeting.purpose,
-              duration_seconds: meeting.duration_seconds,
-            },
-            meeting.meeting_type || 'engagement'
-          );
+    // Every meeting type gets a smart summary — including 'call' (direct-RM
+    // phone calls), which use the buyer-discovery survey question set.
+    const summary = await summarizeWithClaude(
+      transcript.text || '',
+      {
+        rm_name: session.user.name,
+        cp_code: meeting.cp_code,
+        cp_mobile: meeting.cp_mobile,
+        purpose: meeting.purpose,
+        duration_seconds: meeting.duration_seconds,
+      },
+      meeting.meeting_type || 'engagement'
+    );
 
     const updated = await updateMeeting(meeting.id, {
       language: transcript.language_code || null,
