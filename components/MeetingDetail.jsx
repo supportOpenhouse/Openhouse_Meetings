@@ -22,6 +22,7 @@ import {
   Briefcase,
   Home,
   Handshake,
+  Cloud,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
 import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, MEETING_TYPES } from './questions';
@@ -92,6 +93,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               <span><Clock size={12} /> {fmtDuration(localMeeting.duration_seconds)}</span>
               {localMeeting.language && <span>· {localMeeting.language}</span>}
               <MeetingTypeBadge type={meetingType} />
+              {localMeeting.salestrail_call_id && <SourceBadge />}
               {localMeeting.location_lat != null && localMeeting.location_lng != null && (
                 <a
                   className="oh-detail-loc"
@@ -361,6 +363,31 @@ function MeetingTypeBadge({ type }) {
           color: #2f6f6f;
           background: rgba(47, 111, 111, 0.08);
           border-color: rgba(47, 111, 111, 0.25);
+        }
+      `}</style>
+    </span>
+  );
+}
+
+// Shown in the detail header for meetings auto-pulled from Salestrail.
+function SourceBadge() {
+  return (
+    <span className="oh-src-badge">
+      <Cloud size={11} /> Salestrail
+      <style jsx>{`
+        .oh-src-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          border: 1px solid rgba(79, 70, 160, 0.3);
+          color: #4f46a0;
+          background: rgba(79, 70, 160, 0.08);
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
         }
       `}</style>
     </span>

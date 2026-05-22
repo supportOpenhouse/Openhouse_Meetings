@@ -18,6 +18,7 @@ import {
   Home,
   Handshake,
   PhoneCall,
+  Cloud,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
@@ -277,6 +278,7 @@ function DesktopRow({ m, showRM, cols, onClick }) {
             </span>
           )}
           <MeetingTypePill type={m.meeting_type} />
+          <SourcePill meeting={m} />
         </div>
         {m.cp_code && m.cp_name && (
           <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>
@@ -315,6 +317,7 @@ function MobileCard({ m, showRM, onClick }) {
           {m.cp_code || m.cp_name || 'No name'}
           {m.cp_code && m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
           <MeetingTypePill type={m.meeting_type} small />
+          <SourcePill meeting={m} small />
         </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
@@ -450,6 +453,41 @@ function MeetingTypePill({ type, small = false }) {
           border-color: rgba(47, 111, 111, 0.25);
         }
         .oh-mtype-pill.small {
+          font-size: 9.5px;
+          padding: 1px 6px;
+          margin-left: 6px;
+        }
+      `}</style>
+    </span>
+  );
+}
+
+// Marks a meeting that was auto-pulled from Salestrail (vs recorded in-app or
+// manually uploaded). Renders nothing for non-Salestrail meetings.
+function SourcePill({ meeting, small = false }) {
+  if (!meeting.salestrail_call_id) return null;
+  return (
+    <span className={`oh-src-pill ${small ? 'small' : ''}`}>
+      <Cloud size={small ? 9.5 : 10} />
+      Salestrail
+      <style jsx>{`
+        .oh-src-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 10.5px;
+          padding: 2px 7px;
+          border-radius: 999px;
+          border: 1px solid rgba(79, 70, 160, 0.28);
+          color: #4f46a0;
+          background: rgba(79, 70, 160, 0.08);
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          line-height: 1.4;
+          white-space: nowrap;
+        }
+        .oh-src-pill.small {
           font-size: 9.5px;
           padding: 1px 6px;
           margin-left: 6px;
