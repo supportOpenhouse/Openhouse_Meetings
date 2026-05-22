@@ -395,6 +395,7 @@ function getSentiment(meeting) {
     meeting.summary?.score?.classification ||
     meeting.summary?.engagement?.sentiment ||
     meeting.summary?.onboarding?.sentiment ||
+    meeting.summary?.call?.sentiment ||
     meeting.summary?.sentiment ||
     null
   );

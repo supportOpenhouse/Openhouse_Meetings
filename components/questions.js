@@ -184,6 +184,11 @@ export const CALL_QUESTIONS = [
     label: 'When they hope to move in / close',
     options: ['As soon as possible', 'Within 6 months', 'Within a year', '2+ years away'],
   },
+  {
+    key: 'sentiment',
+    label: 'Buyer temperature — how likely they are to convert soon',
+    sentiment: true,
+  },
   { key: 'open_feedback', label: 'Anything else notable the buyer said' },
   { key: 'persona_summary', label: 'Buyer persona' },
   { key: 'sales_recommendation', label: 'Recommended next step for the rep' },
