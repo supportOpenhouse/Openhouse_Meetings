@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Users, X, Calendar } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
@@ -49,6 +49,18 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
   // Global date range filter — shared by stats, Per-RM cards, table, and export.
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
+
+  // RM filter — driven by the clickable Per-RM cards, shared with the table.
+  const [rmFilter, setRmFilter] = useState('all');
+  const tableRef = useRef(null);
+
+  // Clicking an RM card filters the table to that RM (clicking it again clears).
+  function selectRm(id) {
+    setRmFilter((cur) => (cur === id ? 'all' : id));
+    if (tableRef.current) {
+      tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 
   function showToast(msg, type) {
     setToast({ msg, type });
@@ -272,7 +284,10 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
       {perRm.length > 0 && (
         <>
           <h2 className="oh-h2" style={{ marginTop: 32 }}>
-            Per RM {hasRange && <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 400 }}>· filtered</span>}
+            Per RM{' '}
+            <span style={{ fontSize: 12, color: 'var(--ink-3)', fontWeight: 400 }}>
+              {hasRange ? '· filtered · ' : '· '}tap a card to filter the table
+            </span>
           </h2>
           <div
             style={{
@@ -285,7 +300,20 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
             {perRm
               .sort((a, b) => new Date(b.last_meeting || 0) - new Date(a.last_meeting || 0))
               .map((r) => (
-                <div key={r.rm_id} className="oh-rm-card">
+                <div
+                  key={r.rm_id}
+                  className={`oh-rm-card oh-rm-card-btn ${rmFilter === r.rm_id ? 'active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => selectRm(r.rm_id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      selectRm(r.rm_id);
+                    }
+                  }}
+                  title={`Filter the meetings table by ${r.rm_name || r.rm_email}`}
+                >
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="name">{r.rm_name || r.rm_email}</div>
                     <div className="email">
@@ -308,16 +336,20 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
         </>
       )}
 
-      <h2 className="oh-h2">All meetings</h2>
-      <MeetingsTable
-        meetings={filteredMeetings}
-        rms={rms}
-        cities={cities}
-        onOpen={openMeetingFull}
-        showRMColumn={true}
-        onExport={handleExport}
-        hideDateFilter={true}
-      />
+      <div ref={tableRef}>
+        <h2 className="oh-h2">All meetings</h2>
+        <MeetingsTable
+          meetings={filteredMeetings}
+          rms={rms}
+          cities={cities}
+          onOpen={openMeetingFull}
+          showRMColumn={true}
+          onExport={handleExport}
+          hideDateFilter={true}
+          rmFilter={rmFilter}
+          onRmFilterChange={setRmFilter}
+        />
+      </div>
 
       {openMeeting && openDetail && (
         <MeetingDetail
@@ -332,6 +364,20 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
       )}
 
       <Toast toast={toast} />
+
+      <style jsx>{`
+        .oh-rm-card-btn {
+          cursor: pointer;
+          transition: border-color 0.12s, background 0.12s;
+        }
+        .oh-rm-card-btn:hover {
+          border-color: var(--ink-2);
+        }
+        .oh-rm-card-btn.active {
+          border-color: var(--accent);
+          background: rgba(184, 52, 28, 0.05);
+        }
+      `}</style>
     </div>
   );
 }

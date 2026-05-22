@@ -34,8 +34,21 @@ export default function MeetingsTable({
   // Admin owns the date range globally — hide the table's local date inputs so we
   // don't have two competing filters on the same page.
   hideDateFilter = false,
+  // Optional controlled RM filter — lets a parent (e.g. the Per-RM cards) drive
+  // it. When omitted, the table manages the RM filter itself.
+  rmFilter: rmFilterProp,
+  onRmFilterChange,
 }) {
-  const [rmFilter, setRMFilter] = useState('all');
+  const [rmFilterState, setRmFilterState] = useState('all');
+  const rmControlled = rmFilterProp !== undefined;
+  const rmFilter = rmControlled ? rmFilterProp : rmFilterState;
+  const setRMFilter = (v) => {
+    if (rmControlled) {
+      if (onRmFilterChange) onRmFilterChange(v);
+    } else {
+      setRmFilterState(v);
+    }
+  };
   const [cityFilter, setCityFilter] = useState('all');
   const [sentimentFilter, setSentimentFilter] = useState('all');
   const [search, setSearch] = useState('');
