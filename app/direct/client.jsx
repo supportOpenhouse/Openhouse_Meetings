@@ -70,19 +70,48 @@ export default function DirectClient({ initialMeetings, user }) {
     }
   }
 
-  function onPickFiles(e) {
+  async function onPickFiles(e) {
     const files = Array.from(e.target.files || []);
     if (e.target) e.target.value = '';
     if (files.length === 0) return;
-    const items = files.map((file, i) => ({
+
+    // Drop files already sitting in the queue (same name) so picking the
+    // folder twice doesn't double them up locally.
+    const inQueue = new Set(queue.map((x) => x.name));
+    const fresh = files.filter((f) => !inQueue.has(f.name));
+
+    const items = fresh.map((file, i) => ({
       id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
       file,
       name: file.name,
-      status: 'queued', // queued | uploading | transcribing | done | failed
+      status: 'queued', // queued | uploading | transcribing | done | failed | duplicate
       pct: 0,
       error: null,
     }));
     setQueue((q) => [...items, ...q]);
+
+    // Ask the server which of these were already uploaded before — mark them
+    // as duplicates so we skip re-uploading and re-transcribing.
+    try {
+      const r = await fetch('/api/direct/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filenames: fresh.map((f) => f.name) }),
+      });
+      if (r.ok) {
+        const { existing } = await r.json();
+        const dupSet = new Set(existing || []);
+        if (dupSet.size > 0) {
+          setQueue((q) =>
+            q.map((x) => (dupSet.has(x.name) && x.status === 'queued'
+              ? { ...x, status: 'duplicate' }
+              : x))
+          );
+        }
+      }
+    } catch {
+      // Check failed — the server-side guard in /api/direct/upload still catches dups.
+    }
   }
 
   async function uploadOne(item) {
@@ -113,6 +142,12 @@ export default function DirectClient({ initialMeetings, user }) {
       });
       const created = await createRes.json();
       if (!createRes.ok) throw new Error(created.error || `Server returned ${createRes.status}`);
+
+      // Server found this filename was already uploaded — skip transcription.
+      if (created.duplicate) {
+        patch({ status: 'duplicate' });
+        return;
+      }
 
       // Fire transcription in the background.
       try {
@@ -211,6 +246,8 @@ export default function DirectClient({ initialMeetings, user }) {
                     <div className="oh-direct-icon">
                       {item.status === 'done' ? (
                         <CheckCircle2 size={16} color="#2f6f2f" />
+                      ) : item.status === 'duplicate' ? (
+                        <CheckCircle2 size={16} color="var(--ink-3)" />
                       ) : item.status === 'failed' ? (
                         <AlertCircle size={16} color="#b03021" />
                       ) : item.status === 'uploading' || item.status === 'transcribing' ? (
@@ -248,11 +285,19 @@ export default function DirectClient({ initialMeetings, user }) {
                     <><Upload size={14} /> Upload {pendingCount} {pendingCount === 1 ? 'file' : 'files'}</>
                   )}
                 </button>
-                {!uploading && queue.some((x) => x.status === 'done') && (
-                  <button className="oh-btn ghost" onClick={() => setQueue([])}>
-                    Clear finished
-                  </button>
-                )}
+                {!uploading &&
+                  queue.some((x) => x.status === 'done' || x.status === 'duplicate') && (
+                    <button
+                      className="oh-btn ghost"
+                      onClick={() =>
+                        setQueue((q) =>
+                          q.filter((x) => x.status !== 'done' && x.status !== 'duplicate')
+                        )
+                      }
+                    >
+                      Clear finished
+                    </button>
+                  )}
               </div>
             </>
           )}
@@ -361,6 +406,7 @@ function statusLabel(item) {
     case 'uploading': return `Uploading… ${item.pct}%`;
     case 'transcribing': return 'Uploaded — transcribing in background';
     case 'done': return 'Done — transcript processing';
+    case 'duplicate': return 'Already uploaded earlier — skipped';
     case 'failed': return `Failed: ${item.error}`;
     default: return '';
   }

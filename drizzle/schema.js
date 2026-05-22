@@ -61,6 +61,9 @@ export const meetings = pgTable(
     location_lat: doublePrecision('location_lat'),
     location_lng: doublePrecision('location_lng'),
     location_accuracy: doublePrecision('location_accuracy'),
+    // Original device filename for direct-RM call uploads — used to dedupe
+    // re-uploads of the same recording. Null for in-app recordings.
+    source_filename: text('source_filename'),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),
     language: text('language'),

@@ -89,6 +89,10 @@ async function run() {
   await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS location_lng double precision`;
   await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS location_accuracy double precision`;
 
+  // Original device filename for direct-RM call uploads — dedupes re-uploads.
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS source_filename text`;
+  await sql`CREATE INDEX IF NOT EXISTS meetings_source_filename_idx ON meetings(rm_id, source_filename)`;
+
   console.log('Creating activity_logs table...');
   await sql`
     CREATE TABLE IF NOT EXISTS activity_logs (

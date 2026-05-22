@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { neon } from '@neondatabase/serverless';
+import { del } from '@vercel/blob';
 import { auth } from '@/auth';
 import { insertMeeting } from '@/lib/queries';
 import { parseCallFilename } from '@/lib/callRecording';
@@ -37,7 +39,26 @@ export async function POST(request) {
     return NextResponse.json({ error: 'invalid audio_url' }, { status: 400 });
   }
 
-  const parsed = parseCallFilename(filename || '', last_modified);
+  const cleanFilename = String(filename || '').trim();
+  const parsed = parseCallFilename(cleanFilename, last_modified);
+
+  // Dedupe: this RM already uploaded a file with this exact name → skip
+  // re-creating + re-transcribing (transcription costs ElevenLabs credits).
+  // Best-effort delete of the just-uploaded duplicate blob to keep storage tidy.
+  if (cleanFilename) {
+    const sql = neon(process.env.DATABASE_URL);
+    const dup = await sql`
+      SELECT id FROM meetings
+      WHERE rm_id = ${session.user.id} AND source_filename = ${cleanFilename}
+      LIMIT 1
+    `;
+    if (dup[0]) {
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        try { await del(audio_url, { token: process.env.BLOB_READ_WRITE_TOKEN }); } catch {}
+      }
+      return NextResponse.json({ duplicate: true, id: dup[0].id });
+    }
+  }
 
   const meeting = await insertMeeting({
     rm_id: session.user.id,
@@ -51,6 +72,7 @@ export async function POST(request) {
     duration_seconds: parseInt(duration_seconds || 0, 10) || 0,
     audio_url,
     status: 'processing',
+    source_filename: cleanFilename || null,
   });
 
   logActivity({
