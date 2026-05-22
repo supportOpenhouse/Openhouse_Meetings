@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Cloud,
@@ -17,6 +17,10 @@ export default function SalestrailClient({ initial }) {
   const { state, counts, configured } = initial;
   const [busy, setBusy] = useState(null); // 'sync' | 'rescan30' | 'rescan90'
   const [flash, setFlash] = useState(null); // { ok, text }
+  // Dates are formatted client-side only — formatting on the server (UTC) and
+  // re-formatting in the browser (IST) would produce a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   async function run(label, body) {
     setBusy(label);
@@ -120,13 +124,16 @@ export default function SalestrailClient({ initial }) {
           <div className="st-empty">The sync has not run yet.</div>
         ) : (
           <div className="st-lastrun">
-            <Row k="When" v={fmt(state.last_run_at)} />
+            <Row k="When" v={mounted ? fmt(state.last_run_at) : '—'} />
             <Row
               k="Synced up to"
-              v={state.cursor_at ? fmt(state.cursor_at) : 'not started'}
+              v={!state.cursor_at ? 'not started' : mounted ? fmt(state.cursor_at) : '—'}
             />
             {last?.window && (
-              <Row k="Scanned window" v={`${fmtShort(last.window.from)} → ${fmtShort(last.window.to)}`} />
+              <Row
+                k="Scanned window"
+                v={mounted ? `${fmtShort(last.window.from)} → ${fmtShort(last.window.to)}` : '—'}
+              />
             )}
             {last && (
               <Row
@@ -274,6 +281,7 @@ function Row({ k, v }) {
 function fmt(iso) {
   try {
     return new Date(iso).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       day: 'numeric',
       month: 'short',
       hour: 'numeric',
@@ -287,7 +295,11 @@ function fmt(iso) {
 
 function fmtShort(iso) {
   try {
-    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return new Date(iso).toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'short',
+    });
   } catch {
     return String(iso);
   }
