@@ -93,6 +93,14 @@ async function run() {
   await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS source_filename text`;
   await sql`CREATE INDEX IF NOT EXISTS meetings_source_filename_idx ON meetings(rm_id, source_filename)`;
 
+  // Salestrail call-sync: external call id (dedupe key) + fetch retry counter.
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS salestrail_call_id text`;
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS salestrail_fetch_attempts integer NOT NULL DEFAULT 0`;
+  // Partial-unique so a Salestrail call is imported at most once (NULLs, i.e.
+  // in-app + manual-upload rows, are unconstrained).
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS meetings_salestrail_call_uq ON meetings(salestrail_call_id) WHERE salestrail_call_id IS NOT NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS meetings_status_idx ON meetings(status)`;
+
   console.log('Creating activity_logs table...');
   await sql`
     CREATE TABLE IF NOT EXISTS activity_logs (
@@ -172,6 +180,18 @@ async function run() {
   `;
   // Ensure the singleton row exists so UPSERTs in the sync code can target id=1.
   await sql`INSERT INTO cp_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+
+  console.log('Creating salestrail_sync_state table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS salestrail_sync_state (
+      id integer PRIMARY KEY,
+      cursor_at timestamptz,
+      last_run_at timestamptz,
+      last_result jsonb,
+      in_progress boolean NOT NULL DEFAULT false
+    )
+  `;
+  await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
 
   console.log('\n✓ Done. Schema is ready.');
 }

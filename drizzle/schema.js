@@ -64,6 +64,13 @@ export const meetings = pgTable(
     // Original device filename for direct-RM call uploads — used to dedupe
     // re-uploads of the same recording. Null for in-app recordings.
     source_filename: text('source_filename'),
+    // Salestrail integration: the external call id. Set on phone-call
+    // recordings pulled automatically from Salestrail — the dedupe key so the
+    // same call is never imported twice. Null for in-app + manual-upload rows.
+    salestrail_call_id: text('salestrail_call_id'),
+    // Retry counter for the Salestrail recording fetch + transcription. Caps
+    // runaway retries on a permanently broken call (see the sync route).
+    salestrail_fetch_attempts: integer('salestrail_fetch_attempts').notNull().default(0),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),
     language: text('language'),
@@ -82,6 +89,7 @@ export const meetings = pgTable(
     startedAtIdx: index('meetings_started_at_idx').on(t.started_at),
     cpCodeIdx: index('meetings_cp_code_idx').on(t.cp_code),
     statusIdx: index('meetings_status_idx').on(t.status),
+    salestrailCallIdx: index('meetings_salestrail_call_idx').on(t.salestrail_call_id),
   })
 );
 
@@ -131,6 +139,18 @@ export const cpSyncState = pgTable('cp_sync_state', {
   last_synced_at: timestamp('last_synced_at', { withTimezone: true }),
   last_row_count: integer('last_row_count'),
   last_error: text('last_error'),
+  in_progress: boolean('in_progress').notNull().default(false),
+});
+
+// Singleton row (id = 1) tracking the Salestrail call-recording sync.
+// cursor_at is the high-water mark on Salestrail's "createdAt" axis — the next
+// run pulls calls created after it. last_result holds the most recent run's
+// per-phase counts (shown on the admin Call-sync page).
+export const salestrailSyncState = pgTable('salestrail_sync_state', {
+  id: integer('id').primaryKey(),
+  cursor_at: timestamp('cursor_at', { withTimezone: true }),
+  last_run_at: timestamp('last_run_at', { withTimezone: true }),
+  last_result: jsonb('last_result'),
   in_progress: boolean('in_progress').notNull().default(false),
 });
 

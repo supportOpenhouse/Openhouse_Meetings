@@ -8,12 +8,16 @@ export default auth((req) => {
 
   const isAuthRoute = pathname === '/login';
   const isApiAuthRoute = pathname.startsWith('/api/auth');
+  // The Salestrail sync route authorizes itself (Bearer CRON_SECRET for the
+  // cron, admin session for the manual button) — let it through untouched so
+  // the tokenless cron request isn't redirected to /login.
+  const isSalestrailRoute = pathname.startsWith('/api/salestrail');
   const isPublicAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname === '/';
 
-  if (isApiAuthRoute || isPublicAsset) return NextResponse.next();
+  if (isApiAuthRoute || isSalestrailRoute || isPublicAsset) return NextResponse.next();
 
   if (isAuthRoute) {
     if (isLoggedIn) {
