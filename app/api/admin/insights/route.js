@@ -5,6 +5,7 @@ import {
   getVisitMetrics,
   getEngagementMetrics,
   getOnboardingMetrics,
+  getCallMetrics,
   getCpFocusList,
 } from '@/lib/analytics';
 
@@ -25,10 +26,11 @@ export async function GET(request) {
 
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, cpFocus, standardRows, custom] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom] = await Promise.all([
     getVisitMetrics(period),
     getEngagementMetrics(period),
     getOnboardingMetrics(period),
+    getCallMetrics(period),
     getCpFocusList(15),
     // Standard insights: latest row per (scope, insight_key).
     sql`
@@ -53,7 +55,7 @@ export async function GET(request) {
 
   return NextResponse.json({
     period,
-    tier1: { visit, engagement, onboarding, cpFocus },
+    tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,
   });

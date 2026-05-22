@@ -6,6 +6,7 @@ import {
   getVisitMetrics,
   getEngagementMetrics,
   getOnboardingMetrics,
+  getCallMetrics,
   getCpFocusList,
 } from '@/lib/analytics';
 import InsightsClient from './client';
@@ -18,10 +19,11 @@ export default async function InsightsPage() {
   const period = 90;
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, cpFocus, standardRows, custom] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom] = await Promise.all([
     getVisitMetrics(period),
     getEngagementMetrics(period),
     getOnboardingMetrics(period),
+    getCallMetrics(period),
     getCpFocusList(15),
     sql`
       SELECT DISTINCT ON (scope, insight_key)
@@ -44,7 +46,7 @@ export default async function InsightsPage() {
 
   const initial = {
     period,
-    tier1: { visit, engagement, onboarding, cpFocus },
+    tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,
   };

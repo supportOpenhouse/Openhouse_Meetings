@@ -16,6 +16,7 @@ import {
   AlertCircle,
   X,
   Volume2,
+  Phone,
 } from 'lucide-react';
 import { ChevronRight } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
@@ -32,6 +33,7 @@ const TAB_INSIGHTS = {
   visit: ['visit_societies', 'visit_config_budget', 'visit_blockers', 'visit_objections'],
   engagement: ['engagement_cp_issues', 'engagement_cp_asks'],
   onboarding: ['onboarding_objections', 'onboarding_competitors'],
+  direct: ['direct_demand', 'direct_blockers', 'direct_pipeline', 'direct_awareness'],
   cross_cut: ['cross_growth', 'cross_pipeline'],
 };
 
@@ -44,6 +46,10 @@ const INSIGHT_TITLES = {
   engagement_cp_asks: 'What CPs are asking for',
   onboarding_objections: 'Objections that block onboarding',
   onboarding_competitors: 'Competitors prospective CPs use',
+  direct_demand: 'What buyers want',
+  direct_blockers: "Why buyers aren't booking",
+  direct_pipeline: 'Hot-buyer pipeline read',
+  direct_awareness: 'Affordable-housing awareness gaps',
   cross_growth: 'How to increase visits & buyers',
   cross_pipeline: 'Immediate-buyer pipeline read',
 };
@@ -147,6 +153,7 @@ export default function InsightsClient({ initialData }) {
         <TabBtn active={tab === 'visit'} onClick={() => setTab('visit')} icon={Home} label="Visit" />
         <TabBtn active={tab === 'engagement'} onClick={() => setTab('engagement')} icon={Briefcase} label="Engagement" />
         <TabBtn active={tab === 'onboarding'} onClick={() => setTab('onboarding')} icon={Handshake} label="Onboarding" />
+        <TabBtn active={tab === 'direct'} onClick={() => setTab('direct')} icon={Phone} label="Direct" />
         <TabBtn active={tab === 'cross_cut'} onClick={() => setTab('cross_cut')} icon={Target} label="Cross-cut" />
         <TabBtn active={tab === 'ask'} onClick={() => setTab('ask')} icon={Sparkles} label="Ask anything" />
       </div>
@@ -154,6 +161,7 @@ export default function InsightsClient({ initialData }) {
       {tab === 'visit' && <VisitTab m={t1.visit} />}
       {tab === 'engagement' && <EngagementTab m={t1.engagement} />}
       {tab === 'onboarding' && <OnboardingTab m={t1.onboarding} />}
+      {tab === 'direct' && <DirectTab m={t1.direct} />}
       {tab === 'cross_cut' && <CrossCutTab cpFocus={t1.cpFocus} />}
 
       {tab !== 'ask' && (
@@ -367,6 +375,81 @@ function OnboardingTab({ m }) {
   );
 }
 
+function DirectTab({ m }) {
+  if (!m || m.total === 0) {
+    return <Empty text="No direct-RM call recordings in this range yet." />;
+  }
+  return (
+    <div>
+      <StatGrid>
+        <Stat label="Buyer calls" value={m.total} />
+        <Stat label="Hot buyers" value={m.bySentiment.hot} accent />
+        <TempStat mix={m.bySentiment} />
+      </StatGrid>
+
+      <div className="oh-ins-2col">
+        <Panel title="Buyer journey stage">
+          <DistBars rows={m.journeyStage} total={m.total} />
+        </Panel>
+        <Panel title="Move-in timeline">
+          <DistBars rows={m.timeline} total={m.total} />
+        </Panel>
+      </div>
+
+      <div className="oh-ins-2col">
+        <Panel title="Budget demand">
+          <DistBars rows={m.budget} total={m.total} />
+        </Panel>
+        <Panel title="BHK configuration demand">
+          <DistBars rows={m.configuration} total={m.total} />
+        </Panel>
+      </div>
+
+      <Panel title="What's stopping buyers from booking">
+        <DistBars rows={m.blockers} total={m.total} />
+      </Panel>
+
+      <Panel title="Top buyer frustrations">
+        <DistBars rows={m.frustrations} total={m.total} />
+      </Panel>
+
+      <div className="oh-ins-2col">
+        <Panel title="Weekly call volume">
+          <Sparkbars data={m.volumeByWeek} />
+        </Panel>
+        <Panel title="Top RMs by call volume">
+          {m.topRms.length === 0 && <Empty />}
+          {m.topRms.map((r, i) => (
+            <RankRow key={i} rank={i + 1} name={r.rm_name || '—'} value={r.meetings} />
+          ))}
+        </Panel>
+      </div>
+
+      <style jsx>{`
+        .oh-ins-2col {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 14px;
+          align-items: start;
+        }
+        @media (max-width: 760px) { .oh-ins-2col { grid-template-columns: 1fr; } }
+      `}</style>
+    </div>
+  );
+}
+
+// Renders a {label, n} distribution as proportion bars.
+function DistBars({ rows, total }) {
+  if (!rows || rows.length === 0) return <Empty />;
+  return (
+    <>
+      {rows.map((r, i) => (
+        <BarRow key={i} label={shortLabel(r.label)} pct={pct(r.n, total)} caption={String(r.n)} />
+      ))}
+    </>
+  );
+}
+
 function CrossCutTab({ cpFocus }) {
   return (
     <div>
@@ -424,6 +507,7 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
             <option value="visit">Visits only</option>
             <option value="engagement">Engagement only</option>
             <option value="onboarding">Onboarding only</option>
+            <option value="call">Direct calls only</option>
           </select>
           <button className="oh-btn accent" onClick={onAsk} disabled={asking || question.trim().length < 5}>
             {asking ? <Loader2 size={14} className="oh-spin" /> : <Send size={14} />}
@@ -1092,6 +1176,13 @@ function relative(iso) {
   if (d < 3600) return `${Math.round(d / 60)}m ago`;
   if (d < 86400) return `${Math.round(d / 3600)}h ago`;
   return `${Math.round(d / 86400)}d ago`;
+}
+
+// Survey option strings carry a "— description" tail; show only the lead part.
+function shortLabel(s) {
+  if (!s) return '—';
+  const i = s.indexOf('—');
+  return (i > 0 ? s.slice(0, i) : s).trim();
 }
 
 // '2026-05-04' (week-start date) → '4 May' for the bar-chart x-axis.
