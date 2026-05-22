@@ -9,13 +9,16 @@ import {
   CheckCircle2,
   AlertCircle,
   History,
+  Pause,
+  Play,
 } from 'lucide-react';
 
-// Admin Call-sync screen — status + manual trigger for the Salestrail pull.
+// Admin Call-sync screen — status + manual control for the Salestrail pull.
 export default function SalestrailClient({ initial }) {
   const router = useRouter();
   const { state, counts, configured } = initial;
-  const [busy, setBusy] = useState(null); // 'sync' | 'rescan30' | 'rescan90'
+  const paused = !!state?.paused;
+  const [busy, setBusy] = useState(null); // 'sync' | 'pause' | 'rescan30' | 'rescan90'
   const [flash, setFlash] = useState(null); // { ok, text }
   // Dates are formatted client-side only — formatting on the server (UTC) and
   // re-formatting in the browser (IST) would produce a hydration mismatch.
@@ -33,12 +36,18 @@ export default function SalestrailClient({ initial }) {
       });
       const j = await r.json();
       if (!r.ok || j.ok === false) throw new Error(j.error || `Server returned ${r.status}`);
-      if (j.skipped) {
-        setFlash({ ok: true, text: j.reason || 'A sync is already running.' });
+      if (j.paused) {
+        setFlash({ ok: true, text: 'Continuous draining paused.' });
+      } else if (j.skipped) {
+        setFlash({ ok: true, text: j.reason || 'Sync already running.' });
       } else {
         setFlash({
           ok: true,
-          text: `Done — ${j.imported} new call(s) queued, ${j.processed} transcribed, ${j.no_recording} had no recording.`,
+          text:
+            `Pass done — ${j.processed} transcribed, ${j.imported} newly queued. ` +
+            (j.pending > 0
+              ? `${j.pending.toLocaleString('en-IN')} still queued — draining continues automatically in the background.`
+              : 'Queue is clear. 🎉'),
         });
       }
       router.refresh();
@@ -50,6 +59,7 @@ export default function SalestrailClient({ initial }) {
   }
 
   const last = state?.last_result || null;
+  const pending = counts.pending || 0;
 
   return (
     <div className="oh-page" style={{ maxWidth: 760 }}>
@@ -58,21 +68,33 @@ export default function SalestrailClient({ initial }) {
         Call <em>sync</em>
       </h1>
       <p className="oh-sub">
-        Phone-call recordings are pulled automatically from Salestrail every 3 hours — only{' '}
-        <strong>Monday &amp; Friday</strong> calls, saved as engagement meetings with a smart
-        summary. This page is for watching the sync and triggering it on demand.
+        Phone-call recordings are pulled automatically from Salestrail — only{' '}
+        <strong>Monday &amp; Friday</strong> calls by regular RMs, saved as engagement meetings
+        with a smart summary. Once started, the sync <strong>drains the whole queue on its
+        own</strong>, one batch chaining the next, until nothing is left.
       </p>
 
       {!configured && (
         <div className="st-warn">
           <AlertCircle size={15} />
           <div>
-            Salestrail credentials are not set. Add <code>SALESTRAIL_API_USERNAME</code> and{' '}
-            <code>SALESTRAIL_API_PASSWORD</code> (and <code>CRON_SECRET</code>) in your Vercel
-            environment variables, then redeploy.
+            Salestrail credentials are not set. Add <code>SALESTRAIL_API_USERNAME</code>,{' '}
+            <code>SALESTRAIL_API_PASSWORD</code> and <code>CRON_SECRET</code> in Vercel, then
+            redeploy. <code>CRON_SECRET</code> is required for the continuous drain to chain.
           </div>
         </div>
       )}
+
+      {/* Live status line */}
+      <div className={`st-status ${paused ? 'paused' : pending > 0 ? 'draining' : 'idle'}`}>
+        {paused ? (
+          <><Pause size={15} /> Draining is <strong>paused</strong>.</>
+        ) : pending > 0 ? (
+          <><Loader2 size={15} className="oh-spin" /> Draining — <strong>{pending.toLocaleString('en-IN')}</strong> recordings still queued.</>
+        ) : (
+          <><CheckCircle2 size={15} /> Queue is clear.</>
+        )}
+      </div>
 
       <div className="st-cards">
         <Stat label="Imported & ready" value={counts.ready} tone="good" />
@@ -83,16 +105,22 @@ export default function SalestrailClient({ initial }) {
 
       <div className="st-actions">
         <button className="oh-btn accent" disabled={!!busy} onClick={() => run('sync')}>
-          {busy === 'sync' ? <Loader2 size={14} className="oh-spin" /> : <RefreshCw size={14} />}
-          {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+          {busy === 'sync' ? <Loader2 size={14} className="oh-spin" /> : paused ? <Play size={14} /> : <RefreshCw size={14} />}
+          {busy === 'sync' ? 'Starting…' : paused ? 'Resume draining' : 'Sync now'}
         </button>
+        {!paused && (
+          <button className="oh-btn ghost" disabled={!!busy} onClick={() => run('pause', { action: 'pause' })}>
+            {busy === 'pause' ? <Loader2 size={14} className="oh-spin" /> : <Pause size={14} />}
+            Pause draining
+          </button>
+        )}
         <button
           className="oh-btn ghost"
           disabled={!!busy}
           onClick={() => run('rescan30', { rescanDays: 30 })}
         >
           {busy === 'rescan30' ? <Loader2 size={14} className="oh-spin" /> : <History size={14} />}
-          Rescan last 30 days
+          Rescan 30 days
         </button>
         <button
           className="oh-btn ghost"
@@ -100,13 +128,13 @@ export default function SalestrailClient({ initial }) {
           onClick={() => run('rescan90', { rescanDays: 90 })}
         >
           {busy === 'rescan90' ? <Loader2 size={14} className="oh-spin" /> : <History size={14} />}
-          Rescan last 90 days
+          Rescan 90 days
         </button>
       </div>
       <p className="st-hint">
-        Each run transcribes a small batch of recordings. To clear a large backlog, click{' '}
-        <strong>Sync now</strong> a few times — or just let the 3-hourly schedule catch up.
-        A rescan rewinds the cursor so missed calls get picked up.
+        <strong>Sync now</strong> starts the drain and it keeps going by itself — refresh this
+        page to watch the queue fall. <strong>Pause</strong> stops it after the current batch.
+        A rescan rewinds the cursor to re-check for missed calls.
       </p>
 
       {flash && (
@@ -131,7 +159,7 @@ export default function SalestrailClient({ initial }) {
             />
             {last?.window && (
               <Row
-                k="Scanned window"
+                k="Last window"
                 v={mounted ? `${fmtShort(last.window.from)} → ${fmtShort(last.window.to)}` : '—'}
               />
             )}
@@ -141,7 +169,7 @@ export default function SalestrailClient({ initial }) {
                 v={
                   last.error
                     ? `Error: ${last.error}`
-                    : `${last.scanned} call(s) scanned · ${last.imported} imported · ${last.processed} transcribed · ${last.no_recording} no recording · ${last.off_day} off-day · ${last.no_rm} unknown RM`
+                    : `${last.batches || 0} batch(es) · ${last.processed} transcribed · ${last.imported} newly queued · ${last.no_recording} no recording · ${last.failed} failed`
                 }
               />
             )}
@@ -160,7 +188,7 @@ export default function SalestrailClient({ initial }) {
           border-radius: 10px;
           padding: 11px 13px;
           font-size: 13px;
-          margin-bottom: 18px;
+          margin-bottom: 16px;
         }
         .st-warn code {
           font-family: 'Geist Mono', monospace;
@@ -169,11 +197,35 @@ export default function SalestrailClient({ initial }) {
           padding: 1px 5px;
           border-radius: 4px;
         }
+        .st-status {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13.5px;
+          border-radius: 10px;
+          padding: 10px 13px;
+          margin: 16px 0 4px;
+        }
+        .st-status.draining {
+          background: rgba(79, 70, 160, 0.07);
+          color: #4f46a0;
+          border: 1px solid rgba(79, 70, 160, 0.22);
+        }
+        .st-status.paused {
+          background: rgba(196, 122, 26, 0.09);
+          color: #b97417;
+          border: 1px solid rgba(196, 122, 26, 0.28);
+        }
+        .st-status.idle {
+          background: rgba(47, 111, 47, 0.08);
+          color: #2f6f2f;
+          border: 1px solid rgba(47, 111, 47, 0.2);
+        }
         .st-cards {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
           gap: 10px;
-          margin: 18px 0;
+          margin: 14px 0;
         }
         .st-actions {
           display: flex;
@@ -185,7 +237,7 @@ export default function SalestrailClient({ initial }) {
           font-size: 12px;
           color: var(--ink-3);
           margin-top: 9px;
-          line-height: 1.5;
+          line-height: 1.55;
         }
         .st-flash {
           display: flex;
@@ -254,7 +306,7 @@ function Stat({ label, value, tone }) {
       }}
     >
       <div style={{ fontFamily: "'Geist Mono', monospace", fontSize: 22, color }}>
-        {value ?? 0}
+        {(value ?? 0).toLocaleString('en-IN')}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{label}</div>
     </div>
