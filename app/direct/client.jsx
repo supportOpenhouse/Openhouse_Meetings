@@ -2,43 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { upload } from '@vercel/blob/client';
-import {
-  LayoutDashboard,
-  Upload,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  FileAudio,
-  X,
-} from 'lucide-react';
+import { LayoutDashboard, Upload } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
+import CallUploader from '@/components/CallUploader';
 import Toast from '@/components/Toast';
 import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
-
-// Reads an audio file's duration (MP3s carry it in the header, so this is
-// instant and accurate — no WebM workaround needed).
-function readDuration(file) {
-  return new Promise((resolve) => {
-    try {
-      const a = document.createElement('audio');
-      a.preload = 'metadata';
-      const url = URL.createObjectURL(file);
-      a.onloadedmetadata = () => {
-        resolve(isFinite(a.duration) ? Math.round(a.duration) : 0);
-        URL.revokeObjectURL(url);
-      };
-      a.onerror = () => {
-        resolve(0);
-        URL.revokeObjectURL(url);
-      };
-      a.src = url;
-    } catch {
-      resolve(0);
-    }
-  });
-}
 
 export default function DirectClient({ initialMeetings, user }) {
   const router = useRouter();
@@ -49,10 +18,6 @@ export default function DirectClient({ initialMeetings, user }) {
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
   const [toast, setToast] = useState(null);
-
-  // Upload queue — one entry per picked file.
-  const [queue, setQueue] = useState([]);
-  const [uploading, setUploading] = useState(false);
 
   function showToast(msg, type) {
     setToast({ msg, type });
@@ -69,115 +34,6 @@ export default function DirectClient({ initialMeetings, user }) {
       showToast('Could not load recording', 'error');
     }
   }
-
-  async function onPickFiles(e) {
-    const files = Array.from(e.target.files || []);
-    if (e.target) e.target.value = '';
-    if (files.length === 0) return;
-
-    // Drop files already sitting in the queue (same name) so picking the
-    // folder twice doesn't double them up locally.
-    const inQueue = new Set(queue.map((x) => x.name));
-    const fresh = files.filter((f) => !inQueue.has(f.name));
-
-    const items = fresh.map((file, i) => ({
-      id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
-      file,
-      name: file.name,
-      status: 'queued', // queued | uploading | transcribing | done | failed | duplicate
-      pct: 0,
-      error: null,
-    }));
-    setQueue((q) => [...items, ...q]);
-
-    // Ask the server which of these were already uploaded before — mark them
-    // as duplicates so we skip re-uploading and re-transcribing.
-    try {
-      const r = await fetch('/api/direct/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filenames: fresh.map((f) => f.name) }),
-      });
-      if (r.ok) {
-        const { existing } = await r.json();
-        const dupSet = new Set(existing || []);
-        if (dupSet.size > 0) {
-          setQueue((q) =>
-            q.map((x) => (dupSet.has(x.name) && x.status === 'queued'
-              ? { ...x, status: 'duplicate' }
-              : x))
-          );
-        }
-      }
-    } catch {
-      // Check failed — the server-side guard in /api/direct/upload still catches dups.
-    }
-  }
-
-  async function uploadOne(item) {
-    const patch = (p) => setQueue((q) => q.map((x) => (x.id === item.id ? { ...x, ...p } : x)));
-    try {
-      patch({ status: 'uploading', pct: 0 });
-      const dur = await readDuration(item.file);
-      const safe = item.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `meetings/${user.id}/${Date.now()}-${safe}`;
-
-      const blob = await upload(path, item.file, {
-        access: 'public',
-        handleUploadUrl: '/api/upload-url',
-        contentType: item.file.type || 'audio/mpeg',
-        onUploadProgress: (e) => patch({ pct: Math.round(e.percentage || 0) }),
-      });
-
-      patch({ status: 'transcribing', pct: 100 });
-      const createRes = await fetch('/api/direct/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio_url: blob.url,
-          filename: item.name,
-          last_modified: item.file.lastModified || null,
-          duration_seconds: dur,
-        }),
-      });
-      const created = await createRes.json();
-      if (!createRes.ok) throw new Error(created.error || `Server returned ${createRes.status}`);
-
-      // Server found this filename was already uploaded — skip transcription.
-      if (created.duplicate) {
-        patch({ status: 'duplicate' });
-        return;
-      }
-
-      // Fire transcription in the background.
-      try {
-        fetch(`/api/meetings/${created.id}/process`, { method: 'POST', keepalive: true });
-      } catch {}
-
-      patch({ status: 'done' });
-    } catch (e) {
-      patch({ status: 'failed', error: e?.message || 'Upload failed' });
-    }
-  }
-
-  async function runQueue() {
-    setUploading(true);
-    // Process sequentially — gentle on the network + the processing functions.
-    const pending = queue.filter((x) => x.status === 'queued' || x.status === 'failed');
-    for (const item of pending) {
-      // eslint-disable-next-line no-await-in-loop
-      await uploadOne(item);
-    }
-    setUploading(false);
-    showToast('Uploads finished — transcribing in the background', 'success');
-    router.refresh();
-  }
-
-  function removeItem(id) {
-    setQueue((q) => q.filter((x) => x.id !== id));
-  }
-
-  const pendingCount = queue.filter((x) => x.status === 'queued' || x.status === 'failed').length;
 
   return (
     <div>
@@ -223,84 +79,17 @@ export default function DirectClient({ initialMeetings, user }) {
         <div>
           <p className="oh-sub" style={{ marginTop: 4 }}>
             Pick the call recordings (MP3) from your phone. We read the phone number from each
-            file name and generate a transcript. You can select multiple files at once.
+            file name and generate a transcript. You can select multiple files at once — files
+            you already uploaded are skipped automatically.
           </p>
-
-          <label className="oh-direct-pick">
-            <FileAudio size={18} />
-            <span>Choose recordings from your phone</span>
-            <input
-              type="file"
-              accept="audio/*,.mp3,.m4a,.amr,.aac,.wav,.ogg"
-              multiple
-              style={{ display: 'none' }}
-              onChange={onPickFiles}
-            />
-          </label>
-
-          {queue.length > 0 && (
-            <>
-              <div className="oh-direct-queue">
-                {queue.map((item) => (
-                  <div key={item.id} className="oh-direct-row">
-                    <div className="oh-direct-icon">
-                      {item.status === 'done' ? (
-                        <CheckCircle2 size={16} color="#2f6f2f" />
-                      ) : item.status === 'duplicate' ? (
-                        <CheckCircle2 size={16} color="var(--ink-3)" />
-                      ) : item.status === 'failed' ? (
-                        <AlertCircle size={16} color="#b03021" />
-                      ) : item.status === 'uploading' || item.status === 'transcribing' ? (
-                        <Loader2 size={16} className="oh-spin" />
-                      ) : (
-                        <FileAudio size={16} color="var(--ink-3)" />
-                      )}
-                    </div>
-                    <div className="oh-direct-info">
-                      <div className="oh-direct-name">{item.name}</div>
-                      <div className="oh-direct-status">{statusLabel(item)}</div>
-                    </div>
-                    {(item.status === 'queued' || item.status === 'failed') && !uploading && (
-                      <button
-                        className="oh-direct-x"
-                        onClick={() => removeItem(item.id)}
-                        aria-label="Remove"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
-                <button
-                  className="oh-btn accent"
-                  onClick={runQueue}
-                  disabled={uploading || pendingCount === 0}
-                >
-                  {uploading ? (
-                    <><Loader2 size={14} className="oh-spin" /> Uploading…</>
-                  ) : (
-                    <><Upload size={14} /> Upload {pendingCount} {pendingCount === 1 ? 'file' : 'files'}</>
-                  )}
-                </button>
-                {!uploading &&
-                  queue.some((x) => x.status === 'done' || x.status === 'duplicate') && (
-                    <button
-                      className="oh-btn ghost"
-                      onClick={() =>
-                        setQueue((q) =>
-                          q.filter((x) => x.status !== 'done' && x.status !== 'duplicate')
-                        )
-                      }
-                    >
-                      Clear finished
-                    </button>
-                  )}
-              </div>
-            </>
-          )}
+          <CallUploader
+            user={user}
+            uploadEndpoint="/api/direct/upload"
+            onBatchDone={() => {
+              showToast('Uploads finished — transcribing in the background', 'success');
+              router.refresh();
+            }}
+          />
         </div>
       )}
 
@@ -342,72 +131,7 @@ export default function DirectClient({ initialMeetings, user }) {
           border-bottom-color: var(--accent);
           font-weight: 500;
         }
-        .oh-direct-pick {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          justify-content: center;
-          cursor: pointer;
-          padding: 22px;
-          border: 1.5px dashed var(--border-strong, var(--border));
-          border-radius: 12px;
-          background: var(--paper);
-          color: var(--ink);
-          font-size: 14px;
-          font-weight: 500;
-          transition: all 0.15s;
-        }
-        .oh-direct-pick:hover {
-          border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.03);
-        }
-        .oh-direct-queue {
-          margin-top: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .oh-direct-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 12px;
-          border: 1px solid var(--border);
-          border-radius: 9px;
-          background: var(--paper);
-        }
-        .oh-direct-icon { flex-shrink: 0; display: flex; }
-        .oh-direct-info { flex: 1; min-width: 0; }
-        .oh-direct-name {
-          font-size: 13.5px;
-          color: var(--ink);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .oh-direct-status { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
-        .oh-direct-x {
-          all: unset;
-          cursor: pointer;
-          padding: 4px;
-          border-radius: 5px;
-          color: var(--ink-3);
-          flex-shrink: 0;
-        }
-        .oh-direct-x:hover { background: var(--paper-2); color: var(--ink); }
       `}</style>
     </div>
   );
-}
-
-function statusLabel(item) {
-  switch (item.status) {
-    case 'queued': return 'Ready to upload';
-    case 'uploading': return `Uploading… ${item.pct}%`;
-    case 'transcribing': return 'Uploaded — transcribing in background';
-    case 'done': return 'Done — transcript processing';
-    case 'duplicate': return 'Already uploaded earlier — skipped';
-    case 'failed': return `Failed: ${item.error}`;
-    default: return '';
-  }
 }

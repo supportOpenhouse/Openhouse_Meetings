@@ -12,10 +12,9 @@ export const dynamic = 'force-dynamic';
 // ElevenLabs credits).
 export async function POST(request) {
   const session = await auth();
+  // Any signed-in user can check their OWN already-uploaded filenames — it's
+  // scoped to their rm_id below. Used by both the direct-RM and RM uploaders.
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'direct_rm' && session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   let body;
   try { body = await request.json(); } catch { body = {}; }

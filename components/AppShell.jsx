@@ -1,6 +1,6 @@
 import { signOut } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3, Upload } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 
 export default function AppShell({ user, current, children }) {
@@ -28,6 +28,8 @@ export default function AppShell({ user, current, children }) {
     navItems = [
       { href: '/dashboard', key: 'dashboard', label: 'My meetings', icon: LayoutDashboard },
       { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
+      { href: '/dashboard/insights', key: 'insights', label: 'Insights', icon: BarChart3 },
+      { href: '/upload-recording', key: 'upload-recording', label: 'Upload recording', icon: Upload },
       { href: '/new-meeting', key: 'new', label: 'New meeting', icon: Plus },
     ];
   }
