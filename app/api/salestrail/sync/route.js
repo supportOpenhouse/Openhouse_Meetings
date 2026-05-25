@@ -33,6 +33,10 @@ const BATCH = parseInt(process.env.SALESTRAIL_BATCH || '12', 10) || 12;
 // One invocation keeps processing batches for up to this long, then self-chains
 // a fresh invocation — so a single "Sync now" drains the whole backlog hands-free.
 const RUN_BUDGET_MS = 450_000;
+// Brief pause between batches so the continuous drain doesn't saturate Vercel
+// Blob's per-store ops-per-second budget — leaves headroom for live uploads
+// from RMs recording meetings in the app.
+const INTER_BATCH_MS = 1500;
 
 function isCronRequest(request) {
   const secret = process.env.CRON_SECRET;
@@ -142,6 +146,9 @@ async function runSync(request) {
 
       // Nothing left to scan and nothing left to process → done.
       if (caughtUp && picked === 0) break;
+
+      // Brief pause so concurrent browser uploads can use the blob store too.
+      if (picked > 0) await new Promise((r) => setTimeout(r, INTER_BATCH_MS));
     }
 
     const [pend] = await sql`

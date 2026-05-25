@@ -32,8 +32,13 @@ import { uploadAndCreateMeeting } from '@/lib/uploadMeeting';
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
 const STALL_WARN_MS = 12_000;
-// Total time we allow upload to make no forward progress before failing fast.
+// Total time we allow upload to make no forward progress before failing fast,
+// while bytes are still being sent. A real network drop is detected quickly.
 const STALL_FAIL_MS = 45_000;
+// Once all bytes have been sent (uploadPct === 100), we are waiting for
+// Vercel Blob to finalize the multipart upload. On flaky mobile networks the
+// commit response can take a while — give it more headroom before failing.
+const STALL_FAIL_AT100_MS = 120_000;
 
 export default function NewMeetingClient({ user }) {
   const router = useRouter();
@@ -90,8 +95,11 @@ export default function NewMeetingClient({ user }) {
   // Device geolocation captured when recording starts — { lat, lng, accuracy }.
   const [location, setLocation] = useState(null);
 
-  // Refs for the stall watchdog
+  // Refs for the stall watchdog. uploadPctRef mirrors the uploadPct state so
+  // the setInterval callback (created once, frozen closure) can read the
+  // current percentage without a stale capture.
   const lastProgressAtRef = useRef(0);
+  const uploadPctRef = useRef(0);
   const watchdogRef = useRef(null);
   const abortedRef = useRef(false);
 
@@ -262,29 +270,39 @@ export default function NewMeetingClient({ user }) {
     }
 
     lastProgressAtRef.current = Date.now();
+    uploadPctRef.current = 0;
     clearWatchdog();
     watchdogRef.current = setInterval(() => {
       const since = Date.now() - lastProgressAtRef.current;
-      if (since > STALL_FAIL_MS) {
+      const pct = uploadPctRef.current;
+      const at100 = pct >= 100;
+      // Once all bytes are uploaded, give Vercel Blob extra time to commit
+      // the multipart upload — slow networks often see a long final pause.
+      const failAfterMs = at100 ? STALL_FAIL_AT100_MS : STALL_FAIL_MS;
+      if (since > failAfterMs) {
         // Hard fail: stop waiting on @vercel/blob's silent retry loop.
         abortedRef.current = true;
         clearWatchdog();
         setUploadStatus('failed');
         setError(
-          'Upload failed: no progress for ' +
-            Math.round(STALL_FAIL_MS / 1000) +
-            's. The browser is being blocked by Vercel Blob (likely an invalid BLOB_READ_WRITE_TOKEN or a deleted/disconnected blob store).'
+          at100
+            ? `Upload looked complete, but Vercel Blob didn't confirm it after ${Math.round(
+                failAfterMs / 1000
+              )}s. Usually a flaky mobile connection or a slow server commit — your recording is safe, tap Retry.`
+            : `Upload stalled at ${pct}% — no progress for ${Math.round(
+                failAfterMs / 1000
+              )}s. Likely a network drop. Tap Retry once you're back online — the recording is still in your browser.`
         );
         setErrorHint('upload-stalled');
         logEvent('upload.failed', {
           cp_code: form.cp_code,
-          payload: { reason: 'no-progress-watchdog', percentage: uploadPct },
+          payload: { reason: at100 ? 'commit-timeout' : 'no-progress-watchdog', percentage: pct, at100 },
         });
       } else if (since > STALL_WARN_MS && uploadStatus !== 'stalled') {
         setUploadStatus('stalled');
         logEvent('upload.stalled', {
           cp_code: form.cp_code,
-          payload: { percentage: uploadPct, since_ms: since },
+          payload: { percentage: pct, since_ms: since, at100 },
         });
       }
     }, 1000);
@@ -301,10 +319,17 @@ export default function NewMeetingClient({ user }) {
         access: 'public',
         handleUploadUrl: '/api/upload-url',
         contentType: blob.type || 'audio/webm',
+        // Retries reuse the same deterministic filename (CP + timestamp), so
+        // the second attempt would otherwise fail with "blob already exists"
+        // when the first attempt partially or fully committed server-side
+        // without our client seeing the response.
+        allowOverwrite: true,
         onUploadProgress: (e) => {
           lastProgressAtRef.current = Date.now();
           setUploadStatus('progress');
-          setUploadPct(Math.round(e.percentage || 0));
+          const pct = Math.round(e.percentage || 0);
+          uploadPctRef.current = pct;
+          setUploadPct(pct);
         },
       });
 
