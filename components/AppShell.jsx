@@ -20,10 +20,13 @@ export default function AppShell({ user, current, children }) {
       { href: '/admin/logs', key: 'logs', label: 'Activity logs', icon: Activity },
     ];
   } else if (isDirectRm) {
-    // Direct RMs only upload phone call recordings — a stripped-down shell.
-    // The page itself has the "My recordings" / "Upload" tabs.
+    // Direct RMs upload phone call recordings AND can record live site visits.
+    // The /direct page has the "My recordings" / "Upload" tabs; /new-meeting
+    // renders a stripped-down form (phone required, name/city optional) that
+    // saves the recording as a visit meeting.
     navItems = [
       { href: '/direct', key: 'direct', label: 'Recordings', icon: LayoutDashboard },
+      { href: '/new-meeting', key: 'new', label: 'Start meeting', icon: Plus },
     ];
   } else {
     navItems = [

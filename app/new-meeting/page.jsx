@@ -10,7 +10,7 @@ export default async function NewMeetingPage() {
 
   return (
     <AppShell user={session.user} current="new">
-      <NewMeetingClient user={{ id: session.user.id, name: session.user.name, email: session.user.email }} />
+      <NewMeetingClient user={{ id: session.user.id, name: session.user.name, email: session.user.email, role: session.user.role }} />
     </AppShell>
   );
 }

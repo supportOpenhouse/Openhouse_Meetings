@@ -19,6 +19,7 @@ import {
   X,
   Handshake,
   Save,
+  Home,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import Toast from '@/components/Toast';
@@ -42,6 +43,12 @@ const STALL_FAIL_AT100_MS = 120_000;
 
 export default function NewMeetingClient({ user }) {
   const router = useRouter();
+  // Direct RMs use a stripped-down version of this whole flow: just phone (+
+  // optional name/city), meeting_type locked to 'visit', and Back/Cancel go
+  // home to /direct instead of /dashboard. The Recorder + upload pipeline
+  // afterwards are identical to the regular RM flow.
+  const isDirectRm = user?.role === 'direct_rm';
+  const homeHref = isDirectRm ? '/direct' : '/dashboard';
   const [step, setStep] = useState('form'); // form | record | review | process
   // Holds the Recorder instance methods (pause/resume/finalize/discard).
   const recorderRef = useRef(null);
@@ -52,7 +59,7 @@ export default function NewMeetingClient({ user }) {
     cp_name: '',
     cp_city: '',
     purpose: '',
-    meeting_type: '',
+    meeting_type: isDirectRm ? 'visit' : '',
   });
   // Onboarding flow toggle. When true, the prospective CP has no cp_code yet:
   // the form collapses to just name (mandatory) + phone (optional) and the
@@ -381,7 +388,7 @@ export default function NewMeetingClient({ user }) {
       }
 
       showToast('Recording saved — processing in background', 'success');
-      router.push('/dashboard');
+      router.push(homeHref);
       // Force a fresh server fetch so the new row (still status='processing') is in
       // the cached Router data before polling takes over.
       router.refresh();
@@ -480,7 +487,7 @@ export default function NewMeetingClient({ user }) {
       });
       setStage({ uploading: 'done' });
       showToast('Recording uploaded — processing in background', 'success');
-      router.push('/dashboard');
+      router.push(homeHref);
       router.refresh();
     } catch (err) {
       setUploadStatus('failed');
@@ -504,7 +511,7 @@ export default function NewMeetingClient({ user }) {
     // Brief delay so the browser finishes writing the file before the page
     // unloads (the blob URL is revoked on navigation).
     setTimeout(() => {
-      router.push('/dashboard');
+      router.push(homeHref);
       router.refresh();
     }, 700);
   }
@@ -585,7 +592,9 @@ export default function NewMeetingClient({ user }) {
     setCpLookup({ state: 'idle' });
   }
 
-  const canStart = isOnboarding
+  const canStart = isDirectRm
+    ? !!form.cp_mobile.trim()
+    : isOnboarding
     ? !!form.cp_name.trim()
     : form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type;
 
@@ -595,7 +604,7 @@ export default function NewMeetingClient({ user }) {
         <>
           <button
             className="oh-btn ghost oh-back"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push(homeHref)}
           >
             <ArrowLeft size={14} /> Back
           </button>
@@ -609,22 +618,86 @@ export default function NewMeetingClient({ user }) {
           </p>
 
           <div className="oh-form">
-            <button
-              type="button"
-              className={`oh-onboard-toggle ${isOnboarding ? 'on' : ''}`}
-              onClick={() => setIsOnboarding((v) => !v)}
-              title="Toggle if this is a pitch to a prospective CP who isn't onboarded yet"
-            >
-              <span className="check">{isOnboarding ? <CheckCircle2 size={16} /> : <Handshake size={16} />}</span>
-              <span className="oh-onboard-text">
-                <span className="oh-onboard-title">NEW CP</span>
-                <span className="oh-onboard-sub">
-                  Is this a CP onboarding meeting (no CP code)?
+            {!isDirectRm && (
+              <button
+                type="button"
+                className={`oh-onboard-toggle ${isOnboarding ? 'on' : ''}`}
+                onClick={() => setIsOnboarding((v) => !v)}
+                title="Toggle if this is a pitch to a prospective CP who isn't onboarded yet"
+              >
+                <span className="check">{isOnboarding ? <CheckCircle2 size={16} /> : <Handshake size={16} />}</span>
+                <span className="oh-onboard-text">
+                  <span className="oh-onboard-title">NEW CP</span>
+                  <span className="oh-onboard-sub">
+                    Is this a CP onboarding meeting (no CP code)?
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+            )}
 
-            {isOnboarding ? (
+            {isDirectRm ? (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    background: 'rgba(196, 122, 26, 0.08)',
+                    border: '1px solid rgba(196, 122, 26, 0.25)',
+                    color: '#b97417',
+                    borderRadius: 9,
+                    padding: '9px 12px',
+                    fontSize: 13,
+                    marginBottom: 14,
+                  }}
+                >
+                  <Home size={14} />
+                  <span>
+                    Site visit assessment — saved as a{' '}
+                    <strong style={{ color: 'var(--ink)' }}>visit</strong> meeting.
+                  </span>
+                </div>
+                <div className="oh-field">
+                  <label>
+                    <Phone size={11} style={{ display: 'inline', marginRight: 4 }} /> Buyer mobile <span className="oh-req">*</span>
+                  </label>
+                  <input
+                    className="oh-input"
+                    placeholder="98XXXXXXXX"
+                    value={form.cp_mobile}
+                    onChange={(e) => setForm({ ...form, cp_mobile: e.target.value })}
+                    inputMode="tel"
+                    autoComplete="off"
+                    autoFocus
+                  />
+                </div>
+                <div className="oh-form-row-2">
+                  <div className="oh-field">
+                    <label>
+                      <User size={11} style={{ display: 'inline', marginRight: 4 }} /> Buyer name (optional)
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="Their name"
+                      value={form.cp_name}
+                      onChange={(e) => setForm({ ...form, cp_name: e.target.value })}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="oh-field">
+                    <label>
+                      <MapPin size={11} style={{ display: 'inline', marginRight: 4 }} /> City (optional)
+                    </label>
+                    <input
+                      className="oh-input"
+                      placeholder="e.g. Gurugram"
+                      value={form.cp_city}
+                      onChange={(e) => setForm({ ...form, cp_city: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : isOnboarding ? (
               <>
                 <div className="oh-form-row-2">
                   <div className="oh-field">
@@ -755,7 +828,7 @@ export default function NewMeetingClient({ user }) {
               </button>
               <button
                 className="oh-btn ghost"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push(homeHref)}
               >
                 Cancel
               </button>
@@ -952,7 +1025,7 @@ export default function NewMeetingClient({ user }) {
                   )}
                   <button
                     className="oh-btn ghost"
-                    onClick={() => router.push('/dashboard')}
+                    onClick={() => router.push(homeHref)}
                   >
                     Back to dashboard
                   </button>
