@@ -146,6 +146,12 @@ export async function POST(request) {
             'video/mp4',
           ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500 MB ceiling
+          // Append a random suffix so a retry (after a failed /create or a
+          // stalled commit) doesn't fail with "blob already exists" — the
+          // deterministic CP+timestamp filename would otherwise collide with
+          // whatever bytes the previous attempt committed. The client cannot
+          // set this itself; it has to be authorised here at token-sign time.
+          addRandomSuffix: true,
           tokenPayload: JSON.stringify({
             userId: session.user.id,
             email: session.user.email,

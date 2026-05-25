@@ -326,12 +326,8 @@ export default function NewMeetingClient({ user }) {
         access: 'public',
         handleUploadUrl: '/api/upload-url',
         contentType: blob.type || 'audio/webm',
-        // Append a random suffix so every upload attempt has a unique path.
-        // Retries (after a failed /create or a stalled commit) won't collide
-        // with a partially-committed blob from the previous attempt — the
-        // alternative `allowOverwrite` requires server-side handleUpload
-        // cooperation that the token-signing route doesn't expose today.
-        addRandomSuffix: true,
+        // `addRandomSuffix` is configured server-side in /api/upload-url —
+        // the client `upload()` rejects passing it here.
         onUploadProgress: (e) => {
           lastProgressAtRef.current = Date.now();
           setUploadStatus('progress');
