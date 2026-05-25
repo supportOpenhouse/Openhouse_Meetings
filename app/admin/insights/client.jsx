@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles,
   RefreshCw,
@@ -41,6 +41,12 @@ const TAB_INSIGHTS = {
   direct: ['direct_demand', 'direct_blockers', 'direct_pipeline', 'direct_awareness'],
   cross_cut: ['cross_growth', 'cross_pipeline'],
 };
+
+// Context that lets every Tier-1 widget (Stat, TempStat, BarRow, DistBars)
+// open a drill-down modal of the recordings behind its number — without
+// prop-drilling the current filter state and the URL builder through every
+// chart component. The provider sits inside InsightsClient.
+const StatContext = createContext(null);
 
 const INSIGHT_TITLES = {
   visit_societies: 'Top societies buyers want',
@@ -226,6 +232,28 @@ export default function InsightsClient({ initialData }) {
     return s;
   }, [data.savedItems]);
 
+  // Opens a drill-down modal of the recordings behind a Tier-1 stat / bar.
+  // The handler is provided through StatContext so every chart widget can
+  // call it without prop-drilling, while still picking up the live filter
+  // state (since / until / rmFilter).
+  const [openStatModal, setOpenStatModal] = useState(null);
+  const openStat = useCallback(
+    (label, params) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params || {})) {
+        if (v !== null && v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      if (dateSince) qs.set('since', `${dateSince}T00:00:00`);
+      if (dateUntil) qs.set('until', `${dateUntil}T23:59:59`);
+      if (rmFilter !== 'all') qs.set('rm', rmFilter);
+      setOpenStatModal({
+        label,
+        fetchUrl: `/api/admin/insights/stat-meetings?${qs.toString()}`,
+      });
+    },
+    [dateSince, dateUntil, rmFilter]
+  );
+
   async function ask() {
     const q = question.trim();
     if (q.length < 5) return;
@@ -333,11 +361,22 @@ export default function InsightsClient({ initialData }) {
         <TabBtn active={tab === 'ask'} onClick={() => setTab('ask')} icon={Sparkles} label="Ask anything" />
       </div>
 
-      {tab === 'visit' && <VisitTab m={t1.visit} />}
-      {tab === 'engagement' && <EngagementTab m={t1.engagement} />}
-      {tab === 'onboarding' && <OnboardingTab m={t1.onboarding} />}
-      {tab === 'direct' && <DirectTab m={t1.direct} />}
-      {tab === 'cross_cut' && <CrossCutTab cpFocus={t1.cpFocus} />}
+      <StatContext.Provider value={openStat}>
+        {tab === 'visit' && <VisitTab m={t1.visit} />}
+        {tab === 'engagement' && <EngagementTab m={t1.engagement} />}
+        {tab === 'onboarding' && <OnboardingTab m={t1.onboarding} />}
+        {tab === 'direct' && <DirectTab m={t1.direct} />}
+        {tab === 'cross_cut' && <CrossCutTab cpFocus={t1.cpFocus} />}
+      </StatContext.Provider>
+
+      {openStatModal && (
+        <MentionsModal
+          label={openStatModal.label}
+          fetchUrl={openStatModal.fetchUrl}
+          subtitle="in this slice"
+          onClose={() => setOpenStatModal(null)}
+        />
+      )}
 
       {tab !== 'ask' && (
         <div className="oh-ins-ai-section">
@@ -497,18 +536,45 @@ function StatGrid({ children }) {
 }
 
 function VisitTab({ m }) {
+  const openStat = useContext(StatContext);
   return (
     <div>
       <StatGrid>
-        <Stat label="Site visits" value={m.total} />
-        <Stat label="Immediate buyers" value={m.immediateBuyers} accent />
-        <Stat label="Avg lead score" value={m.avgScore != null ? `${m.avgScore}/100` : '—'} />
-        <TempStat mix={m.byClassification} labels={['hot', 'warm', 'cold']} />
+        <Stat
+          label="Site visits"
+          value={m.total}
+          onClick={() => openStat('All site visits', { type: 'visit' })}
+        />
+        <Stat
+          label="Immediate buyers"
+          value={m.immediateBuyers}
+          accent
+          onClick={() =>
+            openStat('Immediate buyers', { type: 'visit', param: 'immediate_closure' })
+          }
+        />
+        <Stat
+          label="Avg lead score"
+          value={m.avgScore != null ? `${m.avgScore}/100` : '—'}
+          onClick={() => openStat('All site visits', { type: 'visit' })}
+        />
+        <TempStat
+          mix={m.byClassification}
+          onSegmentClick={(temp) =>
+            openStat(`${temp[0].toUpperCase() + temp.slice(1)} visits`, { type: 'visit', temp })
+          }
+        />
       </StatGrid>
 
       <Panel title="Visit funnel — what's happening on site">
         {m.funnel.map((f) => (
-          <BarRow key={f.key} label={f.label} pct={f.pct} caption={`${f.met}/${f.total}`} />
+          <BarRow
+            key={f.key}
+            label={f.label}
+            pct={f.pct}
+            caption={`${f.met}/${f.total}`}
+            onClick={() => openStat(f.label, { type: 'visit', param: f.key })}
+          />
         ))}
       </Panel>
 
@@ -537,11 +603,24 @@ function VisitTab({ m }) {
 }
 
 function EngagementTab({ m }) {
+  const openStat = useContext(StatContext);
   return (
     <div>
       <StatGrid>
-        <Stat label="Engagement meetings" value={m.total} />
-        <TempStat mix={m.bySentiment} labels={['hot', 'warm', 'cold']} />
+        <Stat
+          label="Engagement meetings"
+          value={m.total}
+          onClick={() => openStat('All engagement meetings', { type: 'engagement' })}
+        />
+        <TempStat
+          mix={m.bySentiment}
+          onSegmentClick={(temp) =>
+            openStat(`${temp[0].toUpperCase() + temp.slice(1)} engagement meetings`, {
+              type: 'engagement',
+              temp,
+            })
+          }
+        />
       </StatGrid>
       <div className="oh-ins-2col">
         <Panel title="Weekly volume">
@@ -569,18 +648,66 @@ function EngagementTab({ m }) {
 
 function OnboardingTab({ m }) {
   const f = m.outcomeFunnel;
+  const openStat = useContext(StatContext);
   return (
     <div>
       <StatGrid>
-        <Stat label="Onboarding pitches" value={m.total} />
-        <Stat label="Conversion" value={`${m.conversionPct}%`} accent />
-        <Stat label="Will join" value={f.willJoin} />
-        <Stat label="Declined" value={f.declined} />
+        <Stat
+          label="Onboarding pitches"
+          value={m.total}
+          onClick={() => openStat('All onboarding pitches', { type: 'onboarding' })}
+        />
+        <Stat
+          label="Conversion"
+          value={`${m.conversionPct}%`}
+          accent
+          onClick={() =>
+            openStat('Will-join CPs', { type: 'onboarding', outcome: 'will_join' })
+          }
+        />
+        <Stat
+          label="Will join"
+          value={f.willJoin}
+          onClick={() =>
+            openStat('Will-join CPs', { type: 'onboarding', outcome: 'will_join' })
+          }
+        />
+        <Stat
+          label="Declined"
+          value={f.declined}
+          onClick={() =>
+            openStat('Declined CPs', { type: 'onboarding', outcome: 'declined' })
+          }
+        />
       </StatGrid>
       <Panel title="Outcome funnel">
-        <BarRow label="Will join" pct={pct(f.willJoin, m.total)} caption={String(f.willJoin)} tone="ok" />
-        <BarRow label="Undecided" pct={pct(f.undecided, m.total)} caption={String(f.undecided)} tone="warn" />
-        <BarRow label="Declined" pct={pct(f.declined, m.total)} caption={String(f.declined)} tone="bad" />
+        <BarRow
+          label="Will join"
+          pct={pct(f.willJoin, m.total)}
+          caption={String(f.willJoin)}
+          tone="ok"
+          onClick={() =>
+            openStat('Will-join CPs', { type: 'onboarding', outcome: 'will_join' })
+          }
+        />
+        <BarRow
+          label="Undecided"
+          pct={pct(f.undecided, m.total)}
+          caption={String(f.undecided)}
+          tone="warn"
+          onClick={() =>
+            openStat('Undecided CPs', { type: 'onboarding', outcome: 'undecided' })
+          }
+        />
+        <BarRow
+          label="Declined"
+          pct={pct(f.declined, m.total)}
+          caption={String(f.declined)}
+          tone="bad"
+          onClick={() =>
+            openStat('Declined CPs', { type: 'onboarding', outcome: 'declined' })
+          }
+        />
       </Panel>
       <Panel title="Weekly volume">
         <Sparkbars data={m.volumeByWeek} />
@@ -590,41 +717,63 @@ function OnboardingTab({ m }) {
 }
 
 function DirectTab({ m }) {
+  const openStat = useContext(StatContext);
   if (!m || m.total === 0) {
     return <Empty text="No direct-RM call recordings in this range yet." />;
   }
+  // Drill-down handler for any DistBars row inside this tab.
+  const onCallField = (field, value) =>
+    openStat(`${value}`, { type: 'call', call_field: field, call_value: value });
+
   return (
     <div>
       <StatGrid>
-        <Stat label="Buyer calls" value={m.total} />
-        <Stat label="Hot buyers" value={m.bySentiment.hot} accent />
-        <TempStat mix={m.bySentiment} />
+        <Stat
+          label="Buyer calls"
+          value={m.total}
+          onClick={() => openStat('All buyer calls', { type: 'call' })}
+        />
+        <Stat
+          label="Hot buyers"
+          value={m.bySentiment.hot}
+          accent
+          onClick={() => openStat('Hot buyers', { type: 'call', temp: 'hot' })}
+        />
+        <TempStat
+          mix={m.bySentiment}
+          onSegmentClick={(temp) =>
+            openStat(`${temp[0].toUpperCase() + temp.slice(1)} buyer calls`, {
+              type: 'call',
+              temp,
+            })
+          }
+        />
       </StatGrid>
 
       <div className="oh-ins-2col">
         <Panel title="Buyer journey stage">
-          <DistBars rows={m.journeyStage} total={m.total} />
+          <DistBars rows={m.journeyStage} total={m.total} field="journey_stage" onItemClick={onCallField} />
         </Panel>
         <Panel title="Move-in timeline">
-          <DistBars rows={m.timeline} total={m.total} />
+          <DistBars rows={m.timeline} total={m.total} field="move_in_timeline" onItemClick={onCallField} />
         </Panel>
       </div>
 
       <div className="oh-ins-2col">
         <Panel title="Budget demand">
-          <DistBars rows={m.budget} total={m.total} />
+          <DistBars rows={m.budget} total={m.total} field="budget" onItemClick={onCallField} />
         </Panel>
         <Panel title="BHK configuration demand">
-          <DistBars rows={m.configuration} total={m.total} />
+          <DistBars rows={m.configuration} total={m.total} field="configuration" onItemClick={onCallField} />
         </Panel>
       </div>
 
       <Panel title="What's stopping buyers from booking">
-        <DistBars rows={m.blockers} total={m.total} />
+        <DistBars rows={m.blockers} total={m.total} field="booking_blocker" onItemClick={onCallField} />
       </Panel>
 
       <Panel title="Top buyer frustrations">
-        <DistBars rows={m.frustrations} total={m.total} />
+        <DistBars rows={m.frustrations} total={m.total} field="frustrations" onItemClick={onCallField} />
       </Panel>
 
       <div className="oh-ins-2col">
@@ -652,13 +801,23 @@ function DirectTab({ m }) {
   );
 }
 
-// Renders a {label, n} distribution as proportion bars.
-function DistBars({ rows, total }) {
+// Renders a {label, n} distribution as proportion bars. When `field` and
+// `onItemClick` are provided, each row is clickable and surfaces the calls
+// matching that field=value combination.
+function DistBars({ rows, total, field, onItemClick }) {
   if (!rows || rows.length === 0) return <Empty />;
   return (
     <>
       {rows.map((r, i) => (
-        <BarRow key={i} label={shortLabel(r.label)} pct={pct(r.n, total)} caption={String(r.n)} />
+        <BarRow
+          key={i}
+          label={shortLabel(r.label)}
+          pct={pct(r.n, total)}
+          caption={String(r.n)}
+          onClick={
+            onItemClick && field ? () => onItemClick(field, r.label) : undefined
+          }
+        />
       ))}
     </>
   );
@@ -1108,16 +1267,22 @@ function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveIt
 
 /* ---- mentions modal: the recordings behind an insight item ---- */
 
-function MentionsModal({ label, ids, onClose }) {
+function MentionsModal({ label, ids, fetchUrl, subtitle, onClose }) {
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);       // full meeting object
   const [detailLoadingId, setDetailLoadingId] = useState(null);
 
+  // Opens either by explicit ids (legacy mentions flow) or by a server-side
+  // filter encoded as a URL (Tier-1 stat / funnel / DistBars drill-downs).
+  const url =
+    fetchUrl ||
+    `/api/admin/insights/meetings?ids=${encodeURIComponent((ids || []).join(','))}`;
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     let cancelled = false;
-    fetch(`/api/admin/insights/meetings?ids=${encodeURIComponent(ids.join(','))}`)
+    fetch(url)
       .then((r) => r.json())
       .then((j) => { if (!cancelled) setMeetings(j.meetings || []); })
       .catch(() => { if (!cancelled) setError('Could not load the recordings.'); });
@@ -1125,7 +1290,7 @@ function MentionsModal({ label, ids, onClose }) {
       cancelled = true;
       document.body.style.overflow = '';
     };
-  }, [ids]);
+  }, [url]);
 
   // Fetch the full meeting (transcript, summary, score, audio) and open the
   // same detailed view used on the dashboard.
@@ -1155,8 +1320,12 @@ function MentionsModal({ label, ids, onClose }) {
               </div>
               <h2 className="oh-mention-title">{label}</h2>
               <div style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>
-                {ids.length} {ids.length === 1 ? 'recording' : 'recordings'} behind this insight —
-                tap one to see its transcript &amp; summary
+                {meetings
+                  ? `${meetings.length} ${meetings.length === 1 ? 'recording' : 'recordings'}`
+                  : ids
+                  ? `${ids.length} ${ids.length === 1 ? 'recording' : 'recordings'}`
+                  : '…'}{' '}
+                {subtitle || 'behind this'} — tap one to see its transcript &amp; summary
               </div>
             </div>
             <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
@@ -1282,9 +1451,23 @@ function MentionsModal({ label, ids, onClose }) {
 
 /* ---- small shared bits ---- */
 
-function Stat({ label, value, accent }) {
+function Stat({ label, value, accent, onClick }) {
+  const clickable = !!onClick;
   return (
-    <div className={`oh-ins-stat ${accent ? 'accent' : ''}`}>
+    <div
+      className={`oh-ins-stat ${accent ? 'accent' : ''} ${clickable ? 'clickable' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+            }
+          : undefined
+      }
+      title={clickable ? 'Click to see the recordings behind this number' : undefined}
+    >
       <div className="v">{value}</div>
       <div className="l">{label}</div>
       <style jsx>{`
@@ -1295,6 +1478,12 @@ function Stat({ label, value, accent }) {
           padding: 12px 14px;
         }
         .oh-ins-stat.accent { border-color: var(--accent); background: rgba(184, 52, 28, 0.04); }
+        .oh-ins-stat.clickable {
+          cursor: pointer;
+          transition: border-color 0.12s, transform 0.05s;
+        }
+        .oh-ins-stat.clickable:hover { border-color: var(--ink-2); }
+        .oh-ins-stat.clickable:active { transform: scale(0.997); }
         .v { font-family: 'Instrument Serif', serif; font-size: 28px; line-height: 1; color: var(--ink); }
         .l { font-size: 11.5px; color: var(--ink-3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
       `}</style>
@@ -1302,13 +1491,28 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function TempStat({ mix }) {
+function TempStat({ mix, onSegmentClick }) {
+  const clickable = !!onSegmentClick;
+  const Seg = ({ temp, Icon, n }) =>
+    clickable ? (
+      <button
+        className={`seg ${temp}`}
+        onClick={() => onSegmentClick(temp)}
+        title={`See ${temp} recordings`}
+      >
+        <Icon size={12} /> {n}
+      </button>
+    ) : (
+      <span className={`seg ${temp}`}>
+        <Icon size={12} /> {n}
+      </span>
+    );
   return (
     <div className="oh-ins-stat">
       <div className="row">
-        <span className="hot"><Flame size={12} /> {mix.hot}</span>
-        <span className="warm"><TrendingUp size={12} /> {mix.warm}</span>
-        <span className="cold"><Snowflake size={12} /> {mix.cold}</span>
+        <Seg temp="hot" Icon={Flame} n={mix.hot} />
+        <Seg temp="warm" Icon={TrendingUp} n={mix.warm} />
+        <Seg temp="cold" Icon={Snowflake} n={mix.cold} />
       </div>
       <div className="l">Hot / Warm / Cold</div>
       <style jsx>{`
@@ -1318,8 +1522,17 @@ function TempStat({ mix }) {
           border-radius: 10px;
           padding: 12px 14px;
         }
-        .row { display: flex; gap: 12px; font-family: 'Geist Mono', monospace; font-size: 17px; }
-        .row span { display: inline-flex; align-items: center; gap: 4px; }
+        .row { display: flex; gap: 8px; font-family: 'Geist Mono', monospace; font-size: 17px; }
+        .seg {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 6px;
+          border-radius: 6px;
+          all: unset;
+        }
+        button.seg { cursor: pointer; transition: background 0.12s; }
+        button.seg:hover { background: var(--paper-2); }
         .hot { color: #b8341c; }
         .warm { color: #b97417; }
         .cold { color: #4a6b7a; }
@@ -1355,10 +1568,24 @@ function Panel({ title, children }) {
   );
 }
 
-function BarRow({ label, pct, caption, tone }) {
+function BarRow({ label, pct, caption, tone, onClick }) {
   const color = tone === 'ok' ? '#2f6f2f' : tone === 'warn' ? '#b97417' : tone === 'bad' ? '#b03021' : 'var(--accent)';
+  const clickable = !!onClick;
   return (
-    <div className="oh-bar-row">
+    <div
+      className={`oh-bar-row ${clickable ? 'clickable' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+            }
+          : undefined
+      }
+      title={clickable ? 'Click to see the recordings behind this row' : undefined}
+    >
       <div className="oh-bar-label">{label}</div>
       <div className="oh-bar-track">
         <div className="oh-bar-fill" style={{ width: `${Math.min(100, pct)}%`, background: color }} />
@@ -1371,9 +1598,17 @@ function BarRow({ label, pct, caption, tone }) {
           gap: 10px;
           align-items: center;
           padding: 4px 0;
+          border-radius: 5px;
         }
+        .oh-bar-row.clickable {
+          cursor: pointer;
+          margin: 0 -6px;
+          padding: 4px 6px;
+        }
+        .oh-bar-row.clickable:hover { background: var(--paper-2); }
         .oh-bar-label { font-size: 12.5px; color: var(--ink-2); }
         .oh-bar-track { height: 8px; background: var(--paper-2); border-radius: 999px; overflow: hidden; }
+        .oh-bar-row.clickable .oh-bar-track { background: var(--paper); }
         .oh-bar-fill { height: 100%; border-radius: 999px; }
         .oh-bar-caption { font-size: 11px; font-family: 'Geist Mono', monospace; color: var(--ink-3); text-align: right; }
         @media (max-width: 600px) {
