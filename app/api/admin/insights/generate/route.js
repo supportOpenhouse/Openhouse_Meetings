@@ -9,8 +9,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 // POST /api/admin/insights/generate
-// Body: { insight_key, period }
+// Body: { insight_key, period, since?, until?, rmId? }
 // Runs one standard Claude insight over the corpus, caches it, returns it.
+// Custom filters (since/until/rmId) scope the corpus before Claude sees it.
 export async function POST(request) {
   const session = await auth();
   if (!session?.user || session.user.role !== 'admin') {
@@ -21,6 +22,9 @@ export async function POST(request) {
   try { body = await request.json(); } catch { body = {}; }
   const insightKey = body?.insight_key;
   const period = parseInt(body?.period || '90', 10) || 90;
+  const since = body?.since || null;
+  const until = body?.until || null;
+  const rmId = body?.rmId && body.rmId !== 'all' ? body.rmId : null;
 
   const def = STANDARD_INSIGHTS[insightKey];
   if (!def) {
@@ -28,7 +32,7 @@ export async function POST(request) {
   }
 
   try {
-    const { result, meetingCount } = await generateStandardInsight(insightKey, period);
+    const { result, meetingCount } = await generateStandardInsight(insightKey, period, { since, until, rmId });
     const sql = neon(process.env.DATABASE_URL);
     const [row] = await sql`
       INSERT INTO insights (scope, insight_key, title, result, meeting_count, period_days, generated_by)

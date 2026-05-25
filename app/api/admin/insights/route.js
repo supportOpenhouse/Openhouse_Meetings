@@ -23,15 +23,21 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const period = parseInt(searchParams.get('period') || '90', 10) || 90;
+  const since = searchParams.get('since') || null;
+  const until = searchParams.get('until') || null;
+  const rm = searchParams.get('rm');
+  const rmId = rm && rm !== 'all' ? rm : null;
+  const opts = { since, until, rmId };
 
   const sql = neon(process.env.DATABASE_URL);
 
   const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom] = await Promise.all([
-    getVisitMetrics(period),
-    getEngagementMetrics(period),
-    getOnboardingMetrics(period),
-    getCallMetrics(period),
-    getCpFocusList(15),
+    getVisitMetrics(period, opts),
+    getEngagementMetrics(period, opts),
+    getOnboardingMetrics(period, opts),
+    getCallMetrics(period, opts),
+    // CP focus is RM-assignment scoped, not meeting-RM-scoped — pass rmId through.
+    getCpFocusList(15, rmId),
     // Standard insights: latest row per (scope, insight_key).
     sql`
       SELECT DISTINCT ON (scope, insight_key)
@@ -55,6 +61,7 @@ export async function GET(request) {
 
   return NextResponse.json({
     period,
+    filters: { since, until, rmId },
     tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,

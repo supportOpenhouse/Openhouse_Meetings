@@ -34,7 +34,7 @@ export async function POST(request) {
   const storedKey = rmId ? `${insightKey}#${rmId}` : insightKey;
 
   try {
-    const { result, meetingCount } = await generateStandardInsight(insightKey, period, rmId);
+    const { result, meetingCount } = await generateStandardInsight(insightKey, period, { assignedToRmId: rmId });
     const sql = neon(process.env.DATABASE_URL);
     const [row] = await sql`
       INSERT INTO insights (scope, insight_key, title, result, meeting_count, period_days, generated_by)

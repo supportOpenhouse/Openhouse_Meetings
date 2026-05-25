@@ -22,6 +22,9 @@ export async function POST(request) {
   const question = String(body?.question || '').trim();
   const scope = body?.scope || 'all';
   const period = parseInt(body?.period || '90', 10) || 90;
+  const since = body?.since || null;
+  const until = body?.until || null;
+  const rmId = body?.rmId && body.rmId !== 'all' ? body.rmId : null;
 
   if (!question || question.length < 5) {
     return NextResponse.json({ error: 'Question is too short' }, { status: 400 });
@@ -31,7 +34,7 @@ export async function POST(request) {
   }
 
   try {
-    const { result, meetingCount } = await answerCustomQuestion(question, scope, period);
+    const { result, meetingCount } = await answerCustomQuestion(question, scope, period, { since, until, rmId });
     const sql = neon(process.env.DATABASE_URL);
     const [row] = await sql`
       INSERT INTO insights (scope, insight_key, title, question, result, meeting_count, period_days, generated_by)

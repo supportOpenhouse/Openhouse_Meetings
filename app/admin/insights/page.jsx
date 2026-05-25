@@ -9,6 +9,7 @@ import {
   getCallMetrics,
   getCpFocusList,
 } from '@/lib/analytics';
+import { listRMs } from '@/lib/queries';
 import InsightsClient from './client';
 
 export default async function InsightsPage() {
@@ -19,7 +20,7 @@ export default async function InsightsPage() {
   const period = 90;
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, rms] = await Promise.all([
     getVisitMetrics(period),
     getEngagementMetrics(period),
     getOnboardingMetrics(period),
@@ -39,16 +40,22 @@ export default async function InsightsPage() {
       ORDER BY generated_at DESC
       LIMIT 20
     `,
+    listRMs(),
   ]);
 
   const standard = {};
   for (const row of standardRows) standard[row.insight_key] = row;
 
+  // Default date window — computed in IST on the server so it matches what
+  // the client computes during hydration (avoids a date input mismatch).
   const initial = {
     period,
+    defaultSince: istDateValue(period || 90),
+    defaultUntil: istDateValue(0),
     tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,
+    rms,
   };
 
   return (
@@ -56,4 +63,16 @@ export default async function InsightsPage() {
       <InsightsClient initialData={JSON.parse(JSON.stringify(initial))} />
     </AppShell>
   );
+}
+
+// YYYY-MM-DD for the IST calendar date N days ago (0 = today). Deterministic
+// regardless of where it runs, so it produces the same string on both sides
+// of an SSR → hydration boundary.
+function istDateValue(offsetDays = 0) {
+  const ms = Date.now() + 5.5 * 3600 * 1000 - offsetDays * 86400000;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

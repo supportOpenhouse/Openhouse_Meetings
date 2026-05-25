@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles,
   RefreshCw,
@@ -17,6 +17,8 @@ import {
   X,
   Volume2,
   Phone,
+  Calendar,
+  Users,
 } from 'lucide-react';
 import { ChevronRight } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
@@ -56,9 +58,20 @@ const INSIGHT_TITLES = {
 
 export default function InsightsClient({ initialData }) {
   const [data, setData] = useState(initialData);
-  const [period, setPeriod] = useState(initialData.period);
+  const rms = initialData.rms || [];
+  // Single source of truth for the date window: dateSince + dateUntil. Period
+  // preset buttons are shortcuts that write into these. Defaults are computed
+  // on the server (IST) and passed in via initialData so SSR + hydration
+  // produce identical date strings.
+  const [dateSince, setDateSince] = useState(initialData.defaultSince || nDaysAgoValue(initialData.period || 90));
+  const [dateUntil, setDateUntil] = useState(initialData.defaultUntil || todayValue());
+  // Guard time-dependent display (active-preset highlight, "Custom range" tag)
+  // until after mount — avoids any hydration drift around the IST midnight tick.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const [rmFilter, setRmFilter] = useState('all');
   const [tab, setTab] = useState('visit');
-  const [loadingPeriod, setLoadingPeriod] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(null);
   const [genError, setGenError] = useState(null);
 
@@ -68,15 +81,85 @@ export default function InsightsClient({ initialData }) {
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(null);
 
-  async function changePeriod(p) {
-    setPeriod(p);
-    setLoadingPeriod(true);
+  // Which preset (if any) the current date window matches — so the right
+  // pill highlights, and the date inputs feel coordinated with the presets.
+  const activePresetValue = useMemo(() => {
+    if (!dateSince && !dateUntil) return 0; // All time
+    const today = todayValue();
+    if (dateUntil !== today) return -1; // custom
+    if (dateSince === nDaysAgoValue(30)) return 30;
+    if (dateSince === nDaysAgoValue(90)) return 90;
+    return -1;
+  }, [dateSince, dateUntil]);
+
+  // Equivalent periodDays for the server (used as storage hint on cached
+  // insights). 0 = all time. Custom range computes the day span.
+  const period = useMemo(() => {
+    if (!dateSince) return 0;
+    const s = new Date(`${dateSince}T00:00:00`);
+    const u = dateUntil ? new Date(`${dateUntil}T23:59:59`) : new Date();
+    if (isNaN(s) || isNaN(u)) return 0;
+    return Math.max(1, Math.round((u - s) / 86400000));
+  }, [dateSince, dateUntil]);
+
+  // Mounted guard — avoids briefly flashing the Clear button during hydration
+  // if IST-day math drifts between server and client.
+  const filtersActive = mounted && (activePresetValue !== 90 || rmFilter !== 'all');
+
+  function applyPreset(value) {
+    if (value === 0) {
+      setDateSince('');
+      setDateUntil('');
+    } else {
+      setDateSince(nDaysAgoValue(value));
+      setDateUntil(todayValue());
+    }
+  }
+
+  function clearFilters() {
+    setDateSince(nDaysAgoValue(90));
+    setDateUntil(todayValue());
+    setRmFilter('all');
+  }
+
+  // Build the API querystring from current filters.
+  const filterParams = useCallback(() => {
+    const qs = new URLSearchParams();
+    qs.set('period', String(period));
+    if (dateSince) qs.set('since', `${dateSince}T00:00:00`);
+    if (dateUntil) qs.set('until', `${dateUntil}T23:59:59`);
+    if (rmFilter !== 'all') qs.set('rm', rmFilter);
+    return qs;
+  }, [period, dateSince, dateUntil, rmFilter]);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
     try {
-      const r = await fetch(`/api/admin/insights?period=${p}`);
+      const r = await fetch(`/api/admin/insights?${filterParams().toString()}`);
       if (r.ok) setData(await r.json());
     } finally {
-      setLoadingPeriod(false);
+      setLoading(false);
     }
+  }, [filterParams]);
+
+  // Auto-refetch when filters change, debounced so rapid date-keystroke edits
+  // collapse into one request. Skip the very first render — initialData is
+  // already in state.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    const t = setTimeout(refetch, 300);
+    return () => clearTimeout(t);
+  }, [refetch]);
+
+  // The filter payload AI insights + Ask must use.
+  function filterBody() {
+    return {
+      period,
+      since: dateSince ? `${dateSince}T00:00:00` : null,
+      until: dateUntil ? `${dateUntil}T23:59:59` : null,
+      rmId: rmFilter !== 'all' ? rmFilter : null,
+    };
   }
 
   async function generate(insightKey) {
@@ -86,7 +169,7 @@ export default function InsightsClient({ initialData }) {
       const r = await fetch('/api/admin/insights/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ insight_key: insightKey, period }),
+        body: JSON.stringify({ insight_key: insightKey, ...filterBody() }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'Generation failed');
@@ -107,7 +190,7 @@ export default function InsightsClient({ initialData }) {
       const r = await fetch('/api/admin/insights/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, scope: askScope, period }),
+        body: JSON.stringify({ question: q, scope: askScope, ...filterBody() }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'Question failed');
@@ -138,14 +221,61 @@ export default function InsightsClient({ initialData }) {
           {PERIODS.map((p) => (
             <button
               key={p.value}
-              className={`oh-ins-period ${period === p.value ? 'active' : ''}`}
-              onClick={() => changePeriod(p.value)}
-              disabled={loadingPeriod}
+              className={`oh-ins-period ${mounted && activePresetValue === p.value ? 'active' : ''}`}
+              onClick={() => applyPreset(p.value)}
+              disabled={loading}
             >
               {p.label}
             </button>
           ))}
-          {loadingPeriod && <Loader2 size={14} className="oh-spin" />}
+          {mounted && activePresetValue === -1 && (
+            <span className="oh-ins-custom-tag">Custom range</span>
+          )}
+          {loading && <Loader2 size={14} className="oh-spin" />}
+        </div>
+
+        <div className="oh-ins-filter-row">
+          <label className="oh-ins-field">
+            <span><Calendar size={11} /> From</span>
+            <input
+              className="oh-input oh-date"
+              type="date"
+              value={dateSince}
+              onChange={(e) => setDateSince(e.target.value)}
+              aria-label="From date"
+            />
+          </label>
+          <label className="oh-ins-field">
+            <span><Calendar size={11} /> To</span>
+            <input
+              className="oh-input oh-date"
+              type="date"
+              value={dateUntil}
+              onChange={(e) => setDateUntil(e.target.value)}
+              aria-label="To date"
+            />
+          </label>
+          {rms.length > 0 && (
+            <label className="oh-ins-field">
+              <span><Users size={11} /> RM</span>
+              <select
+                className="oh-select"
+                value={rmFilter}
+                onChange={(e) => setRmFilter(e.target.value)}
+                aria-label="Filter by RM"
+              >
+                <option value="all">All RMs</option>
+                {rms.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name || r.email}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {filtersActive && (
+            <button type="button" className="oh-btn ghost oh-ins-clear" onClick={clearFilters}>
+              <X size={13} /> Clear filters
+            </button>
+          )}
         </div>
       </div>
 
@@ -198,7 +328,7 @@ export default function InsightsClient({ initialData }) {
 
       <style jsx>{`
         .oh-ins-toolbar { margin: 16px 0 8px; }
-        .oh-ins-periods { display: flex; gap: 6px; align-items: center; }
+        .oh-ins-periods { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
         .oh-ins-period {
           all: unset;
           cursor: pointer;
@@ -213,6 +343,35 @@ export default function InsightsClient({ initialData }) {
           color: var(--paper);
           border-color: var(--ink);
         }
+        .oh-ins-custom-tag {
+          font-size: 11px;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--ink-3);
+          margin-left: 4px;
+        }
+        .oh-ins-filter-row {
+          display: flex;
+          gap: 12px;
+          align-items: flex-end;
+          flex-wrap: wrap;
+          margin-top: 12px;
+        }
+        .oh-ins-field {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .oh-ins-field > span {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10.5px;
+          color: var(--ink-3);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .oh-ins-clear { align-self: flex-end; }
         .oh-ins-tabs {
           display: flex;
           gap: 4px;
@@ -1176,6 +1335,21 @@ function relative(iso) {
   if (d < 3600) return `${Math.round(d / 60)}m ago`;
   if (d < 86400) return `${Math.round(d / 3600)}h ago`;
   return `${Math.round(d / 86400)}d ago`;
+}
+
+// IST-calendar YYYY-MM-DD helpers for the date-range filter inputs. Computed
+// deterministically (Date.now + offset) so SSR and client first-render
+// produce the same string — no hydration drift on input values.
+function nDaysAgoValue(n) {
+  const ms = Date.now() + 5.5 * 3600 * 1000 - n * 86400000;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function todayValue() {
+  return nDaysAgoValue(0);
 }
 
 // Survey option strings carry a "— description" tail; show only the lead part.
