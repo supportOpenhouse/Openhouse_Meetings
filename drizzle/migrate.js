@@ -137,6 +137,9 @@ async function run() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS insights_scope_key_idx ON insights(scope, insight_key)`;
   await sql`CREATE INDEX IF NOT EXISTS insights_generated_at_idx ON insights(generated_at DESC)`;
+  // Admin "save" feature — pinned rows persist past the next regenerate.
+  await sql`ALTER TABLE insights ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false`;
+  await sql`CREATE INDEX IF NOT EXISTS insights_pinned_idx ON insights(pinned) WHERE pinned = true`;
 
   console.log('Creating cp_assignments table...');
   await sql`

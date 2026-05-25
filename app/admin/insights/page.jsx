@@ -20,7 +20,7 @@ export default async function InsightsPage() {
   const period = 90;
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, rms] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinned, rms] = await Promise.all([
     getVisitMetrics(period),
     getEngagementMetrics(period),
     getOnboardingMetrics(period),
@@ -28,17 +28,23 @@ export default async function InsightsPage() {
     getCpFocusList(15),
     sql`
       SELECT DISTINCT ON (scope, insight_key)
-        id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at
+        id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
       FROM insights
       WHERE insight_key <> 'custom'
       ORDER BY scope, insight_key, generated_at DESC
     `,
     sql`
-      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at
+      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
       FROM insights
       WHERE insight_key = 'custom'
       ORDER BY generated_at DESC
       LIMIT 20
+    `,
+    sql`
+      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
+      FROM insights
+      WHERE pinned = true
+      ORDER BY scope, generated_at DESC
     `,
     listRMs(),
   ]);
@@ -55,6 +61,7 @@ export default async function InsightsPage() {
     tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,
+    pinned,
     rms,
   };
 

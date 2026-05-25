@@ -31,7 +31,7 @@ export async function GET(request) {
 
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinnedList] = await Promise.all([
     getVisitMetrics(period, opts),
     getEngagementMetrics(period, opts),
     getOnboardingMetrics(period, opts),
@@ -41,18 +41,25 @@ export async function GET(request) {
     // Standard insights: latest row per (scope, insight_key).
     sql`
       SELECT DISTINCT ON (scope, insight_key)
-        id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at
+        id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
       FROM insights
       WHERE insight_key <> 'custom'
       ORDER BY scope, insight_key, generated_at DESC
     `,
     // Custom questions: every row, most recent first (do NOT dedupe).
     sql`
-      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at
+      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
       FROM insights
       WHERE insight_key = 'custom'
       ORDER BY generated_at DESC
       LIMIT 20
+    `,
+    // Pinned insights — admin-saved snapshots, kept past the next regenerate.
+    sql`
+      SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
+      FROM insights
+      WHERE pinned = true
+      ORDER BY scope, generated_at DESC
     `,
   ]);
 
@@ -65,5 +72,6 @@ export async function GET(request) {
     tier1: { visit, engagement, onboarding, direct, cpFocus },
     standard,
     custom,
+    pinned: pinnedList,
   });
 }

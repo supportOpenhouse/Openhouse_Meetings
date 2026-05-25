@@ -19,6 +19,9 @@ import {
   Phone,
   Calendar,
   Users,
+  Bookmark,
+  BookmarkCheck,
+  Trash2,
 } from 'lucide-react';
 import { ChevronRight } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
@@ -181,6 +184,43 @@ export default function InsightsClient({ initialData }) {
     }
   }
 
+  // Pin a generated insight — it survives future Refresh clicks and shows up
+  // in the "Saved insights" section at the bottom of its tab.
+  async function savePinned(id) {
+    try {
+      const r = await fetch(`/api/admin/insights/${id}/pin`, { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'Save failed');
+      setData((d) => ({
+        ...d,
+        standard: Object.fromEntries(
+          Object.entries(d.standard || {}).map(([k, v]) => [
+            k,
+            v && v.id === id ? { ...v, pinned: true } : v,
+          ])
+        ),
+        pinned: [j.insight, ...(d.pinned || []).filter((p) => p.id !== id)],
+      }));
+    } catch (e) {
+      setGenError({ key: null, message: e.message });
+    }
+  }
+
+  // Delete a saved insight row. If it happened to be the displayed-latest for
+  // its key, the next refetch surfaces whatever older row exists.
+  async function deletePinned(id) {
+    if (!confirm('Delete this saved insight?')) return;
+    try {
+      const r = await fetch(`/api/admin/insights/${id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'Delete failed');
+      setData((d) => ({ ...d, pinned: (d.pinned || []).filter((p) => p.id !== id) }));
+      refetch();
+    } catch (e) {
+      setGenError({ key: null, message: e.message });
+    }
+  }
+
   async function ask() {
     const q = question.trim();
     if (q.length < 5) return;
@@ -308,9 +348,17 @@ export default function InsightsClient({ initialData }) {
               generating={generating === key}
               error={genError?.key === key ? genError.message : null}
               onGenerate={() => generate(key)}
+              onSave={savePinned}
             />
           ))}
         </div>
+      )}
+
+      {tab !== 'ask' && (
+        <SavedInsightsSection
+          pinned={(data.pinned || []).filter((p) => p.scope === tab)}
+          onDelete={deletePinned}
+        />
       )}
 
       {tab === 'ask' && (
@@ -733,15 +781,33 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
 
 /* ---- AI insight card ---- */
 
-function InsightCard({ insightKey, title, cached, generating, error, onGenerate }) {
+function InsightCard({ insightKey, title, cached, generating, error, onGenerate, onSave }) {
+  const isPinned = !!cached?.pinned;
   return (
     <div className="oh-ins-card">
       <div className="oh-ins-card-head">
         <div className="oh-ins-card-title">{title}</div>
-        <button className="oh-btn ghost" onClick={onGenerate} disabled={generating}>
-          {generating ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
-          {generating ? 'Generating…' : cached ? 'Refresh' : 'Generate'}
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {cached && onSave && (
+            <button
+              className="oh-btn ghost"
+              onClick={() => onSave(cached.id)}
+              disabled={isPinned}
+              title={
+                isPinned
+                  ? 'Saved — see "Saved insights" below. Regenerate to save a new version.'
+                  : 'Save this insight so it survives future Refresh clicks'
+              }
+            >
+              {isPinned ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+              {isPinned ? 'Saved' : 'Save'}
+            </button>
+          )}
+          <button className="oh-btn ghost" onClick={onGenerate} disabled={generating}>
+            {generating ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
+            {generating ? 'Generating…' : cached ? 'Refresh' : 'Generate'}
+          </button>
+        </div>
       </div>
       {error && <div className="oh-ask-err" style={{ marginTop: 8 }}><AlertCircle size={13} /> {error}</div>}
       {!cached && !generating && !error && (
@@ -778,6 +844,67 @@ function InsightCard({ insightKey, title, cached, generating, error, onGenerate 
           border-radius: 8px;
           padding: 10px 12px;
         }
+        .oh-ins-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
+      `}</style>
+    </div>
+  );
+}
+
+// "Saved insights" — the admin's pinned snapshots for the current tab.
+// Each one was a specific Refresh result the admin chose to keep around;
+// they stay until the trash icon is clicked.
+function SavedInsightsSection({ pinned, onDelete }) {
+  if (!pinned || pinned.length === 0) return null;
+  return (
+    <div className="oh-ins-saved-section">
+      <div className="oh-ins-section-head">
+        <Bookmark size={14} /> Saved insights ({pinned.length})
+      </div>
+      {pinned.map((p) => (
+        <div key={p.id} className="oh-ins-saved-card">
+          <div className="oh-ins-saved-head">
+            <div className="oh-ins-saved-title">{p.title}</div>
+            <button
+              className="oh-btn ghost oh-ins-saved-del"
+              onClick={() => onDelete(p.id)}
+              title="Delete this saved insight"
+              aria-label="Delete saved insight"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+          <InsightBody result={p.result} />
+          <div className="oh-ins-meta">
+            {p.meeting_count} meetings · saved {relative(p.generated_at)}
+          </div>
+        </div>
+      ))}
+      <style jsx>{`
+        .oh-ins-saved-section {
+          margin-top: 28px;
+          padding-top: 18px;
+          border-top: 1px dashed var(--border);
+        }
+        .oh-ins-saved-card {
+          background: var(--paper);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 14px 16px;
+          margin-bottom: 10px;
+        }
+        .oh-ins-saved-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+        .oh-ins-saved-title { font-weight: 600; font-size: 14.5px; color: var(--ink); }
+        .oh-ins-saved-del {
+          padding: 6px 10px;
+          color: var(--ink-3);
+          flex-shrink: 0;
+        }
+        .oh-ins-saved-del:hover { color: #b03021; }
         .oh-ins-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
       `}</style>
     </div>

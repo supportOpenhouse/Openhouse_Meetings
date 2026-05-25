@@ -173,10 +173,14 @@ export const insights = pgTable(
     period_days: integer('period_days'), // window the corpus was drawn from (0 = all time)
     generated_at: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
     generated_by: uuid('generated_by').references(() => users.id, { onDelete: 'set null' }),
+    // Admin "Save" button — pinned rows are kept around as named snapshots even
+    // after a fresh Refresh overwrites the displayed-latest for that key.
+    pinned: boolean('pinned').notNull().default(false),
   },
   (t) => ({
     scopeKeyIdx: index('insights_scope_key_idx').on(t.scope, t.insight_key),
     generatedAtIdx: index('insights_generated_at_idx').on(t.generated_at),
+    pinnedIdx: index('insights_pinned_idx').on(t.pinned),
   })
 );
 
