@@ -52,8 +52,11 @@ export async function POST(request) {
         { status: 400 }
       );
     }
-  } else if (!cp_code || !cp_mobile) {
-    return NextResponse.json({ error: 'cp_code and cp_mobile required' }, { status: 400 });
+  } else if (!cp_mobile) {
+    // Engagement meetings normally have a cp_code too — the new-meeting form
+    // enforces it at the UI level. Visit meetings (including direct-RM site
+    // visits) only need the buyer's phone, so cp_code is optional here.
+    return NextResponse.json({ error: 'cp_mobile required' }, { status: 400 });
   }
 
   // Same SSRF guard the old endpoint had — only accept our own Blob host.
