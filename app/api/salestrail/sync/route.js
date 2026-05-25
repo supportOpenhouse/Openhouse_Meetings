@@ -10,6 +10,9 @@ import {
   listCallsByCreated,
   fetchRecording,
   isSyncWeekday,
+  isWithinSyncHours,
+  SYNC_START_HOUR_IST,
+  SYNC_END_HOUR_IST,
   extForAudio,
 } from '@/lib/salestrail';
 import { cpDb, isCpDbConfigured, channelPartners, normalizePhone } from '@/lib/cpDb';
@@ -44,7 +47,7 @@ function isCronRequest(request) {
 }
 
 // GET — Vercel Cron, or the self-chain (both carry Bearer CRON_SECRET), or an
-// admin hitting the URL directly.
+// admin hitting the URL directly. Treated as automatic — respects sync hours.
 export async function GET(request) {
   if (!isCronRequest(request)) {
     const session = await auth();
@@ -52,13 +55,14 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
   }
-  return runSync(request);
+  return runSync(request, { manual: false });
 }
 
-// POST — the admin Call-sync page.
+// POST — the admin Call-sync page. Manual triggers bypass sync hours so the
+// admin can still run a single pass during the day.
 //   { action: 'pause' }  → stop the continuous drain
 //   { rescanDays: 30|90 }→ rewind the cursor, then run
-//   (anything else)      → resume (unpause) + run
+//   (anything else)      → resume (unpause) + run one pass
 export async function POST(request) {
   const session = await auth();
   if (session?.user?.role !== 'admin') {
@@ -84,16 +88,26 @@ export async function POST(request) {
       WHERE id = 1
     `;
   }
-  return runSync(request);
+  return runSync(request, { manual: true });
 }
 
-async function runSync(request) {
+async function runSync(request, { manual }) {
   if (!isSalestrailConfigured()) {
     return NextResponse.json(
       { error: 'Salestrail API credentials are not configured' },
       { status: 503 }
     );
   }
+
+  // Automatic runs (cron + self-chain) honour the nightly window so they
+  // don't contend with live uploads. Manual runs always proceed.
+  if (!manual && !isWithinSyncHours()) {
+    return NextResponse.json({
+      skipped: true,
+      reason: `Outside sync hours (${SYNC_START_HOUR_IST}:00–${String(SYNC_END_HOUR_IST).padStart(2,'0')}:00 IST). Resumes automatically at night.`,
+    });
+  }
+
   const sql = neon(process.env.DATABASE_URL);
   await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
 
@@ -159,6 +173,9 @@ async function runSync(request) {
     result.pending = pend?.n || 0;
     result.caught_up = caughtUp;
     const moreWork = !caughtUp || result.pending > 0;
+    // Only chain during the nightly window — a manual daytime run does one
+    // pass and stops.
+    const willChain = moreWork && isWithinSyncHours();
 
     await sql`
       UPDATE salestrail_sync_state
@@ -167,11 +184,11 @@ async function runSync(request) {
     `;
     logActivity({ eventType: 'salestrail.sync', payload: result, request });
 
-    // Self-chain: kick a fresh invocation so the backlog keeps draining
-    // hands-free until the queue is empty.
-    if (moreWork) await chainNextRun(request, sql);
+    // Self-chain (nighttime only): kick a fresh invocation so the backlog
+    // keeps draining hands-free until the queue is empty or daylight starts.
+    if (willChain) await chainNextRun(request, sql);
 
-    return NextResponse.json({ ok: true, ...result, chained: moreWork });
+    return NextResponse.json({ ok: true, ...result, chained: willChain });
   } catch (e) {
     const msg = e?.message || 'Salestrail sync failed';
     await sql`
@@ -191,6 +208,9 @@ async function runSync(request) {
 async function chainNextRun(request, sql) {
   const [s] = await sql`SELECT paused FROM salestrail_sync_state WHERE id = 1`;
   if (s?.paused || !process.env.CRON_SECRET) return;
+  // Belt-and-suspenders: the child also rejects daytime runs, but we save the
+  // round-trip by checking here too.
+  if (!isWithinSyncHours()) return;
   try {
     const origin = new URL(request.url).origin;
     await fetch(`${origin}/api/salestrail/sync`, {

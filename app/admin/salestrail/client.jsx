@@ -20,10 +20,12 @@ export default function SalestrailClient({ initial }) {
   const paused = !!state?.paused;
   const [busy, setBusy] = useState(null); // 'sync' | 'pause' | 'rescan30' | 'rescan90'
   const [flash, setFlash] = useState(null); // { ok, text }
-  // Dates are formatted client-side only — formatting on the server (UTC) and
-  // re-formatting in the browser (IST) would produce a hydration mismatch.
+  // Dates + night-window check are computed client-side only — formatting on
+  // the server (UTC) and re-checking in the browser (IST) would otherwise
+  // hydration-mismatch.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const inNightWindow = mounted ? isNightWindowIST() : true;
 
   async function run(label, body) {
     setBusy(label);
@@ -41,13 +43,15 @@ export default function SalestrailClient({ initial }) {
       } else if (j.skipped) {
         setFlash({ ok: true, text: j.reason || 'Sync already running.' });
       } else {
+        const tail =
+          j.pending > 0
+            ? j.chained
+              ? `${j.pending.toLocaleString('en-IN')} still queued — draining continues automatically.`
+              : `${j.pending.toLocaleString('en-IN')} still queued — auto-drain resumes at 10 PM IST.`
+            : 'Queue is clear. 🎉';
         setFlash({
           ok: true,
-          text:
-            `Pass done — ${j.processed} transcribed, ${j.imported} newly queued. ` +
-            (j.pending > 0
-              ? `${j.pending.toLocaleString('en-IN')} still queued — draining continues automatically in the background.`
-              : 'Queue is clear. 🎉'),
+          text: `Pass done — ${j.processed} transcribed, ${j.imported} newly queued. ${tail}`,
         });
       }
       router.refresh();
@@ -70,8 +74,9 @@ export default function SalestrailClient({ initial }) {
       <p className="oh-sub">
         Phone-call recordings are pulled automatically from Salestrail — only{' '}
         <strong>Monday &amp; Friday</strong> calls by regular RMs, saved as engagement meetings
-        with a smart summary. Once started, the sync <strong>drains the whole queue on its
-        own</strong>, one batch chaining the next, until nothing is left.
+        with a smart summary. The automatic drain runs nightly{' '}
+        <strong>10 PM – 6 AM IST</strong> so it doesn't interfere with daytime uploads.{' '}
+        <strong>Sync now</strong> below runs one pass anytime.
       </p>
 
       {!configured && (
@@ -86,11 +91,13 @@ export default function SalestrailClient({ initial }) {
       )}
 
       {/* Live status line */}
-      <div className={`st-status ${paused ? 'paused' : pending > 0 ? 'draining' : 'idle'}`}>
+      <div className={`st-status ${paused ? 'paused' : pending > 0 ? (inNightWindow ? 'draining' : 'waiting') : 'idle'}`}>
         {paused ? (
           <><Pause size={15} /> Draining is <strong>paused</strong>.</>
-        ) : pending > 0 ? (
+        ) : pending > 0 && inNightWindow ? (
           <><Loader2 size={15} className="oh-spin" /> Draining — <strong>{pending.toLocaleString('en-IN')}</strong> recordings still queued.</>
+        ) : pending > 0 ? (
+          <><Pause size={15} /> <strong>{pending.toLocaleString('en-IN')}</strong> queued — auto-drain resumes at <strong>10 PM IST</strong>.</>
         ) : (
           <><CheckCircle2 size={15} /> Queue is clear.</>
         )}
@@ -132,9 +139,10 @@ export default function SalestrailClient({ initial }) {
         </button>
       </div>
       <p className="st-hint">
-        <strong>Sync now</strong> starts the drain and it keeps going by itself — refresh this
-        page to watch the queue fall. <strong>Pause</strong> stops it after the current batch.
-        A rescan rewinds the cursor to re-check for missed calls.
+        <strong>10 PM – 6 AM IST:</strong> the drain runs continuously, batch after batch, until
+        the queue empties. <strong>Daytime:</strong> Sync now runs one immediate pass (no
+        chaining) so it doesn't fight live uploads. <strong>Pause</strong> stops the next
+        chained run. A rescan rewinds the cursor to re-check for missed calls.
       </p>
 
       {flash && (
@@ -210,6 +218,11 @@ export default function SalestrailClient({ initial }) {
           background: rgba(79, 70, 160, 0.07);
           color: #4f46a0;
           border: 1px solid rgba(79, 70, 160, 0.22);
+        }
+        .st-status.waiting {
+          background: rgba(74, 107, 122, 0.08);
+          color: #4a6b7a;
+          border: 1px solid rgba(74, 107, 122, 0.25);
         }
         .st-status.paused {
           background: rgba(196, 122, 26, 0.09);
@@ -355,4 +368,12 @@ function fmtShort(iso) {
   } catch {
     return String(iso);
   }
+}
+
+// IST night window for the continuous drain — must mirror the server-side
+// constants in lib/salestrail.js (SYNC_START_HOUR_IST / SYNC_END_HOUR_IST).
+function isNightWindowIST() {
+  const utc = new Date();
+  const istH = new Date(utc.getTime() + 5.5 * 60 * 60 * 1000).getUTCHours();
+  return istH >= 22 || istH < 6;
 }
