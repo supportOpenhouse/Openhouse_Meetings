@@ -184,6 +184,30 @@ export const insights = pgTable(
   })
 );
 
+// Admin "Save this point" — one row per pinned bullet from inside an AI
+// insight's items list. Lets admins keep specific takeaways alive even when
+// the parent insight is regenerated and that exact phrasing changes.
+export const savedInsightItems = pgTable(
+  'saved_insight_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Null when the parent insight gets deleted (we keep the saved item as a
+    // standalone snapshot — `source_title` is denormalised for that case).
+    source_insight_id: uuid('source_insight_id').references(() => insights.id, {
+      onDelete: 'set null',
+    }),
+    source_title: text('source_title'),
+    scope: text('scope').notNull(), // 'visit' | 'engagement' | 'onboarding' | 'direct' | 'cross_cut'
+    item: jsonb('item').notNull(), // { label, value, note, meeting_ids }
+    saved_by: uuid('saved_by').references(() => users.id, { onDelete: 'set null' }),
+    saved_at: timestamp('saved_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    scopeIdx: index('saved_insight_items_scope_idx').on(t.scope),
+    savedAtIdx: index('saved_insight_items_saved_at_idx').on(t.saved_at),
+  })
+);
+
 // Append-only activity feed visible to admins. Records auth events, recording
 // lifecycle, uploads, processing, CP assignment changes, and errors. Heartbeat
 // pings do NOT land here — they only touch users.last_seen_at to avoid spam.

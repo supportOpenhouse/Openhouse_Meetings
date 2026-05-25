@@ -141,6 +141,21 @@ async function run() {
   await sql`ALTER TABLE insights ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false`;
   await sql`CREATE INDEX IF NOT EXISTS insights_pinned_idx ON insights(pinned) WHERE pinned = true`;
 
+  // Per-item "save this point" — finer-grained than whole-row pinning.
+  await sql`
+    CREATE TABLE IF NOT EXISTS saved_insight_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_insight_id uuid REFERENCES insights(id) ON DELETE SET NULL,
+      source_title text,
+      scope text NOT NULL,
+      item jsonb NOT NULL,
+      saved_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      saved_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS saved_insight_items_scope_idx ON saved_insight_items(scope)`;
+  await sql`CREATE INDEX IF NOT EXISTS saved_insight_items_saved_at_idx ON saved_insight_items(saved_at DESC)`;
+
   console.log('Creating cp_assignments table...');
   await sql`
     CREATE TABLE IF NOT EXISTS cp_assignments (

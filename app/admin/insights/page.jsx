@@ -20,7 +20,7 @@ export default async function InsightsPage() {
   const period = 90;
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinned, rms] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinned, savedItems, rms] = await Promise.all([
     getVisitMetrics(period),
     getEngagementMetrics(period),
     getOnboardingMetrics(period),
@@ -46,6 +46,11 @@ export default async function InsightsPage() {
       WHERE pinned = true
       ORDER BY scope, generated_at DESC
     `,
+    sql`
+      SELECT id, source_insight_id, source_title, scope, item, saved_at
+      FROM saved_insight_items
+      ORDER BY scope, saved_at DESC
+    `,
     listRMs(),
   ]);
 
@@ -62,6 +67,7 @@ export default async function InsightsPage() {
     standard,
     custom,
     pinned,
+    savedItems,
     rms,
   };
 

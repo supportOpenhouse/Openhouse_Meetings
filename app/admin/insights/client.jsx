@@ -184,42 +184,47 @@ export default function InsightsClient({ initialData }) {
     }
   }
 
-  // Pin a generated insight — it survives future Refresh clicks and shows up
-  // in the "Saved insights" section at the bottom of its tab.
-  async function savePinned(id) {
+  // Save a single bullet from an AI insight's items list. Per-point is more
+  // useful than freezing the whole card — only the takeaways the admin
+  // actually cares about get kept across regenerations.
+  async function saveItem(sourceId, sourceTitle, scope, item) {
     try {
-      const r = await fetch(`/api/admin/insights/${id}/pin`, { method: 'POST' });
+      const r = await fetch('/api/admin/insights/items/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_insight_id: sourceId, scope, item }),
+      });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'Save failed');
       setData((d) => ({
         ...d,
-        standard: Object.fromEntries(
-          Object.entries(d.standard || {}).map(([k, v]) => [
-            k,
-            v && v.id === id ? { ...v, pinned: true } : v,
-          ])
-        ),
-        pinned: [j.insight, ...(d.pinned || []).filter((p) => p.id !== id)],
+        savedItems: [j.item, ...(d.savedItems || []).filter((x) => x.id !== j.item.id)],
       }));
     } catch (e) {
       setGenError({ key: null, message: e.message });
     }
   }
 
-  // Delete a saved insight row. If it happened to be the displayed-latest for
-  // its key, the next refetch surfaces whatever older row exists.
-  async function deletePinned(id) {
-    if (!confirm('Delete this saved insight?')) return;
+  async function deleteSavedItem(id) {
+    if (!confirm('Delete this saved point?')) return;
     try {
-      const r = await fetch(`/api/admin/insights/${id}`, { method: 'DELETE' });
+      const r = await fetch(`/api/admin/insights/items/${id}`, { method: 'DELETE' });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'Delete failed');
-      setData((d) => ({ ...d, pinned: (d.pinned || []).filter((p) => p.id !== id) }));
-      refetch();
+      setData((d) => ({ ...d, savedItems: (d.savedItems || []).filter((x) => x.id !== id) }));
     } catch (e) {
       setGenError({ key: null, message: e.message });
     }
   }
+
+  // O(1) "is this item already saved" lookup keyed by source insight + label.
+  const savedKeys = useMemo(() => {
+    const s = new Set();
+    for (const it of (data.savedItems || [])) {
+      s.add(`${it.source_insight_id}:${it.item?.label}`);
+    }
+    return s;
+  }, [data.savedItems]);
 
   async function ask() {
     const q = question.trim();
@@ -348,16 +353,18 @@ export default function InsightsClient({ initialData }) {
               generating={generating === key}
               error={genError?.key === key ? genError.message : null}
               onGenerate={() => generate(key)}
-              onSave={savePinned}
+              scope={tab}
+              savedKeys={savedKeys}
+              onSaveItem={saveItem}
             />
           ))}
         </div>
       )}
 
       {tab !== 'ask' && (
-        <SavedInsightsSection
-          pinned={(data.pinned || []).filter((p) => p.scope === tab)}
-          onDelete={deletePinned}
+        <SavedItemsSection
+          items={(data.savedItems || []).filter((p) => p.scope === tab)}
+          onDelete={deleteSavedItem}
         />
       )}
 
@@ -781,33 +788,15 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
 
 /* ---- AI insight card ---- */
 
-function InsightCard({ insightKey, title, cached, generating, error, onGenerate, onSave }) {
-  const isPinned = !!cached?.pinned;
+function InsightCard({ insightKey, title, cached, generating, error, onGenerate, scope, savedKeys, onSaveItem }) {
   return (
     <div className="oh-ins-card">
       <div className="oh-ins-card-head">
         <div className="oh-ins-card-title">{title}</div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          {cached && onSave && (
-            <button
-              className="oh-btn ghost"
-              onClick={() => onSave(cached.id)}
-              disabled={isPinned}
-              title={
-                isPinned
-                  ? 'Saved — see "Saved insights" below. Regenerate to save a new version.'
-                  : 'Save this insight so it survives future Refresh clicks'
-              }
-            >
-              {isPinned ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
-              {isPinned ? 'Saved' : 'Save'}
-            </button>
-          )}
-          <button className="oh-btn ghost" onClick={onGenerate} disabled={generating}>
-            {generating ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
-            {generating ? 'Generating…' : cached ? 'Refresh' : 'Generate'}
-          </button>
-        </div>
+        <button className="oh-btn ghost" onClick={onGenerate} disabled={generating}>
+          {generating ? <Loader2 size={13} className="oh-spin" /> : <RefreshCw size={13} />}
+          {generating ? 'Generating…' : cached ? 'Refresh' : 'Generate'}
+        </button>
       </div>
       {error && <div className="oh-ask-err" style={{ marginTop: 8 }}><AlertCircle size={13} /> {error}</div>}
       {!cached && !generating && !error && (
@@ -817,7 +806,14 @@ function InsightCard({ insightKey, title, cached, generating, error, onGenerate,
       )}
       {cached && (
         <>
-          <InsightBody result={cached.result} />
+          <InsightBody
+            result={cached.result}
+            sourceId={cached.id}
+            sourceTitle={cached.title || title}
+            scope={scope}
+            savedKeys={savedKeys}
+            onSaveItem={onSaveItem}
+          />
           <div className="oh-ins-meta">{cached.meeting_count} meetings · {relative(cached.generated_at)}</div>
         </>
       )}
@@ -850,35 +846,64 @@ function InsightCard({ insightKey, title, cached, generating, error, onGenerate,
   );
 }
 
-// "Saved insights" — the admin's pinned snapshots for the current tab.
-// Each one was a specific Refresh result the admin chose to keep around;
-// they stay until the trash icon is clicked.
-function SavedInsightsSection({ pinned, onDelete }) {
-  if (!pinned || pinned.length === 0) return null;
+// "Saved points" — the admin's per-bullet pins for the current tab. Each
+// entry is one item the admin bookmarked inside an insight card. They stay
+// until the trash icon is clicked, and survive regenerations of the parent.
+function SavedItemsSection({ items, onDelete }) {
+  const [openItem, setOpenItem] = useState(null);
+  if (!items || items.length === 0) return null;
   return (
     <div className="oh-ins-saved-section">
       <div className="oh-ins-section-head">
-        <Bookmark size={14} /> Saved insights ({pinned.length})
+        <Bookmark size={14} /> Saved points ({items.length})
       </div>
-      {pinned.map((p) => (
-        <div key={p.id} className="oh-ins-saved-card">
-          <div className="oh-ins-saved-head">
-            <div className="oh-ins-saved-title">{p.title}</div>
-            <button
-              className="oh-btn ghost oh-ins-saved-del"
-              onClick={() => onDelete(p.id)}
-              title="Delete this saved insight"
-              aria-label="Delete saved insight"
-            >
-              <Trash2 size={13} />
-            </button>
+      {items.map((p) => {
+        const it = p.item || {};
+        const ids = Array.isArray(it.meeting_ids) ? it.meeting_ids : [];
+        return (
+          <div key={p.id} className="oh-ins-saved-card">
+            <div className="oh-ins-saved-row">
+              <div className="oh-ins-saved-body">
+                <div className="oh-ins-saved-top">
+                  <span className="oh-ins-saved-label">{it.label || '—'}</span>
+                  {it.value &&
+                    (ids.length > 0 ? (
+                      <button
+                        className="oh-ins-item-value clickable"
+                        onClick={() => setOpenItem({ label: it.label, ids })}
+                        title="Listen to the source recordings"
+                      >
+                        {it.value} ›
+                      </button>
+                    ) : (
+                      <span className="oh-ins-item-value">{it.value}</span>
+                    ))}
+                </div>
+                {it.note && <div className="oh-ins-item-note">{it.note}</div>}
+                <div className="oh-ins-saved-meta">
+                  {p.source_title ? <>from <em>{p.source_title}</em> · </> : null}
+                  saved {relative(p.saved_at)}
+                </div>
+              </div>
+              <button
+                className="oh-btn ghost oh-ins-saved-del"
+                onClick={() => onDelete(p.id)}
+                title="Delete this saved point"
+                aria-label="Delete saved point"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
-          <InsightBody result={p.result} />
-          <div className="oh-ins-meta">
-            {p.meeting_count} meetings · saved {relative(p.generated_at)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
+      {openItem && (
+        <MentionsModal
+          label={openItem.label}
+          ids={openItem.ids}
+          onClose={() => setOpenItem(null)}
+        />
+      )}
       <style jsx>{`
         .oh-ins-saved-section {
           margin-top: 28px;
@@ -888,32 +913,67 @@ function SavedInsightsSection({ pinned, onDelete }) {
         .oh-ins-saved-card {
           background: var(--paper);
           border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 14px 16px;
-          margin-bottom: 10px;
+          border-radius: 11px;
+          padding: 11px 14px;
+          margin-bottom: 8px;
         }
-        .oh-ins-saved-head {
+        .oh-ins-saved-row {
+          display: flex;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        .oh-ins-saved-body { flex: 1; min-width: 0; }
+        .oh-ins-saved-top {
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          gap: 12px;
+          gap: 10px;
+          align-items: baseline;
+          flex-wrap: wrap;
         }
-        .oh-ins-saved-title { font-weight: 600; font-size: 14.5px; color: var(--ink); }
+        .oh-ins-saved-label { font-weight: 500; font-size: 13.5px; color: var(--ink); }
+        .oh-ins-item-value {
+          font-family: 'Geist Mono', monospace;
+          font-size: 11.5px;
+          color: var(--accent);
+          flex-shrink: 0;
+        }
+        .oh-ins-item-value.clickable {
+          all: unset;
+          font-family: 'Geist Mono', monospace;
+          font-size: 11.5px;
+          color: var(--accent);
+          cursor: pointer;
+          border-bottom: 1px dashed currentColor;
+          white-space: nowrap;
+        }
+        .oh-ins-item-value.clickable:hover { opacity: 0.7; }
+        .oh-ins-item-note {
+          font-size: 12.5px;
+          color: var(--ink-2);
+          margin-top: 3px;
+          line-height: 1.4;
+        }
+        .oh-ins-saved-meta {
+          font-size: 11px;
+          color: var(--ink-3);
+          margin-top: 6px;
+        }
+        .oh-ins-saved-meta em { font-style: normal; color: var(--ink-2); }
         .oh-ins-saved-del {
-          padding: 6px 10px;
+          padding: 6px 8px;
           color: var(--ink-3);
           flex-shrink: 0;
         }
         .oh-ins-saved-del:hover { color: #b03021; }
-        .oh-ins-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 10px; }
       `}</style>
     </div>
   );
 }
 
-function InsightBody({ result }) {
+function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveItem }) {
   const [openItem, setOpenItem] = useState(null);
   if (!result) return null;
+  const canSave = !!onSaveItem && !!sourceId;
   return (
     <div className="oh-ins-body">
       {result.headline && <div className="oh-ins-headline">{result.headline}</div>}
@@ -921,6 +981,7 @@ function InsightBody({ result }) {
         <div className="oh-ins-items">
           {result.items.map((it, i) => {
             const ids = Array.isArray(it.meeting_ids) ? it.meeting_ids : [];
+            const isSaved = savedKeys?.has(`${sourceId}:${it.label}`);
             return (
               <div key={i} className="oh-ins-item">
                 <span className="oh-ins-item-rank">{i + 1}</span>
@@ -942,6 +1003,17 @@ function InsightBody({ result }) {
                   </div>
                   {it.note && <div className="oh-ins-item-note">{it.note}</div>}
                 </div>
+                {canSave && (
+                  <button
+                    className={`oh-ins-item-save ${isSaved ? 'saved' : ''}`}
+                    onClick={() => !isSaved && onSaveItem(sourceId, sourceTitle, scope, it)}
+                    disabled={isSaved}
+                    title={isSaved ? 'Saved — see "Saved points" below' : 'Save this point'}
+                    aria-label={isSaved ? 'Saved' : 'Save this point'}
+                  >
+                    {isSaved ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
+                  </button>
+                )}
               </div>
             );
           })}
@@ -1005,6 +1077,22 @@ function InsightBody({ result }) {
         }
         .oh-ins-item-value.clickable:hover { opacity: 0.7; }
         .oh-ins-item-note { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+        .oh-ins-item-save {
+          all: unset;
+          flex-shrink: 0;
+          width: 26px;
+          height: 26px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 6px;
+          color: var(--ink-3);
+          cursor: pointer;
+          transition: color 0.12s, background 0.12s;
+        }
+        .oh-ins-item-save:hover { color: var(--accent); background: var(--paper-2); }
+        .oh-ins-item-save.saved { color: #2f6f2f; cursor: default; }
+        .oh-ins-item-save.saved:hover { background: transparent; }
         .oh-ins-narrative {
           font-size: 13.5px;
           color: var(--ink-2);

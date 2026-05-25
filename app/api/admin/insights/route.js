@@ -31,7 +31,7 @@ export async function GET(request) {
 
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinnedList] = await Promise.all([
+  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinnedList, savedItems] = await Promise.all([
     getVisitMetrics(period, opts),
     getEngagementMetrics(period, opts),
     getOnboardingMetrics(period, opts),
@@ -54,12 +54,20 @@ export async function GET(request) {
       ORDER BY generated_at DESC
       LIMIT 20
     `,
-    // Pinned insights — admin-saved snapshots, kept past the next regenerate.
+    // Pinned insights — legacy "save whole card" rows, no longer surfaced in
+    // the new UI but kept in the DB for backward compatibility.
     sql`
       SELECT id, scope, insight_key, title, question, result, meeting_count, period_days, generated_at, pinned
       FROM insights
       WHERE pinned = true
       ORDER BY scope, generated_at DESC
+    `,
+    // Saved insight items — one row per "Save this point" click, the active
+    // mechanism for keeping specific bullets alive across regenerations.
+    sql`
+      SELECT id, source_insight_id, source_title, scope, item, saved_at
+      FROM saved_insight_items
+      ORDER BY scope, saved_at DESC
     `,
   ]);
 
@@ -73,5 +81,6 @@ export async function GET(request) {
     standard,
     custom,
     pinned: pinnedList,
+    savedItems,
   });
 }
