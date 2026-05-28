@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(test -f ~/.zshrc && echo \"EXISTS\" || echo \"MISSING\"; ls -la ~/.zshrc 2>/dev/null | head -1)",
+      "Read(//Users/saranshkhera/**)",
+      "Bash(npm install *)",
+      "Bash(which node; which npm; which brew; ls /usr/local/bin/node /opt/homebrew/bin/node 2>/dev/null)",
+      "Read(//usr/local/bin/**)",
+      "Bash(brew install *)",
+      "Bash(npm --version)",
+      "Bash(npm run *)",
+      "Bash(/opt/homebrew/opt/openjdk/bin/keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android)",
+      "Bash(npm ls *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)"
     ]
   }
 }

@@ -5,5 +5,12 @@
   "server": {
     "url": "https://openhouse-meetings.vercel.app",
     "cleartext": false
+  },
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "876278840169-609aemmm6dc5m2lnu7c7khtb35koudq7.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": false
+    }
   }
 }

@@ -1,9 +1,13 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
+import Credentials from 'next-auth/providers/credentials';
+import { OAuth2Client } from 'google-auth-library';
 import { db } from '@/lib/db';
 import { users } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { logActivity } from '@/lib/activityLog';
+
+const googleTokenVerifier = new OAuth2Client();
 
 const adminEmails = (process.env.ADMIN_EMAILS || '')
   .split(',')
@@ -15,6 +19,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
+    // Used by the Capacitor Android app. Google blocks the standard OAuth
+    // redirect inside WebViews ("disallowed_useragent"), so the app does
+    // native sign-in via @codetrix-studio/capacitor-google-auth and POSTs
+    // the resulting ID token here. We verify the signature with Google's
+    // public keys + check audience = our Web Client ID, then fall through
+    // to the same signIn callback as the web Google provider.
+    Credentials({
+      id: 'google-native',
+      name: 'Google (native)',
+      credentials: { idToken: { type: 'text' } },
+      async authorize(creds) {
+        const idToken = creds?.idToken;
+        if (!idToken || typeof idToken !== 'string') return null;
+        try {
+          const ticket = await googleTokenVerifier.verifyIdToken({
+            idToken,
+            audience: process.env.GOOGLE_CLIENT_ID,
+          });
+          const payload = ticket.getPayload();
+          if (!payload?.email || !payload.email_verified) return null;
+          return {
+            email: payload.email,
+            name: payload.name || null,
+            image: payload.picture || null,
+          };
+        } catch (e) {
+          console.error('[auth google-native] verify failed', e?.message);
+          return null;
+        }
+      },
     }),
   ],
   pages: {

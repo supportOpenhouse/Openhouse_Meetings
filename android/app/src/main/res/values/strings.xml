@@ -4,4 +4,5 @@
     <string name="title_activity_main">Openhouse</string>
     <string name="package_name">in.openhouse.meetings</string>
     <string name="custom_url_scheme">in.openhouse.meetings</string>
+    <string name="server_client_id">876278840169-609aemmm6dc5m2lnu7c7khtb35koudq7.apps.googleusercontent.com</string>
 </resources>
