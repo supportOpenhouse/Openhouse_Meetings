@@ -1,0 +1,9 @@
+{
+  "appId": "in.openhouse.meetings",
+  "appName": "Openhouse",
+  "webDir": "public",
+  "server": {
+    "url": "https://openhouse-meetings.vercel.app",
+    "cleartext": false
+  }
+}

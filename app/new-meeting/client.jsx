@@ -22,6 +22,8 @@ import {
   Home,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
+import NativeRecorder from '@/components/NativeRecorder';
+import { Capacitor } from '@capacitor/core';
 import Toast from '@/components/Toast';
 import { fmtDuration } from '@/lib/utils';
 import { MEETING_TYPES } from '@/components/questions';
@@ -49,6 +51,13 @@ export default function NewMeetingClient({ user }) {
   // afterwards are identical to the regular RM flow.
   const isDirectRm = user?.role === 'direct_rm';
   const homeHref = isDirectRm ? '/direct' : '/dashboard';
+  // True only inside the Capacitor Android app — switches the recorder from
+  // the web MediaRecorder to the native OS recorder. Resolved after mount so
+  // SSR/hydration (always web) don't mismatch.
+  const [isNative, setIsNative] = useState(false);
+  useEffect(() => {
+    try { setIsNative(Capacitor.isNativePlatform()); } catch {}
+  }, []);
   const [step, setStep] = useState('form'); // form | record | review | process
   // Holds the Recorder instance methods (pause/resume/finalize/discard).
   const recorderRef = useRef(null);
@@ -874,14 +883,25 @@ export default function NewMeetingClient({ user }) {
           </div>
 
           <div style={{ display: step === 'record' ? 'block' : 'none' }}>
-            <Recorder
-              ref={recorderRef}
-              cpCode={form.cp_code || form.cp_name || ''}
-              onLocation={setLocation}
-              onPause={onRecorderPaused}
-              onDone={onRecorded}
-              onCancel={() => setStep('form')}
-            />
+            {isNative ? (
+              <NativeRecorder
+                ref={recorderRef}
+                cpCode={form.cp_code || form.cp_name || ''}
+                onLocation={setLocation}
+                onPause={onRecorderPaused}
+                onDone={onRecorded}
+                onCancel={() => setStep('form')}
+              />
+            ) : (
+              <Recorder
+                ref={recorderRef}
+                cpCode={form.cp_code || form.cp_name || ''}
+                onLocation={setLocation}
+                onPause={onRecorderPaused}
+                onDone={onRecorded}
+                onCancel={() => setStep('form')}
+              />
+            )}
           </div>
 
           {step === 'review' && (
