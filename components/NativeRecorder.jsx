@@ -2,10 +2,19 @@
 
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Mic, Pause, Play } from 'lucide-react';
-import { VoiceRecorder } from 'capacitor-voice-recorder';
 import { fmtDuration } from '@/lib/utils';
 import { logEvent } from '@/lib/clientLog';
 import { startMicForeground, stopMicForeground } from '@/lib/micForeground';
+import {
+  requestMicPermission,
+  startMicRecording,
+  pauseMicRecording,
+  resumeMicRecording,
+  stopMicRecording,
+  discardMicRecording,
+  cleanupRecordingFile,
+  readRecordingAsBlob,
+} from '@/lib/micRecorder';
 
 // Native (Capacitor) recording path — used ONLY inside the Android app, where
 // a real OS-level recorder keeps capturing with the screen off and survives
@@ -14,6 +23,10 @@ import { startMicForeground, stopMicForeground } from '@/lib/micForeground';
 // swap it in transparently:
 //   ref: finalize() · resume() · discard() · elapsed()
 //   props: onPause(sec) · onDone(blob, sec) · onCancel() · cpCode · onLocation
+//
+// Recorder backend: our own MicRecorder plugin (records to an app-cache file
+// and returns a file path), not capacitor-voice-recorder. The file-path flow
+// avoids the 4-5x base64 memory bloat the old plugin caused on long clips.
 const NativeRecorder = forwardRef(function NativeRecorder(
   { onPause, onDone, onCancel, cpCode, onLocation },
   ref
@@ -74,7 +87,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
 
   async function start() {
     try {
-      const perm = await VoiceRecorder.requestAudioRecordingPermission();
+      const perm = await requestMicPermission();
       if (!perm?.value) {
         setError('Microphone permission was denied. Enable it in Settings to record.');
         return;
@@ -83,7 +96,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       // what keeps Android (Doze / app standby) from killing the recording
       // when the screen goes off. No-op on non-Android platforms.
       await startMicForeground();
-      await VoiceRecorder.startRecording();
+      await startMicRecording();
       captureLocation();
       accumRef.current = 0;
       startRef.current = Date.now();
@@ -99,7 +112,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
   }
 
   async function pause() {
-    try { await VoiceRecorder.pauseRecording(); } catch {}
+    try { await pauseMicRecording(); } catch {}
     if (startRef.current) accumRef.current += Math.round((Date.now() - startRef.current) / 1000);
     startRef.current = null;
     setPaused(true);
@@ -113,7 +126,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
   }
 
   async function resume() {
-    try { await VoiceRecorder.resumeRecording(); } catch {}
+    try { await resumeMicRecording(); } catch {}
     startRef.current = Date.now();
     setPaused(false);
     startTimer();
@@ -127,10 +140,13 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     }
     const durSec = currentElapsed();
     try {
-      const res = await VoiceRecorder.stopRecording();
+      const v = await stopMicRecording(); // { filePath, mimeType, sizeBytes }
       await stopMicForeground();
-      const v = res?.value || {};
-      const blob = base64ToBlob(v.recordDataBase64, v.mimeType || 'audio/aac');
+      if (!v?.filePath) throw new Error('Recorder returned no file path');
+      const blob = await readRecordingAsBlob({ filePath: v.filePath, mimeType: v.mimeType });
+      // File served its purpose; drop the cached copy so it doesn't pile up
+      // across many meetings. Best-effort — Android will reclaim cache anyway.
+      cleanupRecordingFile(v.filePath);
       stopTimer();
       setRecording(false);
       setPaused(false);
@@ -150,7 +166,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
 
   async function discard() {
     const wasActive = recording;
-    try { await VoiceRecorder.stopRecording(); } catch {}
+    try { await discardMicRecording(); } catch {}
     await stopMicForeground();
     const accumAtDiscard = accumRef.current;
     accumRef.current = 0;
@@ -203,16 +219,5 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     </div>
   );
 });
-
-// The plugin hands back the whole recording as base64 — decode to a Blob the
-// existing upload pipeline understands. (Long recordings hold the full clip in
-// memory here; if that becomes a problem we move to a file-URI plugin.)
-function base64ToBlob(base64, mime) {
-  if (!base64) return new Blob([], { type: mime });
-  const byteChars = atob(base64);
-  const bytes = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
-}
 
 export default NativeRecorder;

@@ -12,8 +12,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        Log.d("MicForeground", "MainActivity.onCreate registering MicForegroundPlugin");
+        Log.d("MicForeground", "MainActivity.onCreate registering plugins");
         registerPlugin(MicForegroundPlugin.class);
+        registerPlugin(MicRecorderPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Android 13+ gates notifications behind a runtime permission. Without
