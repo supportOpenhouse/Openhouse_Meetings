@@ -13,7 +13,8 @@
       "Bash(/opt/homebrew/opt/openjdk/bin/keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android)",
       "Bash(npm ls *)",
       "Bash(git checkout *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git pull *)"
     ]
   }
 }

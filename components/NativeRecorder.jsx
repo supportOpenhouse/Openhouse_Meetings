@@ -5,6 +5,7 @@ import { Mic, Pause, Play } from 'lucide-react';
 import { VoiceRecorder } from 'capacitor-voice-recorder';
 import { fmtDuration } from '@/lib/utils';
 import { logEvent } from '@/lib/clientLog';
+import { startMicForeground, stopMicForeground } from '@/lib/micForeground';
 
 // Native (Capacitor) recording path — used ONLY inside the Android app, where
 // a real OS-level recorder keeps capturing with the screen off and survives
@@ -78,6 +79,10 @@ const NativeRecorder = forwardRef(function NativeRecorder(
         setError('Microphone permission was denied. Enable it in Settings to record.');
         return;
       }
+      // Promote the app to a foreground service BEFORE the mic opens. This is
+      // what keeps Android (Doze / app standby) from killing the recording
+      // when the screen goes off. No-op on non-Android platforms.
+      await startMicForeground();
       await VoiceRecorder.startRecording();
       captureLocation();
       accumRef.current = 0;
@@ -123,6 +128,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     const durSec = currentElapsed();
     try {
       const res = await VoiceRecorder.stopRecording();
+      await stopMicForeground();
       const v = res?.value || {};
       const blob = base64ToBlob(v.recordDataBase64, v.mimeType || 'audio/aac');
       stopTimer();
@@ -136,12 +142,16 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     } catch (e) {
       setError(e?.message || 'Could not finish the recording.');
       logEvent('error', { payload: { where: 'native-recorder.finalize', message: e?.message } });
+      // Drop the foreground notification even on error so the user isn't
+      // left with a persistent "Recording in progress" banner.
+      try { await stopMicForeground(); } catch {}
     }
   }
 
   async function discard() {
     const wasActive = recording;
     try { await VoiceRecorder.stopRecording(); } catch {}
+    await stopMicForeground();
     const accumAtDiscard = accumRef.current;
     accumRef.current = 0;
     startRef.current = null;
