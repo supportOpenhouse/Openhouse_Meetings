@@ -1,5 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Release signing — reads creds from a properties file outside the repo
+// (~/.openhouse-android-release.txt by default; override with the
+// OPENHOUSE_RELEASE_CREDS env var). Falls back to the debug keystore so
+// `:app:assembleDebug` and Android Studio's Run button keep working for
+// devs who don't have the release keystore on their machine.
+def releaseSigning = null
+def credsPath = System.getenv("OPENHOUSE_RELEASE_CREDS") ?: "${System.getProperty('user.home')}/.openhouse-android-release.txt"
+def credsFile = file(credsPath)
+if (credsFile.exists()) {
+    def props = new Properties()
+    credsFile.withInputStream { props.load(it) }
+    releaseSigning = props
+}
+
 android {
     namespace "in.openhouse.meetings"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,10 +30,23 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    if (releaseSigning != null) {
+        signingConfigs {
+            release {
+                storeFile file(releaseSigning.getProperty("KEYSTORE_PATH"))
+                storePassword releaseSigning.getProperty("KEYSTORE_PASSWORD")
+                keyAlias releaseSigning.getProperty("KEY_ALIAS")
+                keyPassword releaseSigning.getProperty("KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigning != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
