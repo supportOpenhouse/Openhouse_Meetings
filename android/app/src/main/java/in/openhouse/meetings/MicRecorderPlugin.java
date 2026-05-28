@@ -165,7 +165,7 @@ public class MicRecorderPlugin extends Plugin {
             JSObject result = new JSObject();
             result.put("value", value);
             call.resolve(result);
-        } catch (IllegalStateException | RuntimeException e) {
+        } catch (RuntimeException e) {
             Log.e(TAG, "stopRecording failed", e);
             cleanup();
             call.reject("stopRecording failed: " + e.getMessage());
