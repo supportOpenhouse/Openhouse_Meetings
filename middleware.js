@@ -1,5 +1,11 @@
-import { auth } from '@/auth';
+import NextAuth from 'next-auth';
+import { authConfig } from '@/auth.config';
 import { NextResponse } from 'next/server';
+
+// Middleware runs in the Edge runtime, so it can only use the edge-safe
+// config (no `google-auth-library`, which is Node-only). The full auth
+// instance with the Credentials provider lives in `auth.js` for API routes.
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { nextUrl } = req;
