@@ -2,6 +2,7 @@ import { signOut } from '@/auth';
 import Link from 'next/link';
 import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3, Upload, Cloud } from 'lucide-react';
 import Heartbeat from './Heartbeat';
+import RecordingGuard from './RecordingGuard';
 
 export default function AppShell({ user, current, children }) {
   const isAdmin = user.role === 'admin';
@@ -41,6 +42,7 @@ export default function AppShell({ user, current, children }) {
   return (
     <div className="oh-shell">
       <Heartbeat />
+      <RecordingGuard />
       {/* Desktop sidebar */}
       <aside className="oh-side">
         <div className="oh-brand">

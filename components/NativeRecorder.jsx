@@ -14,7 +14,9 @@ import {
   discardMicRecording,
   cleanupRecordingFile,
   readRecordingAsBlob,
+  getMicStatus,
 } from '@/lib/micRecorder';
+import { getRecordingSession, setRecordingSession } from '@/lib/recordingSession';
 
 // Native (Capacitor) recording path — used ONLY inside the Android app, where
 // a real OS-level recorder keeps capturing with the screen off and survives
@@ -28,7 +30,7 @@ import {
 // and returns a file path), not capacitor-voice-recorder. The file-path flow
 // avoids the 4-5x base64 memory bloat the old plugin caused on long clips.
 const NativeRecorder = forwardRef(function NativeRecorder(
-  { onPause, onDone, onCancel, cpCode, onLocation },
+  { onPause, onDone, onCancel, cpCode, onLocation, resumeSession },
   ref
 ) {
   const [recording, setRecording] = useState(false);
@@ -42,6 +44,37 @@ const NativeRecorder = forwardRef(function NativeRecorder(
   const timerRef = useRef(null);
 
   useEffect(() => () => stopTimer(), []);
+
+  // Recovery: if the native plugin is already recording (user navigated
+  // away and got bounced back by RecordingGuard), restore our UI state
+  // from the persisted session instead of starting a fresh recording.
+  useEffect(() => {
+    if (!resumeSession) return;
+    let cancelled = false;
+    (async () => {
+      const status = await getMicStatus();
+      if (cancelled) return;
+      if (status !== 'recording' && status !== 'paused') return;
+      accumRef.current = Number(resumeSession.accumSec) || 0;
+      if (status === 'recording') {
+        // Live recording — startRef is the real wall-clock moment we last
+        // entered the running state, so `currentElapsed()` keeps ticking
+        // accurately even though the component just mounted.
+        startRef.current = Number(resumeSession.lastResumeMs) || Date.now();
+        setRecording(true);
+        setPaused(false);
+        startTimer();
+      } else {
+        // Paused — frozen elapsed, no live tick.
+        startRef.current = null;
+        setRecording(true);
+        setPaused(true);
+        setElapsed(accumRef.current);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useImperativeHandle(ref, () => ({
     finalize,
@@ -104,6 +137,9 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       setPaused(false);
       setError(null);
       startTimer();
+      // Seed/update the session so a future remount can restore state.
+      const sess = getRecordingSession() || {};
+      setRecordingSession({ ...sess, accumSec: 0, lastResumeMs: startRef.current });
       logEvent('recording.started', { cp_code: cpCode || undefined, payload: { engine: 'native' } });
     } catch (e) {
       setError(e?.message || 'Could not start recording.');
@@ -118,6 +154,8 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     setPaused(true);
     stopTimer();
     setElapsed(accumRef.current);
+    const sess = getRecordingSession();
+    if (sess) setRecordingSession({ ...sess, accumSec: accumRef.current, lastResumeMs: null });
     logEvent('recording.paused', {
       cp_code: cpCode || undefined,
       payload: { elapsed_seconds: accumRef.current, engine: 'native' },
@@ -130,6 +168,8 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     startRef.current = Date.now();
     setPaused(false);
     startTimer();
+    const sess = getRecordingSession();
+    if (sess) setRecordingSession({ ...sess, lastResumeMs: startRef.current });
     logEvent('recording.resumed', { cp_code: cpCode || undefined, payload: { engine: 'native' } });
   }
 

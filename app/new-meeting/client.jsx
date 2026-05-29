@@ -31,6 +31,8 @@ import { logEvent } from '@/lib/clientLog';
 import { saveLocalRecording, deleteLocalRecording } from '@/lib/localQueue';
 import { buildRecordingFilename, parseRecordingFilename, triggerDownload } from '@/lib/recordingName';
 import { uploadAndCreateMeeting } from '@/lib/uploadMeeting';
+import { getMicStatus } from '@/lib/micRecorder';
+import { getRecordingSession, setRecordingSession, clearRecordingSession } from '@/lib/recordingSession';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
 // message instead of leaving the user staring at "0%".
@@ -55,8 +57,32 @@ export default function NewMeetingClient({ user }) {
   // the web MediaRecorder to the native OS recorder. Resolved after mount so
   // SSR/hydration (always web) don't mismatch.
   const [isNative, setIsNative] = useState(false);
+  // Set to a session object when we re-enter the page while a recording is
+  // still running natively (e.g. the user navigated to /dashboard and got
+  // bounced back by RecordingGuard). NativeRecorder reads this on mount to
+  // restore its internal accumSec / lastResumeMs without resetting the mic.
+  const [resumeSession, setResumeSession] = useState(null);
   useEffect(() => {
     try { setIsNative(Capacitor.isNativePlatform()); } catch {}
+    // Recovery path: if a native recording is in progress, jump straight
+    // back into 'record' (or 'review' if paused) with the prior form
+    // metadata so the user can pause / upload / discard.
+    (async () => {
+      const status = await getMicStatus();
+      if (status !== 'recording' && status !== 'paused') return;
+      const sess = getRecordingSession();
+      if (!sess) return;
+      if (sess.form) setForm(sess.form);
+      if (typeof sess.isOnboarding === 'boolean') setIsOnboarding(sess.isOnboarding);
+      if (sess.startedAtMs) setStartedAt(sess.startedAtMs);
+      setResumeSession(sess);
+      if (sess.step === 'review' || status === 'paused') {
+        setReviewedDuration(sess.reviewedDuration || 0);
+        setStep('review');
+      } else {
+        setStep('record');
+      }
+    })();
   }, []);
   const [step, setStep] = useState('form'); // form | record | review | process
   // Holds the Recorder instance methods (pause/resume/finalize/discard).
@@ -129,10 +155,23 @@ export default function NewMeetingClient({ user }) {
   }
 
   function startRecording() {
-    setStartedAt(Date.now());
+    const now = Date.now();
+    setStartedAt(now);
     setIsRestoreFlow(false);
     setDownloadedName(null);
     setStep('record');
+    // Persist enough metadata that RecordingGuard + the recovery useEffect
+    // can put the page back together if the user navigates away. The
+    // accumSec/lastResumeMs fields are owned by NativeRecorder itself.
+    setRecordingSession({
+      form,
+      isOnboarding,
+      startedAtMs: now,
+      step: 'record',
+      reviewedDuration: 0,
+      accumSec: 0,
+      lastResumeMs: now,
+    });
   }
 
   function clearWatchdog() {
@@ -164,6 +203,8 @@ export default function NewMeetingClient({ user }) {
   function onRecorderPaused(elapsedSec) {
     setReviewedDuration(elapsedSec);
     setStep('review');
+    const sess = getRecordingSession();
+    if (sess) setRecordingSession({ ...sess, step: 'review', reviewedDuration: elapsedSec });
   }
 
   // Review screen actions
@@ -171,6 +212,8 @@ export default function NewMeetingClient({ user }) {
     setStep('record');
     // Defer to next tick so the Recorder element is mounted/visible before resume.
     setTimeout(() => recorderRef.current?.resume(), 0);
+    const sess = getRecordingSession();
+    if (sess) setRecordingSession({ ...sess, step: 'record' });
   }
   function uploadFromReview() {
     // recorder.finalize() emits onRecorded(blob, durSec).
@@ -182,6 +225,7 @@ export default function NewMeetingClient({ user }) {
     setRecordedBlob(null);
     setRecordedDuration(0);
     setStep('form');
+    clearRecordingSession();
   }
 
   // Single source of truth for the form metadata we attach to a recording,
@@ -392,6 +436,10 @@ export default function NewMeetingClient({ user }) {
         deleteLocalRecording(localId).catch(() => {});
         setLocalQueueId(null);
       }
+      // Recording is no longer "active" — clear so RecordingGuard releases
+      // navigation. This is the success path; failure paths handle their
+      // own clearing where appropriate.
+      clearRecordingSession();
 
       showToast('Recording saved — processing in background', 'success');
       router.push(homeHref);
@@ -509,6 +557,10 @@ export default function NewMeetingClient({ user }) {
     abortedRef.current = true;
     clearWatchdog();
     const ok = downloadCopyToDevice();
+    // The recording is now off the mic and either downloaded or about to
+    // be retried from the queue — drop the session so RecordingGuard
+    // doesn't keep punting the user back to /new-meeting.
+    clearRecordingSession();
     showToast(
       ok ? 'Saved to your device — retry from the dashboard when online'
          : 'Couldn’t save the file — retry from the dashboard',
@@ -891,6 +943,7 @@ export default function NewMeetingClient({ user }) {
                 onPause={onRecorderPaused}
                 onDone={onRecorded}
                 onCancel={() => setStep('form')}
+                resumeSession={resumeSession}
               />
             ) : (
               <Recorder

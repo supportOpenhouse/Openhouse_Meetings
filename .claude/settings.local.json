@@ -14,7 +14,18 @@
       "Bash(npm ls *)",
       "Bash(git checkout *)",
       "Bash(git add *)",
-      "Bash(git pull *)"
+      "Bash(git pull *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git branch *)",
+      "Bash(openssl rand *)",
+      "Bash(magick identify *)",
+      "Bash(./gradlew assembleRelease)",
+      "Bash(chmod +x ./gradlew)",
+      "Bash(/Users/saranshkhera/Library/Android/sdk/build-tools/36.1.0/apksigner verify *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb devices *)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb install *)",
+      "Bash(~/Library/Android/sdk/build-tools/36.1.0/aapt dump *)"
     ]
   }
 }
