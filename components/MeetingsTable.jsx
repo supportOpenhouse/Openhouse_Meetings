@@ -27,6 +27,7 @@ export default function MeetingsTable({
   rms,
   cities = [],
   onOpen,
+  onOpenThread,
   showRMColumn = true,
   emptyAction,
   // When provided, renders an "Export to CSV" button that receives the active filter set.
@@ -251,14 +252,22 @@ export default function MeetingsTable({
             <div></div>
           </div>
 
-          {filtered.map((m) => (
-            <div key={m.id}>
-              {/* Desktop grid row */}
-              <DesktopRow m={m} showRM={showRMColumn} cols={cols} onClick={() => onOpen(m)} />
-              {/* Mobile card */}
-              <MobileCard m={m} showRM={showRMColumn} onClick={() => onOpen(m)} />
-            </div>
-          ))}
+          {filtered.map((m) => {
+            // Threaded rows: when a meeting was produced by collapseVisitThreads
+            // it has _threadItems with every recording of the same scheduled
+            // visit. Clicking opens the thread detail (all recordings stacked)
+            // instead of the single-meeting detail.
+            const isThread = Array.isArray(m._threadItems) && m._threadItems.length > 1;
+            const handleClick = isThread && onOpenThread
+              ? () => onOpenThread(m._threadItems)
+              : () => onOpen(m);
+            return (
+              <div key={m.id}>
+                <DesktopRow m={m} showRM={showRMColumn} cols={cols} onClick={handleClick} />
+                <MobileCard m={m} showRM={showRMColumn} onClick={handleClick} />
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -292,6 +301,20 @@ function DesktopRow({ m, showRM, cols, onClick }) {
           )}
           <MeetingTypePill type={m.meeting_type} />
           <SourcePill meeting={m} />
+          {Array.isArray(m._threadItems) && m._threadItems.length > 1 && (
+            <span
+              style={{
+                fontSize: 10.5,
+                background: 'var(--ink)',
+                color: 'var(--paper)',
+                padding: '1px 7px',
+                borderRadius: 999,
+                fontWeight: 500,
+              }}
+            >
+              +{m._threadItems.length - 1} more
+            </span>
+          )}
         </div>
         {m.cp_code && m.cp_name && (
           <div style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 2 }}>
@@ -338,6 +361,9 @@ function MobileCard({ m, showRM, onClick }) {
           {m.cp_code && m.cp_name && <span className="cp-name"> · {m.cp_name}</span>}
           <MeetingTypePill type={m.meeting_type} small />
           <SourcePill meeting={m} small />
+          {Array.isArray(m._threadItems) && m._threadItems.length > 1 && (
+            <span className="thread-badge">+{m._threadItems.length - 1}</span>
+          )}
         </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
@@ -370,6 +396,15 @@ function MobileCard({ m, showRM, onClick }) {
           font-size: 12.5px;
           color: var(--ink-2);
           margin-top: 4px;
+        }
+        .thread-badge {
+          font-size: 10.5px;
+          background: var(--ink);
+          color: var(--paper);
+          padding: 1px 6px;
+          border-radius: 999px;
+          font-weight: 500;
+          margin-left: 4px;
         }
         .cp-name {
           font-weight: 400;

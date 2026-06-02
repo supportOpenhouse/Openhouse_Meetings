@@ -1,19 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Mic } from 'lucide-react';
 import Link from 'next/link';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
+import MeetingThreadDetail from '@/components/MeetingThreadDetail';
 import PendingUploads from '@/components/PendingUploads';
 import Toast from '@/components/Toast';
 import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
+import { collapseVisitThreads } from '@/lib/collapseVisits';
 
 export default function RMDashboardClient({ initialMeetings, user }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   usePollWhileProcessing(meetings, setMeetings);
+  // Collapse same-visit recordings into a single thread row before passing
+  // to the table. The lead row carries _threadItems so MeetingsTable knows
+  // to show the "+N more" badge and call onOpenThread instead of onOpen.
+  const tableMeetings = useMemo(() => collapseVisitThreads(meetings), [meetings]);
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openMeetingDetail, setOpenMeetingDetail] = useState(null);
+  const [openThread, setOpenThread] = useState(null);
   const [toast, setToast] = useState(null);
 
   function showToast(msg, type) {
@@ -87,9 +94,10 @@ export default function RMDashboardClient({ initialMeetings, user }) {
 
       <h2 className="oh-h2">All meetings</h2>
       <MeetingsTable
-        meetings={meetings}
+        meetings={tableMeetings}
         showRMColumn={false}
         onOpen={openMeetingFull}
+        onOpenThread={(items) => setOpenThread(items)}
         hideDateFilter={true}
         emptyAction={
           <Link href="/new-meeting" className="oh-btn primary" style={{ marginTop: 16 }}>
@@ -107,6 +115,13 @@ export default function RMDashboardClient({ initialMeetings, user }) {
           }}
           onDelete={handleDelete}
           canDelete={true}
+        />
+      )}
+
+      {openThread && (
+        <MeetingThreadDetail
+          meetings={openThread}
+          onClose={() => setOpenThread(null)}
         />
       )}
 

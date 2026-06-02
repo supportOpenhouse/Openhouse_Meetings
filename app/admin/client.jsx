@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { Users, X, Calendar } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
+import MeetingThreadDetail from '@/components/MeetingThreadDetail';
 import Toast from '@/components/Toast';
 import { fmtDate } from '@/lib/utils';
 import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
+import { collapseVisitThreads } from '@/lib/collapseVisits';
 
 // One global date filter at the top of the admin page. Activity windows become
 // clickable presets that set this filter; Per-RM cards, the meetings table, and
@@ -44,6 +46,7 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
   usePollWhileProcessing(meetings, setMeetings);
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
+  const [openThread, setOpenThread] = useState(null);
   const [toast, setToast] = useState(null);
 
   // Global date range filter — shared by stats, Per-RM cards, table, and export.
@@ -339,10 +342,11 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
       <div ref={tableRef}>
         <h2 className="oh-h2">All meetings</h2>
         <MeetingsTable
-          meetings={filteredMeetings}
+          meetings={collapseVisitThreads(filteredMeetings)}
           rms={rms}
           cities={cities}
           onOpen={openMeetingFull}
+          onOpenThread={(items) => setOpenThread(items)}
           showRMColumn={true}
           onExport={handleExport}
           hideDateFilter={true}
@@ -360,6 +364,13 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
           }}
           onDelete={handleDelete}
           canDelete={true}
+        />
+      )}
+
+      {openThread && (
+        <MeetingThreadDetail
+          meetings={openThread}
+          onClose={() => setOpenThread(null)}
         />
       )}
 

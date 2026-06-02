@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Upload } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
-import GroupedMeetings from '@/components/GroupedMeetings';
 import MeetingDetail from '@/components/MeetingDetail';
+import MeetingThreadDetail from '@/components/MeetingThreadDetail';
 import CallUploader from '@/components/CallUploader';
 import Toast from '@/components/Toast';
 import { usePollWhileProcessing } from '@/lib/usePollWhileProcessing';
+import { collapseThreadsByKey } from '@/lib/collapseVisits';
 
 export default function DirectClient({ initialMeetings, user }) {
   const router = useRouter();
@@ -16,8 +17,17 @@ export default function DirectClient({ initialMeetings, user }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   usePollWhileProcessing(meetings, setMeetings);
 
+  // Direct-RM calls are threaded by buyer phone — multiple recordings of the
+  // same number collapse into one row with a "+N more" badge; clicking opens
+  // the stacked thread detail (summaries + transcripts + audio).
+  const tableMeetings = useMemo(
+    () => collapseThreadsByKey(meetings, 'cp_mobile'),
+    [meetings]
+  );
+
   const [openMeeting, setOpenMeeting] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
+  const [openThread, setOpenThread] = useState(null);
   const [toast, setToast] = useState(null);
 
   function showToast(msg, type) {
@@ -59,32 +69,22 @@ export default function DirectClient({ initialMeetings, user }) {
       </div>
 
       {tab === 'recordings' && (
-        meetings.length === 0 ? (
-          <MeetingsTable
-            meetings={meetings}
-            showRMColumn={false}
-            onOpen={openMeetingFull}
-            hideDateFilter={true}
-            emptyAction={
-              <button
-                className="oh-btn primary"
-                style={{ marginTop: 16 }}
-                onClick={() => setTab('upload')}
-              >
-                <Upload size={14} /> Upload your first recording
-              </button>
-            }
-          />
-        ) : (
-          // Direct-RM recordings are grouped by buyer phone so multiple
-          // calls with the same person live under one card instead of
-          // littering the list. Singletons render as expanded one-row cards.
-          <GroupedMeetings
-            meetings={meetings}
-            groupBy="cp_mobile"
-            onOpen={openMeetingFull}
-          />
-        )
+        <MeetingsTable
+          meetings={tableMeetings}
+          showRMColumn={false}
+          onOpen={openMeetingFull}
+          onOpenThread={(items) => setOpenThread(items)}
+          hideDateFilter={true}
+          emptyAction={
+            <button
+              className="oh-btn primary"
+              style={{ marginTop: 16 }}
+              onClick={() => setTab('upload')}
+            >
+              <Upload size={14} /> Upload your first recording
+            </button>
+          }
+        />
       )}
 
       {tab === 'upload' && (
@@ -114,6 +114,13 @@ export default function DirectClient({ initialMeetings, user }) {
           }}
           onDelete={() => {}}
           canDelete={false}
+        />
+      )}
+
+      {openThread && (
+        <MeetingThreadDetail
+          meetings={openThread}
+          onClose={() => setOpenThread(null)}
         />
       )}
 
