@@ -20,6 +20,7 @@ import {
   Handshake,
   Save,
   Home,
+  Building2,
 } from 'lucide-react';
 import Recorder from '@/components/Recorder';
 import NativeRecorder from '@/components/NativeRecorder';
