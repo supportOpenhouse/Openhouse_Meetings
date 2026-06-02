@@ -33,6 +33,8 @@ export async function POST(request) {
     location_lat,
     location_lng,
     location_accuracy,
+    cp_visit_id,
+    cp_visit_meta,
   } = body;
 
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
@@ -91,6 +93,8 @@ export async function POST(request) {
     location_lat: num(location_lat),
     location_lng: num(location_lng),
     location_accuracy: num(location_accuracy),
+    cp_visit_id: cp_visit_id ? String(cp_visit_id).trim() : null,
+    cp_visit_meta: cp_visit_meta && typeof cp_visit_meta === 'object' ? cp_visit_meta : null,
   });
 
   logActivity({

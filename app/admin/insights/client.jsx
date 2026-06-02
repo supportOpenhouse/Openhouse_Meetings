@@ -223,6 +223,19 @@ export default function InsightsClient({ initialData }) {
     }
   }
 
+  // Delete an entire Ask-anything answer row. Distinct from deleteSavedItem
+  // (which removes only an individual bookmarked bullet within an insight).
+  async function deleteCustomInsight(id) {
+    if (!confirm('Delete this question and its answer?')) return;
+    try {
+      const r = await fetch(`/api/admin/insights/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('Delete failed');
+      setData((d) => ({ ...d, custom: (d.custom || []).filter((x) => x.id !== id) }));
+    } catch (e) {
+      setGenError({ key: null, message: e.message });
+    }
+  }
+
   // O(1) "is this item already saved" lookup keyed by source insight + label.
   const savedKeys = useMemo(() => {
     const s = new Set();
@@ -417,6 +430,9 @@ export default function InsightsClient({ initialData }) {
           askError={askError}
           onAsk={ask}
           custom={data.custom}
+          savedKeys={savedKeys}
+          onSaveItem={saveItem}
+          onDeleteCustom={deleteCustomInsight}
         />
       )}
 
@@ -863,7 +879,7 @@ function CrossCutTab({ cpFocus }) {
 
 /* ---- Ask anything ---- */
 
-function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError, onAsk, custom }) {
+function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError, onAsk, custom, savedKeys, onSaveItem, onDeleteCustom }) {
   return (
     <div>
       <div className="oh-ask-box">
@@ -896,8 +912,27 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
       {custom.length === 0 && <Empty text="No questions asked yet." />}
       {custom.map((c) => (
         <div key={c.id} className="oh-ask-result">
-          <div className="oh-ask-q">{c.question}</div>
-          <InsightBody result={c.result} />
+          <div className="oh-ask-q-row">
+            <div className="oh-ask-q">{c.question}</div>
+            {onDeleteCustom && (
+              <button
+                className="oh-btn ghost oh-ask-delete"
+                onClick={() => onDeleteCustom(c.id)}
+                title="Delete this question and its answer"
+                aria-label="Delete"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+          <InsightBody
+            result={c.result}
+            sourceId={c.id}
+            sourceTitle={c.question}
+            scope={c.scope || 'all'}
+            savedKeys={savedKeys}
+            onSaveItem={onSaveItem}
+          />
           <div className="oh-ins-meta">
             {c.meeting_count} meetings · {relative(c.generated_at)}
           </div>
@@ -933,11 +968,26 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
           padding: 14px 16px;
           margin-bottom: 10px;
         }
+        .oh-ask-q-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 8px;
+        }
         .oh-ask-q {
           font-weight: 600;
           font-size: 14px;
           color: var(--ink);
-          margin-bottom: 8px;
+          flex: 1;
+        }
+        .oh-ask-delete {
+          flex-shrink: 0;
+          padding: 4px 8px;
+          color: var(--ink-3);
+        }
+        .oh-ask-delete:hover {
+          color: var(--danger, #b03021);
         }
         .oh-ins-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 8px; }
       `}</style>

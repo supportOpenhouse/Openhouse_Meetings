@@ -116,6 +116,10 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
         </div>
 
         <div className="oh-modal-body">
+          {localMeeting.cp_visit_meta && (
+            <VisitMetaPanel meta={localMeeting.cp_visit_meta} />
+          )}
+
           {localMeeting.purpose && (
             <div className="oh-purpose">
               <strong>Purpose:</strong> {localMeeting.purpose}
@@ -672,4 +676,60 @@ function pickSummaryView(summary, meetingType) {
   }
   // Flat shape — treat the whole blob as engagement answers.
   return { answers: summary, score: null, missing: false };
+}
+
+// Renders the buyer/society/broker snapshot we captured from the visit
+// dropdown when the meeting was started. Only shown when this meeting was
+// linked to a scheduled visit (cp_visit_meta is present).
+function VisitMetaPanel({ meta }) {
+  if (!meta || typeof meta !== 'object') return null;
+  const rows = [
+    { label: 'Buyer', value: meta.buyer_name },
+    { label: 'Buyer phone', value: meta.buyer_contact },
+    { label: 'Society', value: meta.society_name },
+    { label: 'Broker', value: meta.broker_name },
+    { label: 'Broker phone', value: meta.broker_contact },
+    { label: 'City', value: meta.city },
+    { label: 'Scheduled time', value: meta.selected_time },
+    { label: 'Address', value: [meta.unit_address_line1, meta.unit_address_line2].filter(Boolean).join(', ') || null },
+    { label: 'Lead status', value: meta.lead_status },
+  ].filter((r) => r.value && String(r.value).trim());
+  if (rows.length === 0) return null;
+  return (
+    <div className="oh-visit-meta">
+      <div className="oh-eyebrow" style={{ marginBottom: 8 }}>Visit details (from scheduled sheet)</div>
+      <div className="oh-visit-meta-grid">
+        {rows.map((r) => (
+          <div key={r.label} className="oh-visit-meta-row">
+            <span className="oh-visit-meta-label">{r.label}</span>
+            <span className="oh-visit-meta-value">{r.value}</span>
+          </div>
+        ))}
+      </div>
+      <style jsx>{`
+        .oh-visit-meta {
+          background: var(--paper-2, #fafafa);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 12px 14px;
+          margin-bottom: 18px;
+        }
+        .oh-visit-meta-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 6px 16px;
+        }
+        .oh-visit-meta-row {
+          display: flex;
+          flex-direction: column;
+          font-size: 12.5px;
+        }
+        .oh-visit-meta-label {
+          color: var(--ink-3);
+          font-size: 11px;
+        }
+        .oh-visit-meta-value { color: var(--ink); }
+      `}</style>
+    </div>
+  );
 }

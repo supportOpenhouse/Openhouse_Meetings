@@ -298,6 +298,13 @@ function DesktopRow({ m, showRM, cols, onClick }) {
             {m.cp_name}
           </div>
         )}
+        {m.cp_visit_meta && (m.cp_visit_meta.buyer_name || m.cp_visit_meta.society_name) && (
+          <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 2 }}>
+            {m.cp_visit_meta.buyer_name && <strong style={{ fontWeight: 500 }}>{m.cp_visit_meta.buyer_name}</strong>}
+            {m.cp_visit_meta.buyer_name && m.cp_visit_meta.society_name && ' · '}
+            {m.cp_visit_meta.society_name}
+          </div>
+        )}
         <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>
           {fmtDate(m.started_at)}
         </div>
@@ -334,6 +341,13 @@ function MobileCard({ m, showRM, onClick }) {
         </div>
         <StatusOrSentimentPill meeting={m} />
       </div>
+      {m.cp_visit_meta && (m.cp_visit_meta.buyer_name || m.cp_visit_meta.society_name) && (
+        <div className="visit-row">
+          {m.cp_visit_meta.buyer_name}
+          {m.cp_visit_meta.buyer_name && m.cp_visit_meta.society_name && ' · '}
+          {m.cp_visit_meta.society_name}
+        </div>
+      )}
       <div className="meta">
         <span>{fmtDate(m.started_at)}</span>
         {m.cp_mobile && (
@@ -352,6 +366,11 @@ function MobileCard({ m, showRM, onClick }) {
         )}
       </div>
       <style jsx>{`
+        .visit-row {
+          font-size: 12.5px;
+          color: var(--ink-2);
+          margin-top: 4px;
+        }
         .cp-name {
           font-weight: 400;
           color: var(--ink-2);
@@ -366,7 +385,7 @@ function MobileCard({ m, showRM, onClick }) {
 
 // Single source of truth for the right-side pill: lifecycle state wins over sentiment
 // until the meeting reaches `ready`, then we show the Claude sentiment.
-function StatusOrSentimentPill({ meeting }) {
+export function StatusOrSentimentPill({ meeting }) {
   const status = meeting.status || 'ready';
   if (status === 'processing') {
     return (
@@ -416,7 +435,7 @@ function getSentiment(meeting) {
 
 // Small chip rendered next to the CP code so admins/RMs can tell at a glance
 // which question set/scoring logic drove each row.
-function MeetingTypePill({ type, small = false }) {
+export function MeetingTypePill({ type, small = false }) {
   const cls =
     type === 'visit' ? 'visit'
     : type === 'onboarding' ? 'onboarding'
@@ -478,7 +497,7 @@ function MeetingTypePill({ type, small = false }) {
 
 // Marks a meeting that was auto-pulled from Salestrail (vs recorded in-app or
 // manually uploaded). Renders nothing for non-Salestrail meetings.
-function SourcePill({ meeting, small = false }) {
+export function SourcePill({ meeting, small = false }) {
   if (!meeting.salestrail_call_id) return null;
   return (
     <span className={`oh-src-pill ${small ? 'small' : ''}`}>

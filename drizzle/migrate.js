@@ -101,6 +101,16 @@ async function run() {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS meetings_salestrail_call_uq ON meetings(salestrail_call_id) WHERE salestrail_call_id IS NOT NULL`;
   await sql`CREATE INDEX IF NOT EXISTS meetings_status_idx ON meetings(status)`;
 
+  // Visit-dropdown linkage. For meeting_type='visit' rows started by picking
+  // a scheduled visit from the Google Sheet, we save the sheet row's id and
+  // the relevant buyer/society/broker metadata so the dashboard + detail
+  // views can show "who the visit was with" without re-querying the sheet.
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS cp_visit_id text`;
+  await sql`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS cp_visit_meta jsonb`;
+  // Index supports the "all recordings for this scheduled visit" grouping
+  // in the dashboard (multiple RM recordings of the same visit_id).
+  await sql`CREATE INDEX IF NOT EXISTS meetings_cp_visit_id_idx ON meetings(cp_visit_id) WHERE cp_visit_id IS NOT NULL`;
+
   console.log('Creating activity_logs table...');
   await sql`
     CREATE TABLE IF NOT EXISTS activity_logs (

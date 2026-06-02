@@ -71,6 +71,12 @@ export const meetings = pgTable(
     // Retry counter for the Salestrail recording fetch + transcription. Caps
     // runaway retries on a permanently broken call (see the sync route).
     salestrail_fetch_attempts: integer('salestrail_fetch_attempts').notNull().default(0),
+    // Visit-dropdown linkage. cp_visit_id is the sheet row's id column —
+    // multiple meetings sharing the same id are different recordings of the
+    // same scheduled visit. cp_visit_meta snapshots the buyer/society/broker
+    // fields from the sheet at the moment the meeting was started.
+    cp_visit_id: text('cp_visit_id'),
+    cp_visit_meta: jsonb('cp_visit_meta'),
     started_at: timestamp('started_at', { withTimezone: true }).notNull(),
     duration_seconds: integer('duration_seconds').notNull().default(0),
     language: text('language'),
@@ -90,6 +96,7 @@ export const meetings = pgTable(
     cpCodeIdx: index('meetings_cp_code_idx').on(t.cp_code),
     statusIdx: index('meetings_status_idx').on(t.status),
     salestrailCallIdx: index('meetings_salestrail_call_idx').on(t.salestrail_call_id),
+    cpVisitIdx: index('meetings_cp_visit_id_idx').on(t.cp_visit_id),
   })
 );
 

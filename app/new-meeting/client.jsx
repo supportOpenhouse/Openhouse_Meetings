@@ -105,6 +105,16 @@ export default function NewMeetingClient({ user }) {
   const [cpLookup, setCpLookup] = useState({ state: 'idle' });
   const lookupTimer = useRef(null);
   const lookupSeq = useRef(0);
+  // Visit-dropdown state. When meeting_type==='visit' and cp_code is set, we
+  // live-fetch today's scheduled visits for that CP from the Google Sheet via
+  // /api/visits/today. visits is the array of sheet rows; selectedVisit is the
+  // one the RM picked. Recording is blocked until selectedVisit is set.
+  const [visits, setVisits] = useState([]);
+  const [visitsState, setVisitsState] = useState('idle'); // idle | loading | loaded | error
+  const [visitsError, setVisitsError] = useState(null);
+  const [selectedVisit, setSelectedVisit] = useState(null);
+  const visitsFetchSeq = useRef(0);
+  const visitsTimer = useRef(null);
   const [startedAt, setStartedAt] = useState(null);
   const [stage, setStage] = useState({
     uploading: 'pending',
@@ -242,6 +252,10 @@ export default function NewMeetingClient({ user }) {
       location_lat: location?.lat ?? null,
       location_lng: location?.lng ?? null,
       location_accuracy: location?.accuracy ?? null,
+      // Visit dropdown linkage (visit meetings only) — server stores these on
+      // the meeting row so the dashboard + detail views can show "who".
+      cp_visit_id: selectedVisit?.id || null,
+      cp_visit_meta: selectedVisit || null,
     };
   }
 
@@ -640,6 +654,10 @@ export default function NewMeetingClient({ user }) {
   function onCpCodeChange(value) {
     setForm((f) => ({ ...f, cp_code: value }));
     scheduleLookup({ cp_code: value });
+    // Reset visit picker whenever the CP code changes — the prior selection
+    // belongs to a different CP.
+    setSelectedVisit(null);
+    scheduleVisitsFetch(value, form.meeting_type);
   }
   function onCpMobileChange(value) {
     setForm((f) => ({ ...f, cp_mobile: value }));
@@ -648,13 +666,80 @@ export default function NewMeetingClient({ user }) {
   function clearCpFill() {
     setForm({ cp_code: '', cp_mobile: '', cp_name: '', cp_city: '', purpose: form.purpose });
     setCpLookup({ state: 'idle' });
+    setSelectedVisit(null);
+    setVisits([]);
+    setVisitsState('idle');
+  }
+
+  // Re-fetch visits when the RM toggles meeting type to/from "visit" after
+  // entering a CP code.
+  useEffect(() => {
+    if (form.meeting_type === 'visit' && form.cp_code?.trim()) {
+      scheduleVisitsFetch(form.cp_code, 'visit');
+    } else {
+      setVisits([]);
+      setVisitsState('idle');
+      setSelectedVisit(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.meeting_type]);
+
+  function scheduleVisitsFetch(cpCode, type) {
+    if (visitsTimer.current) clearTimeout(visitsTimer.current);
+    const code = String(cpCode || '').trim();
+    if (type !== 'visit' || !code) {
+      setVisits([]);
+      setVisitsState('idle');
+      return;
+    }
+    setVisitsState('loading');
+    setVisitsError(null);
+    // Debounce so we don't spam the Sheets API while the RM is mid-typing.
+    visitsTimer.current = setTimeout(async () => {
+      const seq = ++visitsFetchSeq.current;
+      try {
+        const r = await fetch(`/api/visits/today?cp_code=${encodeURIComponent(code)}`);
+        const j = await r.json();
+        if (seq !== visitsFetchSeq.current) return; // stale
+        if (!r.ok || !j.ok) {
+          setVisits([]);
+          setVisitsState('error');
+          setVisitsError(j?.error || `Sheet read failed (${r.status})`);
+          return;
+        }
+        setVisits(j.visits || []);
+        setVisitsState('loaded');
+      } catch (e) {
+        if (seq !== visitsFetchSeq.current) return;
+        setVisits([]);
+        setVisitsState('error');
+        setVisitsError(e?.message || 'Sheet read failed');
+      }
+    }, 500);
+  }
+
+  function onSelectVisit(v) {
+    setSelectedVisit(v);
+    // Auto-fill broker_contact → cp_mobile and broker_name → cp_name so the
+    // RM doesn't have to retype what the sheet already has. City and the
+    // CP-level CP code stay as the RM entered them.
+    setForm((f) => ({
+      ...f,
+      cp_mobile: f.cp_mobile?.trim() ? f.cp_mobile : (v.broker_contact || ''),
+      cp_name: f.cp_name?.trim() ? f.cp_name : (v.broker_name || ''),
+      cp_city: f.cp_city?.trim() ? f.cp_city : (v.city || ''),
+    }));
   }
 
   const canStart = isDirectRm
     ? !!form.cp_mobile.trim()
     : isOnboarding
     ? !!form.cp_name.trim()
-    : form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type;
+    : form.cp_code.trim() && form.cp_mobile.trim() && form.meeting_type &&
+      // For visit meetings, the RM must pick a scheduled visit from the
+      // dropdown before recording — that's how we tie the recording back to
+      // a buyer / society / broker for the dashboard.
+      (form.meeting_type !== 'visit' || !!selectedVisit);
 
   return (
     <div className="oh-page">
@@ -788,6 +873,25 @@ export default function NewMeetingClient({ user }) {
               </>
             ) : (
               <>
+                <div className="oh-field">
+                  <label>
+                    Meeting type <span className="oh-req">*</span>
+                  </label>
+                  <div className="oh-mtype-grid">
+                    {MEETING_TYPES.filter((t) => t.value !== 'onboarding').map((t) => (
+                      <button
+                        type="button"
+                        key={t.value}
+                        className={`oh-mtype-card ${form.meeting_type === t.value ? 'selected' : ''}`}
+                        onClick={() => setForm({ ...form, meeting_type: t.value })}
+                      >
+                        <div className="oh-mtype-label">{t.label}</div>
+                        <div className="oh-mtype-desc">{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="oh-form-row-2">
                   <div className="oh-field">
                     <label>
@@ -817,6 +921,16 @@ export default function NewMeetingClient({ user }) {
                 </div>
 
                 <CpLookupStatus lookup={cpLookup} onClear={clearCpFill} />
+
+                {form.meeting_type === 'visit' && form.cp_code.trim() && (
+                  <VisitPicker
+                    visits={visits}
+                    state={visitsState}
+                    error={visitsError}
+                    selected={selectedVisit}
+                    onSelect={onSelectVisit}
+                  />
+                )}
 
                 <div className="oh-form-row-2">
                   <div className="oh-field">
@@ -853,25 +967,6 @@ export default function NewMeetingClient({ user }) {
                     value={form.purpose}
                     onChange={(e) => setForm({ ...form, purpose: e.target.value })}
                   />
-                </div>
-
-                <div className="oh-field">
-                  <label>
-                    Meeting type <span className="oh-req">*</span>
-                  </label>
-                  <div className="oh-mtype-grid">
-                    {MEETING_TYPES.filter((t) => t.value !== 'onboarding').map((t) => (
-                      <button
-                        type="button"
-                        key={t.value}
-                        className={`oh-mtype-card ${form.meeting_type === t.value ? 'selected' : ''}`}
-                        onClick={() => setForm({ ...form, meeting_type: t.value })}
-                      >
-                        <div className="oh-mtype-label">{t.label}</div>
-                        <div className="oh-mtype-desc">{t.description}</div>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </>
             )}
@@ -1425,6 +1520,151 @@ function ProgressStep({ label, state, warn }) {
         />
       )}
       <span>{label}</span>
+    </div>
+  );
+}
+
+// Renders today's scheduled visits for the entered CP code (live Google
+// Sheet read). RM has to pick one before "Proceed to record" enables — the
+// selection is what ties the recording to a specific buyer + society on
+// the dashboard.
+function VisitPicker({ visits, state, error, selected, onSelect }) {
+  return (
+    <div className="oh-visit-picker">
+      <label className="oh-visit-label">
+        <Building2 size={12} style={{ display: 'inline', marginRight: 4 }} />
+        Today&rsquo;s scheduled visits <span className="oh-req">*</span>
+      </label>
+
+      {state === 'loading' && (
+        <div className="oh-visit-row info">
+          <Loader2 size={13} className="oh-spin" />
+          <span>Looking up today&rsquo;s visits for this CP…</span>
+        </div>
+      )}
+
+      {state === 'error' && (
+        <div className="oh-visit-row err">
+          <AlertCircle size={13} />
+          <span>{error || 'Could not load visits from the sheet.'}</span>
+        </div>
+      )}
+
+      {state === 'loaded' && visits.length === 0 && (
+        <div className="oh-visit-row empty">
+          <Search size={13} />
+          <span>No visits scheduled today for this CP in the sheet.</span>
+        </div>
+      )}
+
+      {state === 'loaded' && visits.length > 0 && (
+        <div className="oh-visit-list">
+          {visits.map((v) => {
+            const isSel = selected && selected.id === v.id;
+            return (
+              <button
+                type="button"
+                key={v.id}
+                className={`oh-visit-card ${isSel ? 'selected' : ''}`}
+                onClick={() => onSelect(v)}
+              >
+                <div className="oh-visit-card-head">
+                  <span className="oh-visit-buyer">
+                    {v.buyer_name || '(no buyer name)'}
+                  </span>
+                  {v.selected_time && (
+                    <span className="oh-visit-time">{v.selected_time}</span>
+                  )}
+                </div>
+                <div className="oh-visit-card-sub">
+                  {v.society_name || v.company_name || 'No society'}
+                  {v.city ? ` · ${v.city}` : ''}
+                </div>
+                {(v.broker_name || v.broker_contact) && (
+                  <div className="oh-visit-card-sub2">
+                    Broker: {v.broker_name || ''}{v.broker_contact ? ` · ${v.broker_contact}` : ''}
+                  </div>
+                )}
+                {isSel && <CheckCircle2 size={13} className="oh-visit-check" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <style jsx>{`
+        .oh-visit-picker { margin: 6px 0 14px; }
+        .oh-visit-label {
+          font-size: 12.5px;
+          color: var(--ink-2);
+          display: block;
+          margin-bottom: 6px;
+        }
+        .oh-visit-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          border-radius: 9px;
+          font-size: 13px;
+          border: 1px solid var(--border);
+        }
+        .oh-visit-row.info { color: var(--ink-2); background: var(--paper); }
+        .oh-visit-row.empty { color: var(--ink-3); background: var(--paper); font-style: italic; }
+        .oh-visit-row.err { color: var(--danger, #b03021); background: rgba(176, 48, 33, 0.06); border-color: rgba(176, 48, 33, 0.3); }
+        .oh-visit-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .oh-visit-card {
+          all: unset;
+          cursor: pointer;
+          padding: 12px 14px;
+          border: 1px solid var(--border);
+          border-radius: 11px;
+          background: var(--paper);
+          display: block;
+          position: relative;
+          transition: border-color 0.15s, background 0.15s;
+        }
+        .oh-visit-card:hover { border-color: var(--ink-3); }
+        .oh-visit-card.selected {
+          border-color: var(--accent, #2c8a72);
+          background: rgba(44, 138, 114, 0.06);
+        }
+        .oh-visit-card-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 8px;
+        }
+        .oh-visit-buyer {
+          font-weight: 600;
+          color: var(--ink);
+          font-size: 14px;
+        }
+        .oh-visit-time {
+          font-size: 12px;
+          color: var(--ink-3);
+        }
+        .oh-visit-card-sub {
+          font-size: 12.5px;
+          color: var(--ink-2);
+          margin-top: 3px;
+        }
+        .oh-visit-card-sub2 {
+          font-size: 11.5px;
+          color: var(--ink-3);
+          margin-top: 2px;
+        }
+        .oh-visit-check {
+          position: absolute;
+          top: 12px;
+          right: 14px;
+          color: var(--accent, #2c8a72);
+        }
+      `}</style>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Upload } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
+import GroupedMeetings from '@/components/GroupedMeetings';
 import MeetingDetail from '@/components/MeetingDetail';
 import CallUploader from '@/components/CallUploader';
 import Toast from '@/components/Toast';
@@ -58,21 +59,32 @@ export default function DirectClient({ initialMeetings, user }) {
       </div>
 
       {tab === 'recordings' && (
-        <MeetingsTable
-          meetings={meetings}
-          showRMColumn={false}
-          onOpen={openMeetingFull}
-          hideDateFilter={true}
-          emptyAction={
-            <button
-              className="oh-btn primary"
-              style={{ marginTop: 16 }}
-              onClick={() => setTab('upload')}
-            >
-              <Upload size={14} /> Upload your first recording
-            </button>
-          }
-        />
+        meetings.length === 0 ? (
+          <MeetingsTable
+            meetings={meetings}
+            showRMColumn={false}
+            onOpen={openMeetingFull}
+            hideDateFilter={true}
+            emptyAction={
+              <button
+                className="oh-btn primary"
+                style={{ marginTop: 16 }}
+                onClick={() => setTab('upload')}
+              >
+                <Upload size={14} /> Upload your first recording
+              </button>
+            }
+          />
+        ) : (
+          // Direct-RM recordings are grouped by buyer phone so multiple
+          // calls with the same person live under one card instead of
+          // littering the list. Singletons render as expanded one-row cards.
+          <GroupedMeetings
+            meetings={meetings}
+            groupBy="cp_mobile"
+            onOpen={openMeetingFull}
+          />
+        )
       )}
 
       {tab === 'upload' && (
