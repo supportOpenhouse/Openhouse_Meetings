@@ -427,6 +427,12 @@ export default function NewMeetingClient({ user }) {
           location_lat: location?.lat ?? null,
           location_lng: location?.lng ?? null,
           location_accuracy: location?.accuracy ?? null,
+          // Visit-dropdown linkage. Selected only on visit meetings; null on
+          // engagement/onboarding/direct paths. Without this the row has no
+          // cp_visit_id and never threads with sibling recordings of the
+          // same scheduled visit on the dashboard.
+          cp_visit_id: selectedVisit?.id || null,
+          cp_visit_meta: selectedVisit || null,
         }),
       });
       if (!createRes.ok) {
