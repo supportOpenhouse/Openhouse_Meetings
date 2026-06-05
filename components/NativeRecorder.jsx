@@ -125,6 +125,17 @@ const NativeRecorder = forwardRef(function NativeRecorder(
         setError('Microphone permission was denied. Enable it in Settings to record.');
         return;
       }
+      // Safety net: if the native plugin is still holding a recording from
+      // a previous run (app killed mid-record, etc.), startMicRecording
+      // would reject with "Already recording" and leave the UI stuck.
+      // Discarding here frees the mic so the new recording can begin. By
+      // this point the parent's recovery useEffect has already decided
+      // there's no session worth restoring, so dropping the orphan is safe.
+      const orphanStatus = await getMicStatus();
+      if (orphanStatus === 'recording' || orphanStatus === 'paused') {
+        try { await discardMicRecording(); } catch {}
+        try { await stopMicForeground(); } catch {}
+      }
       // Promote the app to a foreground service BEFORE the mic opens. This is
       // what keeps Android (Doze / app standby) from killing the recording
       // when the screen goes off. No-op on non-Android platforms.

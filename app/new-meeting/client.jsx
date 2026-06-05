@@ -65,14 +65,29 @@ export default function NewMeetingClient({ user }) {
   const [resumeSession, setResumeSession] = useState(null);
   useEffect(() => {
     try { setIsNative(Capacitor.isNativePlatform()); } catch {}
-    // Recovery path: if a native recording is in progress, jump straight
-    // back into 'record' (or 'review' if paused) with the prior form
-    // metadata so the user can pause / upload / discard.
+    // Recovery path: if a native recording is in progress, either restore
+    // the UI to match (when we have session metadata to reconstruct from)
+    // or discard the orphan (when we don't — without form metadata the
+    // recording can never be uploaded anyway, so it's just a stuck mic).
     (async () => {
       const status = await getMicStatus();
       if (status !== 'recording' && status !== 'paused') return;
       const sess = getRecordingSession();
-      if (!sess) return;
+      if (!sess) {
+        // Native is recording but we lost the form context (app data
+        // cleared, session expired, etc.). Free the mic so the form
+        // doesn't hit "Already recording" later. Best-effort; if discard
+        // fails NativeRecorder.start has its own safety net.
+        try {
+          const { discardMicRecording } = await import('@/lib/micRecorder');
+          await discardMicRecording();
+        } catch {}
+        try {
+          const { stopMicForeground } = await import('@/lib/micForeground');
+          await stopMicForeground();
+        } catch {}
+        return;
+      }
       if (sess.form) setForm(sess.form);
       if (typeof sess.isOnboarding === 'boolean') setIsOnboarding(sess.isOnboarding);
       if (sess.startedAtMs) setStartedAt(sess.startedAtMs);
