@@ -1,4 +1,5 @@
 import './globals.css';
+import ErrorReporter from '@/components/ErrorReporter';
 
 export const metadata = {
   title: 'Openhouse · Meetings',
@@ -17,7 +18,10 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="oh">{children}</body>
+      <body className="oh">
+        <ErrorReporter />
+        {children}
+      </body>
     </html>
   );
 }
