@@ -291,7 +291,7 @@ function DesktopRow({ m, showRM, cols, onClick }) {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {m.cp_code ? (
-            <span style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
+            <span style={{ fontWeight: 500, fontFamily: "var(--font-mono), monospace", fontSize: 13.5 }}>
               {m.cp_code}
             </span>
           ) : (

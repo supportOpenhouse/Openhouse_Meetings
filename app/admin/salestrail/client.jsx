@@ -199,7 +199,7 @@ export default function SalestrailClient({ initial }) {
           margin-bottom: 16px;
         }
         .st-warn code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           background: var(--paper-2);
           padding: 1px 5px;
@@ -318,7 +318,7 @@ function Stat({ label, value, tone }) {
         padding: '12px 14px',
       }}
     >
-      <div style={{ fontFamily: "'Geist Mono', monospace", fontSize: 22, color }}>
+      <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: 22, color }}>
         {(value ?? 0).toLocaleString('en-IN')}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{label}</div>

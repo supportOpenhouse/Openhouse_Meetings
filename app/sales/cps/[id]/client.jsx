@@ -201,7 +201,7 @@ export default function SalesCpDetailClient({ cp, visits }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 26px;
           color: var(--accent);
           background: var(--accent-soft);
@@ -213,7 +213,7 @@ export default function SalesCpDetailClient({ cp, visits }) {
           margin-top: 4px;
         }
         .sx-cp-sub .code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 13px;
           color: var(--ink-2);
         }

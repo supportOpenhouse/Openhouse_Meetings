@@ -1287,7 +1287,7 @@ export default function NewMeetingClient({ user }) {
           line-height: 1.5;
         }
         .oh-hint code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           background: rgba(0,0,0,0.05);
           padding: 1px 4px;

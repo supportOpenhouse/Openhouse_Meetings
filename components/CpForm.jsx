@@ -349,7 +349,7 @@ export default function CpForm({ initial = {}, submitLabel = 'Register partner',
           gap: 14px;
         }
         .sx-card-title {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 19px;
           letter-spacing: -0.01em;
           color: var(--ink);

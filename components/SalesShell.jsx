@@ -30,7 +30,7 @@ export default function SalesShell({ user, current, children }) {
             Open<span>house</span>
             <div
               style={{
-                fontFamily: "'Geist', sans-serif",
+                fontFamily: "var(--font-sans), sans-serif",
                 fontSize: 10,
                 letterSpacing: '0.18em',
                 textTransform: 'uppercase',

@@ -131,7 +131,7 @@ export function RepCard({ rep }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 20px;
           color: var(--accent);
           background: var(--accent-soft);
@@ -161,7 +161,7 @@ export function RepCard({ rep }) {
           flex-direction: column;
         }
         .sx-rep-card .n strong {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 22px;
           font-weight: 400;
           color: var(--ink);

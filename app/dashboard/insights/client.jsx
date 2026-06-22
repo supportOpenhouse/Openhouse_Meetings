@@ -128,7 +128,7 @@ export default function RmInsightsClient({ initial, user }) {
         }
         .oh-rmi-focus:last-child { border-bottom: none; }
         .oh-rmi-drop {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-weight: 600;
           color: var(--danger, #b03021);
           font-size: 14px;
@@ -199,7 +199,7 @@ function ResultBody({ result, meta }) {
       <style jsx>{`
         .oh-rmi-body { margin-top: 10px; }
         .oh-rmi-headline {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 19px;
           line-height: 1.3;
           color: var(--ink);
@@ -213,7 +213,7 @@ function ResultBody({ result, meta }) {
         }
         .oh-rmi-item:last-of-type { border-bottom: none; }
         .oh-rmi-rank {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           width: 16px;
@@ -228,7 +228,7 @@ function ResultBody({ result, meta }) {
         }
         .oh-rmi-item-label { font-weight: 500; font-size: 13.5px; color: var(--ink); }
         .oh-rmi-item-value {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--accent);
           flex-shrink: 0;

@@ -240,7 +240,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 
       <style jsx>{`
         .oh-detail-title {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 28px;
           letter-spacing: -0.01em;
           margin: 4px 0 6px;
@@ -486,7 +486,7 @@ function ScorePanel({ score }) {
           flex-wrap: wrap;
         }
         .oh-score-value {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 32px;
           line-height: 1;
           margin-top: 2px;
@@ -546,7 +546,7 @@ function ScorePanel({ score }) {
           border-color: #2f6f2f;
         }
         .oh-score-pts {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--ink-3);
         }

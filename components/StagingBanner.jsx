@@ -24,7 +24,7 @@ export default function StagingBanner() {
         fontSize: 11,
         fontWeight: 700,
         letterSpacing: '0.04em',
-        fontFamily: "'Geist', system-ui, sans-serif",
+        fontFamily: "var(--font-sans), system-ui, sans-serif",
         boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
       }}
     >

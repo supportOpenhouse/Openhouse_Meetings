@@ -16,7 +16,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import Recorder from '@/components/Recorder';
 import NativeRecorder from '@/components/NativeRecorder';
-import { uploadAndCreateVisit } from '@/lib/salesUpload';
+import { uploadVisitAudio, createSalesVisit } from '@/lib/salesUpload';
 import { fmtDuration } from '@/lib/utils';
 import { initials } from '@/lib/salesFormat';
 
@@ -43,6 +43,12 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   const recorderRef = useRef(null);
   const recordStartRef = useRef(null);
   const [reviewDuration, setReviewDuration] = useState(0);
+
+  // Background audio upload — kicked off the instant recording is finalized so
+  // it overlaps the rep filling the assessment form. Submit then only has to
+  // create the row (near-instant) instead of waiting on the network.
+  const audioUrlRef = useRef(null);
+  const audioUploadPromiseRef = useRef(null);
 
   const [blob, setBlob] = useState(null);
   const [durSec, setDurSec] = useState(0);
@@ -111,6 +117,34 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
     setDurSec(dur);
     setCheckOut(new Date());
     setStep('form');
+    startBackgroundUpload(b, dur);
+  }
+  function startBackgroundUpload(b, dur) {
+    audioUrlRef.current = null;
+    setUploadStatus('uploading');
+    setUploadPct(0);
+    const checkIn = recordStartRef.current || new Date();
+    const p = uploadVisitAudio({
+      blob: b,
+      durSec: dur,
+      userId: user.id,
+      cp,
+      startedAt: checkIn,
+      onProgress: setUploadPct,
+      onStatus: setUploadStatus,
+    })
+      .then((url) => {
+        audioUrlRef.current = url;
+        return url;
+      })
+      .catch((err) => {
+        setUploadStatus('error');
+        throw err;
+      });
+    audioUploadPromiseRef.current = p;
+    // Swallow here so a slow/early failure doesn't surface as an unhandled
+    // rejection; handleSubmit re-awaits and handles errors there.
+    p.catch(() => {});
   }
   function useRecording() {
     recorderRef.current?.finalize();
@@ -122,6 +156,10 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   function discardRecording() {
     recorderRef.current?.discard();
     setBlob(null);
+    audioUrlRef.current = null;
+    audioUploadPromiseRef.current = null;
+    setUploadStatus('');
+    setUploadPct(0);
     setStep('record');
   }
 
@@ -133,8 +171,6 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
       return;
     }
     setStep('submit');
-    setUploadStatus('starting');
-    setUploadPct(0);
 
     const checkIn = recordStartRef.current || new Date();
     const visit = {
@@ -156,16 +192,29 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
     };
 
     try {
-      const visitId = await uploadAndCreateVisit({
-        blob,
-        durSec,
-        userId: user.id,
-        cp,
-        visit,
-        startedAt: checkIn,
-        onProgress: setUploadPct,
-        onStatus: setUploadStatus,
-      });
+      // The background upload (started when recording finished) is usually done
+      // by now. If not, wait on it; if it failed, retry inline.
+      let audioUrl = audioUrlRef.current;
+      if (!audioUrl) {
+        setUploadStatus('uploading');
+        try {
+          audioUrl = await audioUploadPromiseRef.current;
+        } catch {
+          audioUrl = await uploadVisitAudio({
+            blob,
+            durSec,
+            userId: user.id,
+            cp,
+            startedAt: checkIn,
+            onProgress: setUploadPct,
+            onStatus: setUploadStatus,
+          });
+        }
+        audioUrlRef.current = audioUrl;
+      }
+
+      setUploadStatus('creating');
+      const visitId = await createSalesVisit({ visit, audioUrl, durSec });
       router.push(`/sales/visits/${visitId}`);
     } catch (err) {
       setError(err?.message || 'Upload failed. Please try again.');
@@ -286,10 +335,51 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
           <h1 className="oh-h1" style={{ fontSize: 30, marginTop: 14 }}>
             Log the <em>assessment</em>
           </h1>
-          <p className="oh-sub">
+          <p className="oh-sub" style={{ marginBottom: 12 }}>
             <Mic size={13} style={{ verticalAlign: '-2px' }} /> {fmtDuration(durSec)} recorded — the
             AI summary fills in automatically once you submit.
           </p>
+
+          {uploadStatus && uploadStatus !== 'creating' && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12.5,
+                fontWeight: 500,
+                padding: '6px 11px',
+                borderRadius: 100,
+                marginBottom: 18,
+                background:
+                  uploadStatus === 'done'
+                    ? 'var(--success-soft)'
+                    : uploadStatus === 'error'
+                      ? 'var(--danger-soft)'
+                      : 'var(--accent-soft)',
+                color:
+                  uploadStatus === 'done'
+                    ? 'var(--success)'
+                    : uploadStatus === 'error'
+                      ? 'var(--danger)'
+                      : 'var(--accent)',
+              }}
+            >
+              {uploadStatus === 'done' ? (
+                <>
+                  <CheckCircle2 size={13} /> Recording uploaded — submit when ready
+                </>
+              ) : uploadStatus === 'error' ? (
+                <>
+                  <AlertCircle size={13} /> Upload hit a snag — we’ll retry on submit
+                </>
+              ) : (
+                <>
+                  <Loader2 size={13} className="oh-spin" /> Uploading recording… {uploadPct}%
+                </>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="sx-form">
             <div className="sx-card">
@@ -510,7 +600,7 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 18px;
           color: var(--accent);
           background: var(--accent-soft);
@@ -520,7 +610,7 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
           color: var(--ink);
         }
         .sx-visit-cp .cd {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           color: var(--ink-3);
         }
@@ -532,7 +622,7 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
           margin-top: 16px;
         }
         .sx-review .dur {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 30px;
         }
         .sx-review p {

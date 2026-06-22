@@ -237,7 +237,7 @@ export default function SalesVisitDetailClient({ initialVisit }) {
           margin-top: 2px;
         }
         .head .code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 13px;
           color: var(--accent);
           text-decoration: none;
@@ -307,7 +307,7 @@ export default function SalesVisitDetailClient({ initialVisit }) {
           margin-top: 2px;
         }
         .sx-ai-card .headline {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 22px;
           line-height: 1.2;
           color: var(--ink);

@@ -866,7 +866,7 @@ function CrossCutTab({ cpFocus }) {
         }
         .oh-ins-focus-row:last-child { border-bottom: none; }
         .oh-ins-focus-drop {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-weight: 600;
           color: var(--danger, #b03021);
           font-size: 14px;
@@ -1141,14 +1141,14 @@ function SavedItemsSection({ items, onDelete }) {
         }
         .oh-ins-saved-label { font-weight: 500; font-size: 13.5px; color: var(--ink); }
         .oh-ins-item-value {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--accent);
           flex-shrink: 0;
         }
         .oh-ins-item-value.clickable {
           all: unset;
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--accent);
           cursor: pointer;
@@ -1239,7 +1239,7 @@ function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveIt
       <style jsx>{`
         .oh-ins-body { margin-top: 10px; }
         .oh-ins-headline {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 19px;
           line-height: 1.3;
           color: var(--ink);
@@ -1254,7 +1254,7 @@ function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveIt
         }
         .oh-ins-item:last-child { border-bottom: none; }
         .oh-ins-item-rank {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           width: 16px;
@@ -1269,14 +1269,14 @@ function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveIt
         }
         .oh-ins-item-label { font-weight: 500; font-size: 13.5px; color: var(--ink); }
         .oh-ins-item-value {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--accent);
           flex-shrink: 0;
         }
         .oh-ins-item-value.clickable {
           all: unset;
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--accent);
           flex-shrink: 0;
@@ -1431,7 +1431,7 @@ function MentionsModal({ label, ids, fetchUrl, subtitle, onClose }) {
 
         <style jsx>{`
           .oh-mention-title {
-            font-family: 'Instrument Serif', serif;
+            font-family: var(--font-sans); font-weight: 700;
             font-size: 22px;
             margin: 4px 0 4px;
             line-height: 1.2;
@@ -1534,7 +1534,7 @@ function Stat({ label, value, accent, onClick }) {
         }
         .oh-ins-stat.clickable:hover { border-color: var(--ink-2); }
         .oh-ins-stat.clickable:active { transform: scale(0.997); }
-        .v { font-family: 'Instrument Serif', serif; font-size: 28px; line-height: 1; color: var(--ink); }
+        .v { font-family: var(--font-sans); font-weight: 700; font-size: 28px; line-height: 1; color: var(--ink); }
         .l { font-size: 11.5px; color: var(--ink-3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
       `}</style>
     </div>
@@ -1572,7 +1572,7 @@ function TempStat({ mix, onSegmentClick }) {
           border-radius: 10px;
           padding: 12px 14px;
         }
-        .row { display: flex; gap: 8px; font-family: 'Geist Mono', monospace; font-size: 17px; }
+        .row { display: flex; gap: 8px; font-family: var(--font-mono), monospace; font-size: 17px; }
         .seg {
           display: inline-flex;
           align-items: center;
@@ -1660,7 +1660,7 @@ function BarRow({ label, pct, caption, tone, onClick }) {
         .oh-bar-track { height: 8px; background: var(--paper-2); border-radius: 999px; overflow: hidden; }
         .oh-bar-row.clickable .oh-bar-track { background: var(--paper); }
         .oh-bar-fill { height: 100%; border-radius: 999px; }
-        .oh-bar-caption { font-size: 11px; font-family: 'Geist Mono', monospace; color: var(--ink-3); text-align: right; }
+        .oh-bar-caption { font-size: 11px; font-family: var(--font-mono), monospace; color: var(--ink-3); text-align: right; }
         @media (max-width: 600px) {
           .oh-bar-row { grid-template-columns: 110px 1fr 70px; }
         }
@@ -1736,7 +1736,7 @@ function Sparkbars({ data }) {
         }
         .oh-chart-val {
           font-size: 11px;
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           color: var(--ink-2);
           margin-bottom: 4px;
         }
@@ -1796,7 +1796,7 @@ function RankRow({ rank, name, value }) {
         }
         .oh-rank-row:last-child { border-bottom: none; }
         .r {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11px;
           color: var(--ink-3);
           width: 16px;
@@ -1811,7 +1811,7 @@ function RankRow({ rank, name, value }) {
           white-space: nowrap;
         }
         .v {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           color: var(--ink-2);
           flex-shrink: 0;
