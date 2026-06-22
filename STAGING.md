@@ -31,6 +31,7 @@ shared, so they're identical) and add one extra:
 |---|---|
 | `DATABASE_URL` | same as production (shared DB) |
 | `AUTH_SECRET` | same as production |
+| `AUTH_URL` | **the staging alias** `https://<project>-git-staging-<team>.vercel.app` — **NOT** the production URL |
 | `AUTH_TRUST_HOST` | `true` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | same as production |
 | `ADMIN_EMAILS` | same as production |
@@ -39,9 +40,13 @@ shared, so they're identical) and add one extra:
 | `NEXT_PUBLIC_STAGING` | **`1`**  ← only here, never in Production |
 | (others: `CP_INVENTORY_DB_STRING`, `GOOGLE_*`, `SALESTRAIL_*`, `CRON_SECRET`) | same as production |
 
-> `AUTH_URL` can be left at the production value or omitted — `trustHost` makes
-> it follow the request host. If Google login ever redirects to the wrong host,
-> set `AUTH_URL` to the staging alias explicitly.
+> ⚠️ **`AUTH_URL` is the #1 gotcha.** If you copy the Production env to Preview,
+> `AUTH_URL` comes across as the production URL — and then NextAuth sends the
+> OAuth `redirect_uri` to production, so **after login you land on prod (old
+> code), not staging.** You MUST override `AUTH_URL` in the Preview scope to the
+> staging alias (or remove it from Preview so `trustHost` auto-detects the host).
+> This is exactly the "logged in → bounced to openhouse-meetings.vercel.app"
+> symptom.
 
 ### 3. Add the staging callback to Google OAuth (REQUIRED for login)
 Google Cloud Console → APIs & Services → Credentials → your OAuth client →

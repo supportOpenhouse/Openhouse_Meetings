@@ -19,6 +19,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
 
   function roleLabel(role) {
     if (role === 'direct_rm') return 'Direct RM';
+    if (role === 'sales_rm') return 'Sales RM';
     return role;
   }
 
@@ -182,6 +183,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
               >
                 <option value="rm">RM</option>
                 <option value="direct_rm">Direct RM (upload only)</option>
+                <option value="sales_rm">Sales RM (field sales)</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -286,6 +288,7 @@ export default function RMsClient({ initialRMs, currentUserId }) {
                   >
                     <option value="rm">RM</option>
                     <option value="direct_rm">Direct RM</option>
+                    <option value="sales_rm">Sales RM</option>
                     <option value="admin">Admin</option>
                   </select>
                 )}
