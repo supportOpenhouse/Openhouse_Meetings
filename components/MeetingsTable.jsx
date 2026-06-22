@@ -459,6 +459,10 @@ function getSentVisuals(sent) {
 // under summary.onboarding.sentiment.
 function getSentiment(meeting) {
   return (
+    // List endpoints now ship a lean `list_sentiment` (extracted in SQL) instead
+    // of the full summary jsonb. Detail views still carry the full summary, so
+    // keep the object-path fallbacks for those.
+    meeting.list_sentiment ||
     meeting.summary?.score?.classification ||
     meeting.summary?.engagement?.sentiment ||
     meeting.summary?.onboarding?.sentiment ||

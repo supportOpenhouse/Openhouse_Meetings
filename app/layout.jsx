@@ -1,5 +1,6 @@
 import './globals.css';
 import ErrorReporter from '@/components/ErrorReporter';
+import StagingBanner from '@/components/StagingBanner';
 
 export const metadata = {
   title: 'Openhouse · Meetings',
@@ -20,6 +21,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body className="oh">
         <ErrorReporter />
+        <StagingBanner />
         {children}
       </body>
     </html>

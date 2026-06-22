@@ -9,3 +9,10 @@ node_modules
 .turbo
 dist
 drizzle/migrations
+
+# Spartan AI config (contains API keys)
+.spartan/ai.env
+.claude
+
+# Local screenshot/QA harness (forges sessions with AUTH_SECRET — do not commit)
+tools/shots

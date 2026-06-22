@@ -1159,12 +1159,12 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-onboard-toggle:hover {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.03);
+          background: rgba(var(--accent-rgb), 0.03);
         }
         .oh-onboard-toggle.on {
           border-style: solid;
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.06);
+          background: rgba(var(--accent-rgb), 0.06);
         }
         .oh-onboard-toggle .check {
           flex-shrink: 0;
@@ -1179,7 +1179,7 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-onboard-toggle.on .check {
           color: var(--accent);
-          background: rgba(184, 52, 28, 0.1);
+          background: rgba(var(--accent-rgb), 0.1);
         }
         .oh-onboard-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
         .oh-onboard-title { font-size: 14px; font-weight: 500; color: var(--ink); }
@@ -1237,7 +1237,7 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-mtype-card.selected {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.04);
+          background: rgba(var(--accent-rgb), 0.04);
         }
         .oh-mtype-label {
           font-size: 14px;

@@ -25,11 +25,13 @@ export default auth((req) => {
 
   if (isApiAuthRoute || isSalestrailRoute || isPublicAsset) return NextResponse.next();
 
+  // Where each role lands after login / when bounced off a forbidden page.
+  const homeFor = (role) =>
+    role === 'admin' ? '/admin' : role === 'sales_rm' ? '/sales' : '/dashboard';
+
   if (isAuthRoute) {
     if (isLoggedIn) {
-      const role = req.auth?.user?.role;
-      const dest = role === 'admin' ? '/admin' : '/dashboard';
-      return NextResponse.redirect(new URL(dest, nextUrl));
+      return NextResponse.redirect(new URL(homeFor(req.auth?.user?.role), nextUrl));
     }
     return NextResponse.next();
   }
@@ -38,10 +40,28 @@ export default auth((req) => {
     return NextResponse.redirect(new URL('/login', nextUrl));
   }
 
+  const role = req.auth?.user?.role;
+
   // Admin-only routes
   if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin') || pathname.startsWith('/api/rms')) {
-    if (req.auth?.user?.role !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', nextUrl));
+    if (role !== 'admin') {
+      return NextResponse.redirect(new URL(homeFor(role), nextUrl));
+    }
+  }
+
+  // Sales RM area — only sales reps (and admins, for oversight) may enter.
+  if (pathname.startsWith('/sales') || pathname.startsWith('/api/sales')) {
+    if (role !== 'sales_rm' && role !== 'admin') {
+      return NextResponse.redirect(new URL(homeFor(role), nextUrl));
+    }
+  }
+
+  // Keep sales reps out of the demand/direct recording app entirely — their
+  // whole experience lives under /sales.
+  if (role === 'sales_rm') {
+    const recordingPages = ['/dashboard', '/new-meeting', '/direct', '/upload-recording'];
+    if (recordingPages.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+      return NextResponse.redirect(new URL('/sales', nextUrl));
     }
   }
 

@@ -15,7 +15,11 @@ import {
 
 // 'direct_rm' — a lightweight RM who only uploads phone call recordings
 // (MP3s) and sees a stripped-down dashboard. No live recording, no CP tools.
-export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm']);
+// 'sales_rm' — a field-sales executive on a completely separate flow: a CP
+// registry + on-site visit logging (record audio + manual visit form + AI
+// summary). Their data lives in its own tables (sales_channel_partners,
+// sales_visits) and they see the /sales experience, never /dashboard.
+export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm', 'sales_rm']);
 
 export const users = pgTable(
   'users',
@@ -236,5 +240,109 @@ export const activityLogs = pgTable(
     eventIdx: index('activity_logs_event_idx').on(t.event_type),
     createdAtIdx: index('activity_logs_created_at_idx').on(t.created_at),
     meetingIdx: index('activity_logs_meeting_idx').on(t.meeting_id),
+  })
+);
+
+// ────────────────────────────────────────────────────────────────────────────
+// SALES RM — field-sales executive flow. Deliberately a separate data island
+// from the demand/direct meetings above: its own CP registry + visit log so
+// the two products never tangle. Audio + AI summary reuse the same libraries
+// (Blob, ElevenLabs, Claude) but write here, not to `meetings`.
+// ────────────────────────────────────────────────────────────────────────────
+
+// CP registry owned by the sales team. cp_id is the human-facing code
+// (auto-issued, e.g. SCP001) shown in the UI; id is the internal key visits
+// link to. Arrays (primary_business, other_platforms, societies) are stored as
+// jsonb to match the existing app's convention (no text[] anywhere else).
+export const salesChannelPartners = pgTable(
+  'sales_channel_partners',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    cp_id: text('cp_id').notNull(), // human code, e.g. SCP001 (unique)
+    cp_name: text('cp_name').notNull(),
+    phone_primary: text('phone_primary').notNull(),
+    phone_secondary: text('phone_secondary'),
+    email: text('email'),
+    // ['primary' | 'resale' | 'rental']
+    primary_business: jsonb('primary_business'),
+    team_size: integer('team_size'),
+    monthly_deal_volume: integer('monthly_deal_volume'),
+    // free-form list of other platforms the CP works with
+    other_platforms: jsonb('other_platforms'),
+    office_address: text('office_address'),
+    office_lat: doublePrecision('office_lat'),
+    office_lng: doublePrecision('office_lng'),
+    // 'visible_signage' | 'no_signage' | 'shared_office' | 'home_based'
+    office_verification_status: text('office_verification_status'),
+    // [{ society_name, micromarket, is_primary }] — kept inline for v1 instead
+    // of a separate societies table.
+    societies: jsonb('societies'),
+    created_by: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    is_active: boolean('is_active').notNull().default(true),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    cpIdUnique: uniqueIndex('sales_cp_cp_id_uq').on(t.cp_id),
+    phoneIdx: index('sales_cp_phone_idx').on(t.phone_primary),
+    createdByIdx: index('sales_cp_created_by_idx').on(t.created_by),
+  })
+);
+
+// One row per on-site visit. Combines the manual visit form (engagement /
+// outcome / follow-up) with the audio pipeline (audio_url → transcript →
+// summary, same lifecycle as meetings.status). cp_code/cp_name are snapshotted
+// for display so list views don't need a join.
+export const salesVisits = pgTable(
+  'sales_visits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sales_rm_id: uuid('sales_rm_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    sales_cp_id: uuid('sales_cp_id').references(() => salesChannelPartners.id, {
+      onDelete: 'set null',
+    }),
+    cp_code: text('cp_code'), // snapshot of salesChannelPartners.cp_id
+    cp_name: text('cp_name'), // snapshot for list views
+    // 'first_visit' | 'repeat_visit'
+    meeting_type: text('meeting_type').notNull().default('first_visit'),
+    check_in_time: timestamp('check_in_time', { withTimezone: true }).notNull(),
+    check_out_time: timestamp('check_out_time', { withTimezone: true }),
+    duration_seconds: integer('duration_seconds').notNull().default(0),
+    meeting_lat: doublePrecision('meeting_lat'),
+    meeting_lng: doublePrecision('meeting_lng'),
+    location_accuracy: doublePrecision('location_accuracy'),
+    // ── manual visit form ──
+    key_discussion_points: text('key_discussion_points'),
+    // 'positive' | 'neutral' | 'disengaged'
+    cp_engagement_level: text('cp_engagement_level'),
+    competitive_update: text('competitive_update'),
+    inventory_received: boolean('inventory_received').notNull().default(false),
+    inventory_pipeline_count: integer('inventory_pipeline_count'),
+    next_followup_date: date('next_followup_date'),
+    next_action_required: text('next_action_required'),
+    // 'onboarded' | 'follow_up_required' | 'not_interested' | 'future_potential'
+    meeting_outcome: text('meeting_outcome'),
+    // selfie-with-CP — fast-follow, nullable for v1
+    selfie_url: text('selfie_url'),
+    // ── audio pipeline (same shape as meetings) ──
+    audio_url: text('audio_url'),
+    transcript_text: text('transcript_text'),
+    transcript_words: jsonb('transcript_words'),
+    summary: jsonb('summary'),
+    language: text('language'),
+    // 'processing' | 'ready' | 'failed' — mirrors meetings.status. Rows with no
+    // audio go straight to 'ready'.
+    status: text('status').notNull().default('processing'),
+    error_message: text('error_message'),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    rmIdx: index('sales_visits_rm_idx').on(t.sales_rm_id),
+    cpIdx: index('sales_visits_cp_idx').on(t.sales_cp_id),
+    followupIdx: index('sales_visits_followup_idx').on(t.next_followup_date),
+    statusIdx: index('sales_visits_status_idx').on(t.status),
+    checkInIdx: index('sales_visits_check_in_idx').on(t.check_in_time),
   })
 );

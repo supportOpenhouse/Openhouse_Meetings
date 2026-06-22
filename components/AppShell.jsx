@@ -1,6 +1,6 @@
 import { signOut } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3, Upload, Cloud } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 
@@ -14,6 +14,7 @@ export default function AppShell({ user, current, children }) {
     navItems = [
       { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard },
       { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3 },
+      { href: '/admin/sales', key: 'sales', label: 'Field sales', icon: Footprints },
       { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2 },
       { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users },
       { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: Users },
@@ -40,7 +41,9 @@ export default function AppShell({ user, current, children }) {
   }
 
   return (
-    <div className="oh-shell">
+    // Phase 5: non-admin roles (demand RM, direct RM) get the teal accent scope
+    // so the recording screens match the new Sales app. Admin stays rust.
+    <div className={`oh-shell ${isAdmin ? '' : 'oh-teal'}`}>
       <Heartbeat />
       <RecordingGuard />
       {/* Desktop sidebar */}

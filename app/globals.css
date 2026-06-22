@@ -15,6 +15,8 @@ html { -webkit-text-size-adjust: 100%; }
   --ink-3: #9B948A;
   --accent: #B43A18;
   --accent-soft: #F5DDC9;
+  --accent-hover: #962F12;
+  --accent-rgb: 180, 58, 24;
   --success: #3F5E36;
   --success-soft: #DCE5D2;
   --warning: #8B6914;
@@ -31,6 +33,19 @@ html { -webkit-text-size-adjust: 100%; }
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Phase 5: accent-only teal refresh for the demand/direct RM screens. Applied
+   by AppShell to every non-admin role, this remaps ONLY the accent variables —
+   the cream background, paper, and ink stay, so existing RMs keep a familiar
+   layout but the accent now matches the teal Sales app. Fully reversible: drop
+   the `oh-teal` class from AppShell to restore rust. */
+.oh-teal {
+  --accent: #14707C;
+  --accent-2: #0E5660;
+  --accent-hover: #0E5660;
+  --accent-soft: #D6EAEC;
+  --accent-rgb: 20, 112, 124;
 }
 
 .oh-serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; }
@@ -73,7 +88,7 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-btn.primary { background: var(--ink); color: var(--paper); }
 .oh-btn.primary:hover { background: #000; }
 .oh-btn.accent { background: var(--accent); color: #fff; }
-.oh-btn.accent:hover { background: #962F12; }
+.oh-btn.accent:hover { background: var(--accent-hover); }
 .oh-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--border-strong); }
 .oh-btn.ghost:hover { background: var(--paper-2); color: var(--ink); }
 .oh-btn.danger { background: transparent; color: var(--danger); border-color: var(--danger-soft); }
@@ -94,7 +109,7 @@ html { -webkit-text-size-adjust: 100%; }
   color: var(--ink);
   transition: border-color 0.15s;
 }
-.oh-input:focus, .oh-select:focus, .oh-textarea:focus { border-color: var(--ink); outline: 2px solid rgba(180,58,24,0.15); outline-offset: 0; }
+.oh-input:focus, .oh-select:focus, .oh-textarea:focus { border-color: var(--ink); outline: 2px solid rgba(var(--accent-rgb), 0.15); outline-offset: 0; }
 .oh-textarea { min-height: 60px; resize: vertical; line-height: 1.5; }
 .oh-select { cursor: pointer; }
 
@@ -122,7 +137,7 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-modal-body { padding: 24px 32px 32px; }
 
 .oh-recorder { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 40px 32px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
-.oh-mic-btn { all: unset; cursor: pointer; width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 24px rgba(180,58,24,0.3); }
+.oh-mic-btn { all: unset; cursor: pointer; width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 24px rgba(var(--accent-rgb), 0.3); }
 .oh-mic-btn:hover { transform: scale(1.04); }
 .oh-mic-btn:active { transform: scale(0.96); }
 .oh-mic-btn.recording { background: var(--danger); animation: pulse 1.6s ease-in-out infinite; }
@@ -440,4 +455,153 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 
   /* Speaker text slightly bigger for readability */
   .oh-speaker .text { font-size: 14.5px; }
+}
+
+/* ============================================================
+   SALES RM — scoped teal/amber design system.
+   Everything under .oh-sales REMAPS the shared CSS variables, so the
+   reused .oh-* components (cards, inputs, buttons, recorder) adopt the
+   new palette automatically. Sales-only structures use .sx-* classes.
+   This whole block is additive — it never touches the demand/direct RM
+   screens, which keep the cream/rust .oh palette until Phase 5.
+   ============================================================ */
+.oh-sales {
+  --bg: #EEF3F4;
+  --paper: #FFFFFF;
+  --paper-2: #E3EDEE;
+  --ink: #102A2E;
+  --ink-2: #4C6164;
+  --ink-3: #8AA1A3;
+  --accent: #14707C;          /* deep teal — primary */
+  --accent-2: #0E5660;        /* darker teal — hover */
+  --accent-soft: #D6EAEC;
+  --amber: #F59E0B;           /* warm amber — highlight / record */
+  --amber-2: #D9870A;
+  --amber-soft: #FCEBCB;
+  --success: #1F9D6B;
+  --success-soft: #D6F0E3;
+  --warning: #B45309;
+  --warning-soft: #FBE7CC;
+  --danger: #DC2828;
+  --danger-soft: #F7D6D6;
+  --border: #D8E4E5;
+  --border-strong: #BCD0D2;
+
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Re-skin reused .oh-* components inside the sales subtree where they
+   hardcode the rust colour rather than reading a variable. */
+.oh-sales .oh-brand span { color: var(--accent); }
+.oh-sales .oh-h1 em { color: var(--accent); }
+.oh-sales .oh-btn.accent { background: var(--accent); }
+.oh-sales .oh-btn.accent:hover { background: var(--accent-2); }
+.oh-sales .oh-input:focus,
+.oh-sales .oh-select:focus,
+.oh-sales .oh-textarea:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(20, 112, 124, 0.16);
+}
+.oh-sales .oh-mic-btn { background: var(--amber); box-shadow: 0 6px 28px rgba(245, 158, 11, 0.34); }
+.oh-sales .oh-mic-btn.recording { background: var(--danger); box-shadow: 0 0 0 0 rgba(220, 40, 40, 0.5); }
+.oh-sales .oh-wave span { background: var(--amber); }
+.oh-sales .oh-mobile-bottom .item.active { color: var(--accent); background: var(--accent-soft); }
+
+/* ---- Sales gradient hero (dashboard greeting + primary CTA) ---- */
+.sx-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 26px 26px 24px;
+  color: #EAFBFC;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(245, 158, 11, 0.28) 0%, rgba(245, 158, 11, 0) 46%),
+    linear-gradient(135deg, #0E5660 0%, #14707C 58%, #1B8A93 100%);
+  box-shadow: 0 14px 34px rgba(14, 86, 96, 0.28);
+}
+.sx-hero .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: rgba(234, 251, 252, 0.7); }
+.sx-hero h1 { font-family: 'Instrument Serif', serif; font-size: 34px; line-height: 1.08; letter-spacing: -0.01em; margin: 6px 0 2px; color: #fff; }
+.sx-hero h1 em { font-style: italic; color: #FCD7A0; }
+.sx-hero .sub { font-size: 13.5px; color: rgba(234, 251, 252, 0.82); margin: 0; }
+.sx-hero-cta {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 18px; padding: 12px 18px; border-radius: 11px;
+  background: var(--amber); color: #3A2606; font-weight: 600; font-size: 14.5px;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.34);
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+.sx-hero-cta:hover { background: #FFB02E; }
+.sx-hero-cta:active { transform: scale(0.97); }
+
+/* ---- Section heading inside the sales app ---- */
+.sx-section { margin-top: 28px; }
+.sx-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sx-section-head h2 { font-family: 'Instrument Serif', serif; font-size: 21px; letter-spacing: -0.01em; margin: 0; }
+.sx-section-head a { all: unset; cursor: pointer; font-size: 12.5px; color: var(--accent); font-weight: 500; }
+
+/* ---- Stat tiles (2x2 on mobile) ---- */
+.sx-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.sx-stat { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 16px 16px 15px; display: flex; flex-direction: column; gap: 2px; }
+.sx-stat .ico { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 8px; }
+.sx-stat .ico.amber { background: var(--amber-soft); color: var(--amber-2); }
+.sx-stat .ico.green { background: var(--success-soft); color: var(--success); }
+.sx-stat .v { font-family: 'Instrument Serif', serif; font-size: 32px; line-height: 1; }
+.sx-stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); margin-top: 3px; }
+
+/* ---- List card (CP rows, visit rows, follow-ups) ---- */
+.sx-list { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.sx-row { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px 16px; border-bottom: 1px solid var(--border); transition: background 0.12s; }
+.sx-row:last-child { border-bottom: none; }
+.sx-row:hover { background: var(--paper-2); }
+.sx-row .avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-family: 'Instrument Serif', serif; font-size: 18px; color: var(--accent); background: var(--accent-soft); }
+.sx-row .body { flex: 1; min-width: 0; }
+.sx-row .title { font-size: 14.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-row .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.sx-row .meta .code { font-family: 'Geist Mono', monospace; color: var(--ink-2); }
+.sx-row .chev { flex-shrink: 0; color: var(--ink-3); display: flex; }
+
+/* ---- Pills (engagement / outcome / status) ---- */
+.sx-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.sx-pill.positive, .sx-pill.onboarded { background: var(--success-soft); color: var(--success); }
+.sx-pill.neutral, .sx-pill.future { background: var(--amber-soft); color: var(--amber-2); }
+.sx-pill.disengaged, .sx-pill.not_interested { background: var(--danger-soft); color: var(--danger); }
+.sx-pill.follow_up { background: var(--accent-soft); color: var(--accent); }
+.sx-pill.processing { background: var(--paper-2); color: var(--ink-2); border: 1px dashed var(--border-strong); }
+.sx-pill.failed { background: var(--danger-soft); color: var(--danger); }
+.sx-pill.first { background: var(--accent-soft); color: var(--accent); }
+.sx-pill.repeat { background: var(--paper-2); color: var(--ink-2); }
+
+/* ---- Search bar ---- */
+.sx-search { position: relative; }
+.sx-search .ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; display: flex; }
+.sx-search input { width: 100%; padding-left: 38px !important; }
+
+/* ---- Selectable chips (business type, engagement, outcome) ---- */
+.sx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sx-chip { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 14px; border-radius: 100px; border: 1.5px solid var(--border-strong); background: var(--paper); font-size: 13px; font-weight: 500; color: var(--ink-2); transition: all 0.13s; }
+.sx-chip:hover { border-color: var(--accent); color: var(--ink); }
+.sx-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+/* ---- Boolean toggle row ---- */
+.sx-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--paper); }
+.sx-toggle .sx-toggle-text { font-size: 14px; font-weight: 500; color: var(--ink); }
+.sx-switch { all: unset; box-sizing: border-box; cursor: pointer; position: relative; width: 46px; height: 27px; border-radius: 100px; background: var(--border-strong); transition: background 0.15s; flex-shrink: 0; }
+.sx-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.sx-switch.on { background: var(--accent); }
+.sx-switch.on::after { transform: translateX(19px); }
+
+/* ---- Empty state ---- */
+.sx-empty { text-align: center; padding: 44px 22px; color: var(--ink-2); background: var(--paper); border: 1px dashed var(--border-strong); border-radius: 14px; }
+.sx-empty .ico { width: 46px; height: 46px; border-radius: 13px; background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.sx-empty .t { font-family: 'Instrument Serif', serif; font-size: 22px; color: var(--ink); margin-bottom: 4px; }
+.sx-empty .s { font-size: 13px; }
+
+@media (max-width: 768px) {
+  .sx-stats { grid-template-columns: repeat(2, 1fr); }
+  .sx-hero { border-radius: 16px; padding: 22px 20px; }
+  .sx-hero h1 { font-size: 30px; }
 }
