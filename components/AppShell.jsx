@@ -41,9 +41,10 @@ export default function AppShell({ user, current, children }) {
   }
 
   return (
-    // Phase 5: non-admin roles (demand RM, direct RM) get the teal accent scope
-    // so the recording screens match the new Sales app. Admin stays rust.
-    <div className={`oh-shell ${isAdmin ? '' : 'oh-teal'}`}>
+    // Phase 5: non-admin roles (demand RM, direct RM) get the full Field
+    // Connect Pro teal/amber scope so the recording screens match the new
+    // Sales app. Admin stays rust.
+    <div className={`oh-shell ${isAdmin ? '' : 'oh-sales'}`}>
       <Heartbeat />
       <RecordingGuard />
       {/* Desktop sidebar */}

@@ -1,13 +1,13 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import SalesShell from '@/components/SalesShell';
-import { salesDashboardData } from '@/lib/salesQueries';
-import { salesHomeExtras } from '@/lib/salesDashboard';
-import SalesDashboardClient from './client';
+import { listInventoryForRm } from '@/lib/salesInventoryQueries';
+import { listSalesCps } from '@/lib/salesQueries';
+import InventoryClient from './client';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SalesHomePage() {
+export default async function SalesInventoryPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -16,17 +16,16 @@ export default async function SalesHomePage() {
     redirect(role === 'admin' ? '/admin' : '/dashboard');
   }
 
-  const [data, extras] = await Promise.all([
-    salesDashboardData(session.user.id),
-    salesHomeExtras(session.user.id),
+  const [inventory, cps] = await Promise.all([
+    listInventoryForRm(session.user.id),
+    listSalesCps({}),
   ]);
 
-  const initialData = { ...data, ...extras };
-
   return (
-    <SalesShell user={session.user} current="home">
-      <SalesDashboardClient
-        initialData={JSON.parse(JSON.stringify(initialData))}
+    <SalesShell user={session.user} current="">
+      <InventoryClient
+        initial={JSON.parse(JSON.stringify(inventory))}
+        cps={JSON.parse(JSON.stringify(cps))}
         user={{
           id: session.user.id,
           name: session.user.name || '',

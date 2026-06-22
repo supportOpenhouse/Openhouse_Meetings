@@ -295,6 +295,68 @@ async function run() {
   await sql`CREATE INDEX IF NOT EXISTS sales_visits_status_idx ON sales_visits(status)`;
   await sql`CREATE INDEX IF NOT EXISTS sales_visits_check_in_idx ON sales_visits(check_in_time)`;
 
+  console.log('Creating sales_clock_sessions table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_clock_sessions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      clock_in_time timestamptz NOT NULL DEFAULT now(),
+      clock_out_time timestamptz,
+      clock_in_lat double precision,
+      clock_in_lng double precision,
+      clock_out_lat double precision,
+      clock_out_lng double precision,
+      distance_meters double precision DEFAULT 0,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_rm_idx ON sales_clock_sessions(sales_rm_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_status_idx ON sales_clock_sessions(status)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_in_idx ON sales_clock_sessions(clock_in_time)`;
+
+  console.log('Creating sales_location_pings table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_location_pings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      clock_session_id uuid REFERENCES sales_clock_sessions(id) ON DELETE SET NULL,
+      lat double precision NOT NULL,
+      lng double precision NOT NULL,
+      accuracy double precision,
+      recorded_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_pings_rm_time_idx ON sales_location_pings(sales_rm_id, recorded_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_pings_session_idx ON sales_location_pings(clock_session_id)`;
+
+  console.log('Creating sales_inventory table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_inventory (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_cp_id uuid REFERENCES sales_channel_partners(id) ON DELETE SET NULL,
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      cp_code text,
+      cp_name text,
+      city text,
+      society_name text,
+      configuration text,
+      size_sqft integer,
+      price integer,
+      facing text,
+      flat_status text,
+      floor integer,
+      unit_number text,
+      furnishing text,
+      comments text,
+      ok_to_visit boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_cp_idx ON sales_inventory(sales_cp_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_rm_idx ON sales_inventory(sales_rm_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_created_idx ON sales_inventory(created_at)`;
+
   console.log('\n✓ Done. Schema is ready.');
 }
 

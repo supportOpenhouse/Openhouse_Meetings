@@ -4,14 +4,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Plus,
-  CalendarCheck,
-  TrendingUp,
-  BarChart3,
-  Users,
   ChevronRight,
   Clock,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
+  Users,
 } from 'lucide-react';
 import {
   fmtTime,
@@ -23,6 +21,9 @@ import {
   OUTCOME_PILL,
   ENGAGEMENT_LABELS,
 } from '@/lib/salesFormat';
+import QuickStats from '@/components/sales/QuickStats';
+import DailyTargets from '@/components/sales/DailyTargets';
+import RecentPartners from '@/components/sales/RecentPartners';
 
 function greeting(hour) {
   if (hour < 12) return 'Good morning';
@@ -31,21 +32,32 @@ function greeting(hour) {
 }
 
 export default function SalesDashboardClient({ initialData, user }) {
-  const { stats, today, followups } = initialData;
+  const { stats, today, followups, targets, recentCps } = initialData;
   const firstName = (user.name || user.email || '').split(' ')[0].split('@')[0];
 
-  // Compute the time-of-day greeting only after mount to avoid a server/client
-  // timezone hydration mismatch (server runs UTC).
+  // Greeting + date are computed only after mount to avoid a server/client
+  // timezone hydration mismatch (the server runs UTC).
   const [hello, setHello] = useState('Welcome back');
+  const [todayLabel, setTodayLabel] = useState('');
   useEffect(() => {
-    setHello(greeting(new Date().getHours()));
+    const now = new Date();
+    setHello(greeting(now.getHours()));
+    setTodayLabel(
+      now.toLocaleDateString(undefined, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      })
+    );
   }, []);
+
+  const overdueCount = followups.filter((f) => isOverdue(f.next_followup_date)).length;
 
   return (
     <div>
-      {/* Hero */}
+      {/* 1 — Greeting hero */}
       <section className="sx-hero">
-        <div className="eyebrow">Field Sales</div>
+        <div className="eyebrow">Field Sales{todayLabel ? ` · ${todayLabel}` : ''}</div>
         <h1>
           {hello}
           {firstName ? (
@@ -64,41 +76,33 @@ export default function SalesDashboardClient({ initialData, user }) {
         </Link>
       </section>
 
-      {/* Stats */}
-      <div className="sx-stats" style={{ marginTop: 20 }}>
-        <div className="sx-stat">
-          <div className="ico">
-            <CalendarCheck size={17} />
-          </div>
-          <div className="v">{stats.today}</div>
-          <div className="l">Today</div>
-        </div>
-        <div className="sx-stat">
-          <div className="ico amber">
-            <TrendingUp size={17} />
-          </div>
-          <div className="v">{stats.week}</div>
-          <div className="l">This week</div>
-        </div>
-        <div className="sx-stat">
-          <div className="ico">
-            <BarChart3 size={17} />
-          </div>
-          <div className="v">{stats.total}</div>
-          <div className="l">All visits</div>
-        </div>
-        <div className="sx-stat">
-          <div className="ico green">
-            <Users size={17} />
-          </div>
-          <div className="v">{stats.cps}</div>
-          <div className="l">Partners</div>
-        </div>
+      {/* 2 — Quick stats */}
+      <QuickStats stats={stats} />
+
+      {/* 3 — Daily targets */}
+      <div style={{ marginTop: 20 }}>
+        <DailyTargets targets={targets} />
       </div>
 
-      {/* Follow-ups due */}
+      {/* 4 — Overdue follow-ups banner */}
+      {overdueCount > 0 && (
+        <a href="#followups" className="hm-overdue">
+          <span className="hm-overdue-ico">
+            <AlertTriangle size={18} />
+          </span>
+          <span className="hm-overdue-body">
+            <span className="hm-overdue-title">
+              {overdueCount} overdue follow-{overdueCount === 1 ? 'up' : 'ups'}
+            </span>
+            <span className="hm-overdue-sub">Tap to review the partners waiting on you.</span>
+          </span>
+          <ChevronRight size={18} className="hm-overdue-chev" />
+        </a>
+      )}
+
+      {/* 5 — Follow-ups due */}
       {followups.length > 0 && (
-        <section className="sx-section">
+        <section className="sx-section" id="followups">
           <div className="sx-section-head">
             <h2>Follow-ups due</h2>
           </div>
@@ -141,7 +145,7 @@ export default function SalesDashboardClient({ initialData, user }) {
         </section>
       )}
 
-      {/* Today's visits */}
+      {/* 6 — Today's visits */}
       <section className="sx-section">
         <div className="sx-section-head">
           <h2>Today’s visits</h2>
@@ -163,6 +167,76 @@ export default function SalesDashboardClient({ initialData, user }) {
           </div>
         )}
       </section>
+
+      {/* 7 — Recent partners */}
+      <section className="sx-section">
+        <div className="sx-section-head">
+          <h2>Recent partners</h2>
+          <Link href="/sales/cps">All partners →</Link>
+        </div>
+        {recentCps && recentCps.length > 0 ? (
+          <RecentPartners cps={recentCps} />
+        ) : (
+          <div className="sx-empty">
+            <div className="ico">
+              <Users size={22} />
+            </div>
+            <div className="t">No partners yet</div>
+            <div className="s">Register your first channel partner to get started.</div>
+          </div>
+        )}
+      </section>
+
+      <style jsx>{`
+        .hm-overdue {
+          all: unset;
+          cursor: pointer;
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-top: 20px;
+          padding: 14px 16px;
+          border-radius: 14px;
+          background: var(--danger-soft);
+          border: 1px solid rgba(229, 62, 62, 0.28);
+          transition: filter 0.15s;
+        }
+        .hm-overdue:hover {
+          filter: brightness(0.99);
+        }
+        .hm-overdue-ico {
+          flex-shrink: 0;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--danger);
+          color: #fff;
+        }
+        .hm-overdue-body {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .hm-overdue-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: var(--danger);
+        }
+        .hm-overdue-sub {
+          font-size: 12px;
+          color: #9a3b3b;
+          margin-top: 1px;
+        }
+        .hm-overdue :global(.hm-overdue-chev) {
+          flex-shrink: 0;
+          color: var(--danger);
+        }
+      `}</style>
     </div>
   );
 }

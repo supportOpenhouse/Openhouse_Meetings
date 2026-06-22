@@ -541,26 +541,43 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
    screens, which keep the cream/rust .oh palette until Phase 5.
    ============================================================ */
 .oh-sales {
-  --bg: #EEF3F4;
+  /* Exact Field Connect Pro tokens (HSL → hex). */
+  --bg: #F5F8FB;              /* 210 20% 98% */
   --paper: #FFFFFF;
-  --paper-2: #E3EDEE;
-  --ink: #102A2E;
-  --ink-2: #4C6164;
-  --ink-3: #8AA1A3;
-  --accent: #14707C;          /* deep teal — primary */
-  --accent-2: #0E5660;        /* darker teal — hover */
-  --accent-soft: #D6EAEC;
-  --amber: #F59E0B;           /* warm amber — highlight / record */
-  --amber-2: #D9870A;
-  --amber-soft: #FCEBCB;
-  --success: #1F9D6B;
-  --success-soft: #D6F0E3;
-  --warning: #B45309;
-  --warning-soft: #FBE7CC;
-  --danger: #DC2828;
-  --danger-soft: #F7D6D6;
-  --border: #D8E4E5;
-  --border-strong: #BCD0D2;
+  --paper-2: #EBF0F5;        /* secondary 215 20% 94% */
+  --ink: #1C2733;            /* foreground 215 25% 15% */
+  --ink-2: #6B7888;          /* muted-foreground 215 15% 50% */
+  --ink-3: #9AA6B4;
+  --accent: #1B6F5F;         /* primary — deep teal 187 65% 28% */
+  --accent-2: #155A4D;       /* darker teal — hover */
+  --accent-soft: #DDEDEA;    /* teal tint */
+  --accent-rgb: 27, 111, 95;
+  --amber: #F59E0B;          /* accent — warm amber 38 92% 50% */
+  --amber-2: #DD8A0A;
+  --amber-soft: #FDEBC8;
+  --amber-rgb: 245, 158, 11;
+  --success: #2D9D78;        /* 152 60% 40% */
+  --success-soft: #DCF1E8;
+  --warning: #F59E0B;
+  --warning-soft: #FDEBC8;
+  --danger: #E53E3E;         /* destructive 0 72% 51% */
+  --danger-soft: #FBDADA;
+  --border: #D9DFE8;         /* 215 20% 90% */
+  --border-strong: #C3CCD8;
+
+  /* Signature gradients */
+  --grad-primary: linear-gradient(135deg, #1B6F5F 0%, #1E7FA6 100%);
+  --grad-accent: linear-gradient(135deg, #F59E0B 0%, #F47B16 100%);
+  --grad-hero: linear-gradient(135deg, #175E51 0%, #1C7398 50%, #2A5E8C 100%);
+  --grad-card: linear-gradient(180deg, #FFFFFF 0%, #F5F8FB 100%);
+
+  /* Soft layered shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(28, 39, 51, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(28, 39, 51, 0.08), 0 2px 4px -2px rgba(28, 39, 51, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(28, 39, 51, 0.1), 0 4px 6px -4px rgba(28, 39, 51, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(28, 39, 51, 0.12), 0 8px 10px -6px rgba(28, 39, 51, 0.05);
+  --shadow-glow: 0 0 20px rgba(27, 111, 95, 0.3);
+  --shadow-accent-glow: 0 6px 20px rgba(245, 158, 11, 0.4);
 
   background: var(--bg);
   color: var(--ink);
@@ -696,3 +713,112 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 .sx-skel-rows { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; }
 .sx-skel-row { height: 64px; }
 @media (max-width: 768px) { .sx-skel-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* ============================================================
+   V2 — Field Connect Pro visual layer (scoped to .oh-sales).
+   Upgrades the existing sx-* components to FCP's look: gradients,
+   soft layered shadows, larger radii, glass chrome, amber FAB.
+   ============================================================ */
+
+/* Glass chrome */
+.oh-sales .oh-side { background: rgba(255, 255, 255, 0.92); border-right-color: var(--border); }
+.oh-sales .oh-mobile-top {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom-color: var(--border);
+}
+.oh-sales .oh-mobile-bottom {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-top-color: var(--border);
+}
+.oh-sales .oh-nav.active { background: var(--accent); color: #fff; }
+
+/* Gradient hero */
+.oh-sales .sx-hero {
+  background: var(--grad-hero);
+  box-shadow: var(--shadow-lg);
+  border-radius: 20px;
+}
+.oh-sales .sx-hero-cta {
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-accent-glow);
+  color: #3A2606;
+}
+
+/* Soft-shadow rounded cards everywhere */
+.oh-sales .sx-list,
+.oh-sales .sx-stat,
+.oh-sales .sx-detail-card,
+.oh-sales .sx-ai-card {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border);
+  border-radius: 16px;
+}
+.oh-sales .sx-stat { background: var(--grad-card); }
+.oh-sales .sx-row:hover { background: rgba(var(--accent-rgb), 0.04); }
+
+/* Stat tiles — bolder FCP colored icon chips */
+.oh-sales .sx-stat .ico { width: 34px; height: 34px; border-radius: 11px; }
+.oh-sales .sx-stat .v { font-weight: 800; letter-spacing: -0.02em; }
+
+/* Buttons — teal gradient for primary, amber gradient+glow for the headline CTA */
+.oh-sales .oh-btn.accent {
+  background: var(--grad-primary);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.oh-sales .oh-btn.accent:hover { background: var(--grad-primary); filter: brightness(1.06); }
+.oh-sales .oh-btn.amber {
+  background: var(--grad-accent);
+  color: #3A2606;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow-accent-glow);
+}
+.oh-sales .oh-btn.amber:hover { filter: brightness(1.04); }
+
+/* Avatar / CP-icon → gradient-primary square (FCP CP card icon) */
+.oh-sales .sx-row .avatar {
+  background: var(--grad-primary);
+  color: #fff;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+/* Inputs / chips a touch rounder to match radius 12 */
+.oh-sales .oh-input, .oh-sales .oh-select, .oh-sales .oh-textarea { border-radius: 12px; }
+.oh-sales .sx-pill { border-radius: 100px; font-weight: 600; }
+
+/* Central amber FAB for the mobile bottom nav */
+.oh-sales .oh-fab-wrap { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: center; }
+.oh-sales .oh-fab {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin-top: -20px;
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-accent-glow);
+  color: #3A2606;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease;
+}
+.oh-sales .oh-fab:active { transform: scale(0.93); }
+.oh-sales .oh-fab span { display: none; }
+
+/* When demand/direct RM screens are wrapped in .oh-sales (V2 restyle), give the
+   reused oh-* components the FCP soft-shadow + rounded treatment too. */
+.oh-sales .oh-card { box-shadow: var(--shadow-md); border-radius: 14px; }
+.oh-sales .oh-recorder { box-shadow: var(--shadow-md); border-radius: 16px; }
+.oh-sales .oh-mic-btn { background: var(--grad-accent); box-shadow: var(--shadow-accent-glow); }
+.oh-sales .oh-meeting-row:hover { background: rgba(var(--accent-rgb), 0.04); }
+.oh-sales .oh-meeting-card:active { background: rgba(var(--accent-rgb), 0.06); }
+.oh-sales .oh-h1 em, .oh-sales .oh-brand span { color: var(--accent); }

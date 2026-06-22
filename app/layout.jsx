@@ -1,12 +1,12 @@
-import { Hanken_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import ErrorReporter from '@/components/ErrorReporter';
 import StagingBanner from '@/components/StagingBanner';
 
-// Self-hosted via next/font — no render-blocking Google Fonts request, and the
-// fonts are subset + preloaded. Hanken Grotesk (a professional grotesque) for
+// Self-hosted via next/font — no render-blocking Google Fonts request, subset +
+// preloaded. Inter (matches the Field Connect Pro design language) for
 // everything; JetBrains Mono for codes/IDs.
-const sans = Hanken_Grotesk({
+const sans = Inter({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
   variable: '--font-sans',

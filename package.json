@@ -26,6 +26,7 @@
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@neondatabase/serverless": "^0.10.4",
     "@vercel/blob": "^2.3.3",
+    "@vis.gl/react-google-maps": "^1.8.3",
     "capacitor-voice-recorder": "^6.1.0",
     "drizzle-orm": "^0.36.4",
     "fix-webm-duration": "^1.0.5",

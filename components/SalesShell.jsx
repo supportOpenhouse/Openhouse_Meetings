@@ -1,6 +1,6 @@
 import { signOut } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, Users, Plus, BarChart3, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Plus, BarChart3, LogOut, MapPin, Search, ClipboardList, BookOpen } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 
@@ -15,7 +15,11 @@ export default function SalesShell({ user, current, children }) {
     { href: '/sales', key: 'home', label: 'Home', icon: LayoutDashboard },
     { href: '/sales/cps', key: 'cps', label: 'Partners', icon: Users },
     { href: '/sales/visits/new', key: 'new', label: 'New visit', icon: Plus },
-    { href: '/sales/reports', key: 'reports', label: 'Reports', icon: BarChart3 },
+    { href: '/sales/map', key: 'map', label: 'Live map', icon: MapPin },
+    { href: '/sales/performance', key: 'performance', label: 'Performance', icon: BarChart3 },
+    { href: '/sales/search', key: 'search', label: 'Search', icon: Search },
+    { href: '/sales/reports', key: 'reports', label: 'Reports', icon: ClipboardList },
+    { href: '/sales/guide', key: 'guide', label: 'Guide', icon: BookOpen },
   ];
 
   return (
@@ -101,15 +105,31 @@ export default function SalesShell({ user, current, children }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <UserAvatar user={user} size={32} />
+              <form
+                action={async () => {
+                  'use server';
+                  await signOut({ redirectTo: '/login' });
+                }}
+                style={{ display: 'flex' }}
+              >
+                <button
+                  type="submit"
+                  className="oh-nav"
+                  style={{ padding: 6, color: 'var(--ink-3)' }}
+                  aria-label="Sign out"
+                >
+                  <LogOut size={16} />
+                </button>
+              </form>
             </div>
           </header>
 
           {children}
         </main>
 
-        {/* Mobile bottom nav */}
+        {/* Mobile bottom nav with central amber FAB (FCP signature) */}
         <nav className="oh-mobile-bottom" aria-label="Primary">
-          {navItems.map((it) => {
+          {[navItems[0], navItems[1]].map((it) => {
             const Icon = it.icon;
             return (
               <Link
@@ -122,18 +142,26 @@ export default function SalesShell({ user, current, children }) {
               </Link>
             );
           })}
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/login' });
-            }}
-            style={{ display: 'contents' }}
-          >
-            <button type="submit" className="item signout" aria-label="Sign out">
-              <LogOut size={20} />
-              <span>Sign out</span>
-            </button>
-          </form>
+
+          <div className="oh-fab-wrap">
+            <Link href="/sales/visits/new" className="oh-fab" aria-label="New visit">
+              <Plus size={26} />
+            </Link>
+          </div>
+
+          {[navItems[3], navItems[4]].map((it) => {
+            const Icon = it.icon;
+            return (
+              <Link
+                key={it.key}
+                href={it.href}
+                className={`item ${current === it.key ? 'active' : ''}`}
+              >
+                <Icon size={20} />
+                <span>{it.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       </div>
     </div>

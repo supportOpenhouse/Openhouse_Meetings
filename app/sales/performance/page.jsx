@@ -1,13 +1,12 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import SalesShell from '@/components/SalesShell';
-import { salesDashboardData } from '@/lib/salesQueries';
-import { salesHomeExtras } from '@/lib/salesDashboard';
-import SalesDashboardClient from './client';
+import { repPerformanceData, teamPerformanceData } from '@/lib/salesPerf';
+import SalesPerformanceClient from './client';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SalesHomePage() {
+export default async function SalesPerformancePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -16,17 +15,14 @@ export default async function SalesHomePage() {
     redirect(role === 'admin' ? '/admin' : '/dashboard');
   }
 
-  const [data, extras] = await Promise.all([
-    salesDashboardData(session.user.id),
-    salesHomeExtras(session.user.id),
-  ]);
-
-  const initialData = { ...data, ...extras };
+  const isAdmin = role === 'admin';
+  const data = isAdmin ? await teamPerformanceData() : await repPerformanceData(session.user.id);
 
   return (
-    <SalesShell user={session.user} current="home">
-      <SalesDashboardClient
-        initialData={JSON.parse(JSON.stringify(initialData))}
+    <SalesShell user={session.user} current="performance">
+      <SalesPerformanceClient
+        initial={JSON.parse(JSON.stringify(data))}
+        isAdmin={isAdmin}
         user={{
           id: session.user.id,
           name: session.user.name || '',

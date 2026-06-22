@@ -346,3 +346,84 @@ export const salesVisits = pgTable(
     checkInIdx: index('sales_visits_check_in_idx').on(t.check_in_time),
   })
 );
+
+// V2 — rep work sessions (clock in / clock out). One open session per rep.
+export const salesClockSessions = pgTable(
+  'sales_clock_sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sales_rm_id: uuid('sales_rm_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    clock_in_time: timestamp('clock_in_time', { withTimezone: true }).defaultNow().notNull(),
+    clock_out_time: timestamp('clock_out_time', { withTimezone: true }),
+    clock_in_lat: doublePrecision('clock_in_lat'),
+    clock_in_lng: doublePrecision('clock_in_lng'),
+    clock_out_lat: doublePrecision('clock_out_lat'),
+    clock_out_lng: doublePrecision('clock_out_lng'),
+    distance_meters: doublePrecision('distance_meters').default(0),
+    status: text('status').notNull().default('open'), // 'open' | 'closed'
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    rmIdx: index('sales_clock_rm_idx').on(t.sales_rm_id),
+    statusIdx: index('sales_clock_status_idx').on(t.status),
+    inTimeIdx: index('sales_clock_in_idx').on(t.clock_in_time),
+  })
+);
+
+// V2 — GPS breadcrumbs for the live map + route trails.
+export const salesLocationPings = pgTable(
+  'sales_location_pings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sales_rm_id: uuid('sales_rm_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    clock_session_id: uuid('clock_session_id').references(() => salesClockSessions.id, {
+      onDelete: 'set null',
+    }),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    accuracy: doublePrecision('accuracy'),
+    recorded_at: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    rmTimeIdx: index('sales_pings_rm_time_idx').on(t.sales_rm_id, t.recorded_at),
+    sessionIdx: index('sales_pings_session_idx').on(t.clock_session_id),
+  })
+);
+
+// V2 — property inventory captured per channel partner.
+export const salesInventory = pgTable(
+  'sales_inventory',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sales_cp_id: uuid('sales_cp_id').references(() => salesChannelPartners.id, {
+      onDelete: 'set null',
+    }),
+    sales_rm_id: uuid('sales_rm_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    cp_code: text('cp_code'),
+    cp_name: text('cp_name'),
+    city: text('city'),
+    society_name: text('society_name'),
+    configuration: text('configuration'), // 1BHK, 2BHK, 3BHK…
+    size_sqft: integer('size_sqft'),
+    price: integer('price'),
+    facing: text('facing'),
+    flat_status: text('flat_status'), // vacant | tenant | owner
+    floor: integer('floor'),
+    unit_number: text('unit_number'),
+    furnishing: text('furnishing'), // unfurnished | semi | full
+    comments: text('comments'),
+    ok_to_visit: boolean('ok_to_visit').notNull().default(true),
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    cpIdx: index('sales_inventory_cp_idx').on(t.sales_cp_id),
+    rmIdx: index('sales_inventory_rm_idx').on(t.sales_rm_id),
+    createdIdx: index('sales_inventory_created_idx').on(t.created_at),
+  })
+);
