@@ -36,6 +36,9 @@ export const users = pgTable(
     // recent window (see admin logs page). Nullable for users who have never
     // signed in.
     last_seen_at: timestamp('last_seen_at', { withTimezone: true }),
+    // Open House Core sales_manager_id — used as the broker's sales_manager when
+    // this rep registers a CP partner (lib/cpMeetingsApi.js). Null until mapped.
+    smid: integer('smid'),
   },
   (t) => ({
     emailIdx: index('users_email_idx').on(t.email),

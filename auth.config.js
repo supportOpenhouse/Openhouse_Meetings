@@ -90,12 +90,16 @@ export const authConfig = {
         token.id = u.id;
         token.role = u.role;
         token.is_active = u.is_active;
+        token.smid = u.smid ?? null;
       }
       return token;
     },
     async session({ session, token }) {
       if (token?.id) session.user.id = token.id;
       if (token?.role) session.user.role = token.role;
+      // Exposed to the broker-registration route, which prefers the rep's own
+      // Core sales_manager_id over the configured default.
+      if (token?.smid != null) session.user.salesManagerId = token.smid;
       return session;
     },
   },
