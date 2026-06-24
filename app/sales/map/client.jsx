@@ -13,6 +13,11 @@ import { fmtTime, initials } from '@/lib/salesFormat';
 
 const GURGAON = { lat: 28.4595, lng: 77.0266 };
 
+// Only pass a Map ID when one is actually configured. A *fake* Map ID makes
+// Google render a grey box; `undefined` falls back to the default raster map
+// (tiles render fine — AdvancedMarkers just need a real Map ID to appear).
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || undefined;
+
 // One color per active rep (cycled). Teal + amber lead, then a spread that
 // stays legible on the light map.
 const PALETTE = [
@@ -314,7 +319,7 @@ function RepMap({ initial, mapsKey }) {
           {mapsKey ? (
             <APIProvider apiKey={mapsKey}>
               <GoogleMap
-                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || 'oh-sales-rep-map'}
+                mapId={MAP_ID}
                 defaultCenter={center}
                 defaultZoom={13}
                 gestureHandling="greedy"
@@ -436,7 +441,7 @@ function AdminMap({ initial, mapsKey }) {
           {mapsKey ? (
             <APIProvider apiKey={mapsKey}>
               <GoogleMap
-                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || 'oh-sales-team-map'}
+                mapId={MAP_ID}
                 defaultCenter={GURGAON}
                 defaultZoom={12}
                 gestureHandling="greedy"
