@@ -64,7 +64,10 @@ export default auth((req) => {
   // Supply rep app — supply reps + admins (oversight). Supply managers use the
   // /admin/supply oversight pages, not the rep app.
   if (pathname.startsWith('/supply') || pathname.startsWith('/api/supply')) {
-    if (role !== 'supply_rm' && role !== 'admin') {
+    // Supply managers may read the team location feed (for the oversight live
+    // map), but not the rest of the rep app/API.
+    const smTeamFeed = role === 'supply_manager' && pathname.startsWith('/api/supply/location');
+    if (role !== 'supply_rm' && role !== 'admin' && !smTeamFeed) {
       return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }
   }

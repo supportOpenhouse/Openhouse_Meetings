@@ -206,7 +206,8 @@ function MapPlaceholder() {
 // Main client
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SalesMapClient({ initial, user, mapsKey }) {
-  const isAdmin = user.role === 'admin';
+  // Admins AND supply managers watch the whole team (the all-reps map).
+  const isAdmin = user.role === 'admin' || user.role === 'supply_manager';
   return isAdmin ? (
     <AdminMap initial={initial} mapsKey={mapsKey} />
   ) : (

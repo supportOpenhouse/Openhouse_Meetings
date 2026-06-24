@@ -20,7 +20,7 @@ export async function GET(request) {
   const scope = new URL(request.url).searchParams.get('scope') || 'me';
 
   if (scope === 'team') {
-    if (session.user.role !== 'admin') {
+    if (session.user.role !== 'admin' && session.user.role !== 'supply_manager') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const data = await teamMapData();

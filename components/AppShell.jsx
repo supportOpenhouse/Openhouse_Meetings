@@ -1,6 +1,6 @@
 import { signOut } from '@/auth';
 import Link from 'next/link';
-import { LayoutDashboard, Plus, Users, UserCog, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints } from 'lucide-react';
+import { LayoutDashboard, Plus, Users, UserCog, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints, MapPin } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 import Logo from './Logo';
@@ -21,6 +21,8 @@ export default function AppShell({ user, current, section = 'demand', children }
     { href: '/admin/supply', key: 'supply', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
     { href: '/admin/supply/visits', key: 'supply-visits', label: 'Visits', icon: Footprints, iconName: 'Footprints', primary: true },
     { href: '/admin/supply/reps', key: 'supply-reps', label: 'Reps', icon: Users, iconName: 'Users', primary: true },
+    { href: '/admin/supply/map', key: 'supply-map', label: 'Live map', icon: MapPin, iconName: 'MapPin' },
+    { href: '/admin/supply/performance', key: 'supply-performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
     { href: '/admin/supply/cps', key: 'supply-cps', label: 'Partners', icon: Building2, iconName: 'Building2' },
   ];
   // Demand-side admin (the normal admin home + all its tools).
