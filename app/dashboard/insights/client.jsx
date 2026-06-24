@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sparkles, RefreshCw, Loader2, Target, AlertCircle } from 'lucide-react';
 
 const CARDS = [
@@ -193,7 +193,7 @@ function ResultBody({ result, meta }) {
       {result.narrative && <div className="oh-rmi-narrative">{result.narrative}</div>}
       {meta && (
         <div className="oh-rmi-meta">
-          {meta.meeting_count} meetings · generated {relative(meta.generated_at)}
+          {meta.meeting_count} meetings · generated <RelTime iso={meta.generated_at} />
         </div>
       )}
       <style jsx>{`
@@ -254,4 +254,17 @@ function relative(iso) {
   if (d < 3600) return `${Math.round(d / 60)}m ago`;
   if (d < 86400) return `${Math.round(d / 3600)}h ago`;
   return `${Math.round(d / 86400)}d ago`;
+}
+
+// "x ago" depends on the current moment, which differs between the server render
+// and the client hydration → React #422. Render a stable IST date on SSR + first
+// paint, then the live relative label after mount.
+function RelTime({ iso }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    const dt = new Date(iso);
+    return <>{isNaN(dt) ? '' : dt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}</>;
+  }
+  return <>{relative(iso)}</>;
 }

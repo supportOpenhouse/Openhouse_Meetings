@@ -934,7 +934,7 @@ function AskTab({ question, setQuestion, askScope, setAskScope, asking, askError
             onSaveItem={onSaveItem}
           />
           <div className="oh-ins-meta">
-            {c.meeting_count} meetings · {relative(c.generated_at)}
+            {c.meeting_count} meetings · <RelTime iso={c.generated_at} />
           </div>
         </div>
       ))}
@@ -1023,7 +1023,7 @@ function InsightCard({ insightKey, title, cached, generating, error, onGenerate,
             savedKeys={savedKeys}
             onSaveItem={onSaveItem}
           />
-          <div className="oh-ins-meta">{cached.meeting_count} meetings · {relative(cached.generated_at)}</div>
+          <div className="oh-ins-meta">{cached.meeting_count} meetings · <RelTime iso={cached.generated_at} /></div>
         </>
       )}
       <style jsx>{`
@@ -1091,7 +1091,7 @@ function SavedItemsSection({ items, onDelete }) {
                 {it.note && <div className="oh-ins-item-note">{it.note}</div>}
                 <div className="oh-ins-saved-meta">
                   {p.source_title ? <>from <em>{p.source_title}</em> · </> : null}
-                  saved {relative(p.saved_at)}
+                  saved <RelTime iso={p.saved_at} />
                 </div>
               </div>
               <button
@@ -1835,6 +1835,19 @@ function relative(iso) {
   if (d < 3600) return `${Math.round(d / 60)}m ago`;
   if (d < 86400) return `${Math.round(d / 3600)}h ago`;
   return `${Math.round(d / 86400)}d ago`;
+}
+
+// "x ago" depends on the current moment, which differs between the server render
+// and the client hydration → React #422. Render a stable IST date on SSR + first
+// paint, then the live relative label after mount.
+function RelTime({ iso }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    const dt = new Date(iso);
+    return <>{isNaN(dt) ? '' : dt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}</>;
+  }
+  return <>{relative(iso)}</>;
 }
 
 // IST-calendar YYYY-MM-DD helpers for the date-range filter inputs. Computed

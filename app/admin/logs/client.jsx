@@ -80,6 +80,16 @@ function relativeTime(iso) {
   return fmtDate(iso);
 }
 
+// "x ago" depends on the current moment, which differs between the server render
+// and the client hydration → a guaranteed mismatch (React #422). Show the
+// absolute (IST-pinned) date on the server + first client paint, then switch to
+// the live relative label after mount.
+function RelTime({ iso }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return <>{mounted ? relativeTime(iso) : fmtDate(iso)}</>;
+}
+
 export default function LogsClient({ initialActivity, initialOnline, users }) {
   const [activity, setActivity] = useState(initialActivity);
   const [online, setOnline] = useState(initialOnline);
@@ -229,7 +239,7 @@ function OnlinePanel({ online }) {
               <Circle size={8} fill="#2f6f2f" stroke="#2f6f2f" />
               <div style={{ minWidth: 0 }}>
                 <div className="name">{u.name || u.email}</div>
-                <div className="meta">{u.role} · last seen {relativeTime(u.last_seen_at)}</div>
+                <div className="meta">{u.role} · last seen <RelTime iso={u.last_seen_at} /></div>
               </div>
             </div>
           ))}
@@ -305,7 +315,7 @@ function LogRow({ entry }) {
           {entry.cp_code && <><span className="oh-log-dot">·</span><span className="oh-mono">{entry.cp_code}</span></>}
           {entry.meeting_id && <><span className="oh-log-dot">·</span><span className="oh-mono oh-log-mid">meeting {entry.meeting_id.slice(0, 8)}</span></>}
           <span className="oh-log-dot">·</span>
-          <span title={fmtDate(entry.created_at)}>{relativeTime(entry.created_at)}</span>
+          <span title={fmtDate(entry.created_at)}><RelTime iso={entry.created_at} /></span>
           {entry.ip && <><span className="oh-log-dot">·</span><span>{entry.ip}</span></>}
         </div>
         {entry.payload && Object.keys(entry.payload).length > 0 && (
