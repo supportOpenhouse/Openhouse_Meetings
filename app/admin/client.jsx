@@ -386,7 +386,7 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
         }
         .oh-rm-card-btn.active {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.05);
+          background: rgba(var(--accent-rgb), 0.05);
         }
       `}</style>
     </div>

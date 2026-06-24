@@ -97,7 +97,7 @@ export default function UploadRecordingClient({ user }) {
         .oh-ur-type:hover { border-color: var(--ink-2); }
         .oh-ur-type.selected {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.04);
+          background: rgba(var(--accent-rgb), 0.04);
         }
         .oh-ur-type .t { font-size: 13.5px; font-weight: 500; color: var(--ink); }
         .oh-ur-type .d { font-size: 11.5px; color: var(--ink-2); margin-top: 1px; }

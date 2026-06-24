@@ -15,6 +15,24 @@ const adminEmails = (process.env.ADMIN_EMAILS || '')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
+// On Vercel PREVIEW deployments (e.g. the `staging` branch) force the NextAuth
+// base URL to the preview's OWN stable branch alias. Without this, an AUTH_URL
+// copied from Production makes the Google OAuth redirect_uri — and therefore the
+// session — land on production after login (the classic "logged in on staging,
+// bounced to prod" bug). Production is untouched: there VERCEL_ENV is
+// 'production', so this block is skipped. VERCEL_BRANCH_URL is the stable
+// `<project>-git-<branch>-<scope>.vercel.app` alias — the one you register in
+// the Google OAuth redirect URIs. Wrapped in try/catch because the shared edge
+// middleware also imports this module.
+try {
+  if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_BRANCH_URL) {
+    process.env.AUTH_URL = `https://${process.env.VERCEL_BRANCH_URL}`;
+  }
+} catch {
+  // edge runtime may disallow writing process.env — the Node auth handlers
+  // (which actually build the OAuth redirect) will still apply it.
+}
+
 export const authConfig = {
   providers: [
     Google({

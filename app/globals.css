@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
 
 * { box-sizing: border-box; }
 html, body { padding: 0; margin: 0; }
@@ -15,6 +14,8 @@ html { -webkit-text-size-adjust: 100%; }
   --ink-3: #9B948A;
   --accent: #B43A18;
   --accent-soft: #F5DDC9;
+  --accent-hover: #962F12;
+  --accent-rgb: 180, 58, 24;
   --success: #3F5E36;
   --success-soft: #DCE5D2;
   --warning: #8B6914;
@@ -24,7 +25,7 @@ html { -webkit-text-size-adjust: 100%; }
   --border: #DDD3BD;
   --border-strong: #C0B59B;
 
-  font-family: 'Geist', system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   color: var(--ink);
   background: var(--bg);
   min-height: 100vh;
@@ -33,8 +34,21 @@ html { -webkit-text-size-adjust: 100%; }
   -webkit-font-smoothing: antialiased;
 }
 
-.oh-serif { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; }
-.oh-mono  { font-family: 'Geist Mono', ui-monospace, monospace; letter-spacing: -0.02em; }
+/* Phase 5: accent-only teal refresh for the demand/direct RM screens. Applied
+   by AppShell to every non-admin role, this remaps ONLY the accent variables —
+   the cream background, paper, and ink stay, so existing RMs keep a familiar
+   layout but the accent now matches the teal Sales app. Fully reversible: drop
+   the `oh-teal` class from AppShell to restore rust. */
+.oh-teal {
+  --accent: #14707C;
+  --accent-2: #0E5660;
+  --accent-hover: #0E5660;
+  --accent-soft: #D6EAEC;
+  --accent-rgb: 20, 112, 124;
+}
+
+.oh-serif { font-family: var(--font-sans); font-weight: 700; font-weight: 400; }
+.oh-mono  { font-family: var(--font-mono), ui-monospace, monospace; letter-spacing: -0.02em; }
 
 .oh-desktop-only {}
 
@@ -45,8 +59,19 @@ html { -webkit-text-size-adjust: 100%; }
   padding: 28px 18px;
   display: flex; flex-direction: column; gap: 4px;
 }
-.oh-brand { font-family: 'Instrument Serif', serif; font-size: 28px; letter-spacing: -0.01em; margin-bottom: 32px; padding-left: 6px; }
-.oh-brand span { color: var(--accent); font-style: italic; }
+.oh-brand { font-family: var(--font-sans); font-weight: 700; font-size: 28px; letter-spacing: -0.01em; margin-bottom: 32px; padding-left: 6px; }
+.oh-brand span { color: var(--accent); font-style: normal; }
+
+/* Brand logo image (replaces the text wordmark). Source PNG is light/cream;
+   darken it to ink on light surfaces, keep native on the dark login panel. */
+.oh-logo { display: block; width: auto; height: 30px; }
+.oh-side .oh-logo,
+.oh-mobile-top .oh-logo,
+.oh-auth-form .oh-logo,
+.sx-loading .oh-logo { filter: brightness(0); }
+.oh-mobile-top .oh-logo { height: 22px; }
+.oh-auth-form .oh-logo { height: 24px; margin-bottom: 4px; }
+.oh-auth-brand .oh-logo { filter: none; height: 32px; }
 .oh-nav { all: unset; cursor: pointer; padding: 10px 12px; border-radius: 6px; display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13.5px; transition: all 0.15s; }
 .oh-nav:hover { background: var(--paper-2); color: var(--ink); }
 .oh-nav.active { background: var(--ink); color: var(--paper); }
@@ -57,15 +82,15 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-side-user .role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
 
 .oh-main { padding: 40px 48px 80px; overflow-y: auto; max-width: 1280px; }
-.oh-h1 { font-family: 'Instrument Serif', serif; font-size: 44px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 4px; }
+.oh-h1 { font-family: var(--font-sans); font-weight: 700; font-size: 44px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 4px; }
 .oh-h1 em { font-style: italic; color: var(--accent); }
-.oh-h2 { font-family: 'Instrument Serif', serif; font-size: 22px; margin: 0 0 16px; letter-spacing: -0.01em; }
+.oh-h2 { font-family: var(--font-sans); font-weight: 700; font-size: 22px; margin: 0 0 16px; letter-spacing: -0.01em; }
 .oh-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 6px; }
 .oh-sub { color: var(--ink-2); font-size: 14px; margin: 0 0 32px; }
 
 .oh-card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; }
 .oh-stat { padding: 22px; display: flex; flex-direction: column; gap: 4px; }
-.oh-stat .v { font-family: 'Instrument Serif', serif; font-size: 38px; line-height: 1; margin: 4px 0; }
+.oh-stat .v { font-family: var(--font-sans); font-weight: 700; font-size: 38px; line-height: 1; margin: 4px 0; }
 .oh-stat .l { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); }
 .oh-stat .sub { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
 
@@ -73,7 +98,7 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-btn.primary { background: var(--ink); color: var(--paper); }
 .oh-btn.primary:hover { background: #000; }
 .oh-btn.accent { background: var(--accent); color: #fff; }
-.oh-btn.accent:hover { background: #962F12; }
+.oh-btn.accent:hover { background: var(--accent-hover); }
 .oh-btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--border-strong); }
 .oh-btn.ghost:hover { background: var(--paper-2); color: var(--ink); }
 .oh-btn.danger { background: transparent; color: var(--danger); border-color: var(--danger-soft); }
@@ -94,7 +119,7 @@ html { -webkit-text-size-adjust: 100%; }
   color: var(--ink);
   transition: border-color 0.15s;
 }
-.oh-input:focus, .oh-select:focus, .oh-textarea:focus { border-color: var(--ink); outline: 2px solid rgba(180,58,24,0.15); outline-offset: 0; }
+.oh-input:focus, .oh-select:focus, .oh-textarea:focus { border-color: var(--ink); outline: 2px solid rgba(var(--accent-rgb), 0.15); outline-offset: 0; }
 .oh-textarea { min-height: 60px; resize: vertical; line-height: 1.5; }
 .oh-select { cursor: pointer; }
 
@@ -122,12 +147,12 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-modal-body { padding: 24px 32px 32px; }
 
 .oh-recorder { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 40px 32px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
-.oh-mic-btn { all: unset; cursor: pointer; width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 24px rgba(180,58,24,0.3); }
+.oh-mic-btn { all: unset; cursor: pointer; width: 96px; height: 96px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 24px rgba(var(--accent-rgb), 0.3); }
 .oh-mic-btn:hover { transform: scale(1.04); }
 .oh-mic-btn:active { transform: scale(0.96); }
 .oh-mic-btn.recording { background: var(--danger); animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(158,42,47,0.5); } 50% { box-shadow: 0 0 0 16px rgba(158,42,47,0); } }
-.oh-timer { font-family: 'Instrument Serif', serif; font-size: 56px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
+.oh-timer { font-family: var(--font-sans); font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -0.02em; color: var(--ink); }
 .oh-wave { display: flex; align-items: center; gap: 3px; height: 24px; }
 .oh-wave span { width: 3px; background: var(--accent); border-radius: 2px; animation: wave 1s ease-in-out infinite; }
 .oh-wave span:nth-child(2) { animation-delay: 0.1s; }
@@ -168,10 +193,10 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-meta strong { color: var(--ink); font-weight: 500; }
 
 .oh-rm-card { background: var(--paper); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.oh-rm-card .name { font-family: 'Instrument Serif', serif; font-size: 22px; line-height: 1.1; }
+.oh-rm-card .name { font-family: var(--font-sans); font-weight: 700; font-size: 22px; line-height: 1.1; }
 .oh-rm-card .email { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
 .oh-rm-card .stats { display: flex; gap: 24px; font-size: 12.5px; color: var(--ink-2); }
-.oh-rm-card .stats strong { color: var(--ink); font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 14px; display: block; }
+.oh-rm-card .stats strong { color: var(--ink); font-family: var(--font-mono), monospace; font-weight: 500; font-size: 14px; display: block; }
 
 .oh-login-wrap {
   display: flex; align-items: center; justify-content: center;
@@ -187,6 +212,82 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-login-card { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 48px 40px; max-width: 420px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,0.05); }
 .oh-google-btn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; background: #fff; color: #1A1815; border: 1px solid var(--border-strong); width: 100%; justify-content: center; transition: all 0.15s; }
 .oh-google-btn:hover { background: var(--paper-2); }
+.oh-google-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ---------- Auth / sign-in (split brand + form) ---------- */
+.oh-auth {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.oh-auth-brand {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 56px calc(48px + env(safe-area-inset-bottom));
+  padding-left: calc(56px + env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  color: #FBEAF6;
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(252, 175, 69, 0.30) 0%, rgba(252, 175, 69, 0) 52%),
+    var(--grad-hero);
+}
+.oh-auth-brand .wordmark { font-family: var(--font-sans); font-weight: 700; font-size: 30px; letter-spacing: -0.01em; }
+.oh-auth-brand .wordmark em { font-style: normal; color: #FCD7A0; }
+.oh-auth-brand h2 {
+  font-family: var(--font-sans); font-weight: 700;
+  font-size: 46px;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  margin: 0 0 16px;
+  color: #fff;
+  max-width: 14ch;
+}
+.oh-auth-brand .lede { font-size: 15px; line-height: 1.6; color: rgba(234, 251, 252, 0.82); max-width: 44ch; margin: 0; }
+.oh-auth-features { display: flex; flex-direction: column; gap: 14px; }
+.oh-auth-feature { display: flex; align-items: center; gap: 13px; font-size: 14px; color: rgba(234, 251, 252, 0.92); }
+.oh-auth-feature .ic {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex; align-items: center; justify-content: center;
+  color: #FCD7A0;
+}
+.oh-auth-foot { font-size: 12.5px; color: rgba(234, 251, 252, 0.55); }
+
+.oh-auth-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 40px 24px;
+  padding-top: calc(40px + env(safe-area-inset-top));
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  padding-right: calc(24px + env(safe-area-inset-right));
+}
+.oh-auth-form { width: 100%; max-width: 384px; }
+.oh-auth-form .wm { display: none; font-family: var(--font-sans); font-weight: 700; font-size: 26px; margin-bottom: 28px; }
+.oh-auth-form .wm span { color: var(--accent); font-style: normal; }
+.oh-auth-form .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-3); margin-bottom: 8px; }
+.oh-auth-form h1 { font-family: var(--font-sans); font-weight: 700; font-size: 38px; line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 14px; }
+.oh-auth-form h1 em { font-style: italic; color: var(--accent); }
+.oh-auth-form .sub { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 0 0 26px; }
+.oh-auth-error {
+  background: var(--danger-soft); color: var(--danger);
+  padding: 11px 14px; border-radius: 9px; font-size: 13px; line-height: 1.45;
+  margin-bottom: 18px;
+}
+.oh-auth-fineprint { margin-top: 22px; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+
+@media (max-width: 880px) {
+  .oh-auth { grid-template-columns: 1fr; }
+  .oh-auth-brand { display: none; }
+  .oh-auth-side { min-height: 100vh; min-height: 100dvh; }
+  .oh-auth-form .wm { display: block; }
+  .oh-auth-form h1 { font-size: 34px; }
+}
 
 /* ---------- Meetings table filters (search + RM select) ---------- */
 .oh-filters-wrap { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
@@ -351,7 +452,7 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 .oh-meeting-card.short-transcript { background: rgba(192,57,43,0.08); }
 .oh-meeting-card.short-transcript:active { background: rgba(192,57,43,0.14); }
 .oh-meeting-card .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.oh-meeting-card .code { font-family: 'Geist Mono', monospace; font-size: 15px; font-weight: 500; }
+.oh-meeting-card .code { font-family: var(--font-mono), monospace; font-size: 15px; font-weight: 500; }
 .oh-meeting-card .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink-3); }
 .oh-meeting-card .meta .dot { color: var(--ink-3); }
 
@@ -441,3 +542,295 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
   /* Speaker text slightly bigger for readability */
   .oh-speaker .text { font-size: 14.5px; }
 }
+
+/* ============================================================
+   SALES RM — scoped teal/amber design system.
+   Everything under .oh-sales REMAPS the shared CSS variables, so the
+   reused .oh-* components (cards, inputs, buttons, recorder) adopt the
+   new palette automatically. Sales-only structures use .sx-* classes.
+   This whole block is additive — it never touches the demand/direct RM
+   screens, which keep the cream/rust .oh palette until Phase 5.
+   ============================================================ */
+.oh-sales {
+  /* Instagram "sunset" palette — fuchsia/purple primary, pink→orange CTAs. */
+  --bg: #FAF7FC;             /* faint lavender-white page bg */
+  --paper: #FFFFFF;          /* crisp white cards */
+  --paper-2: #F2ECF8;        /* light lavender secondary surface */
+  --ink: #211A2E;            /* dark plum text */
+  --ink-2: #6E6580;          /* muted purple-grey */
+  --ink-3: #9E94B0;
+  --accent: #B5179E;         /* primary — rich fuchsia */
+  --accent-2: #8E1178;       /* darker fuchsia — hover */
+  --accent-soft: #F6E2F3;    /* muted lavender tint */
+  --accent-rgb: 181, 23, 158;
+  --amber: #F97C3C;          /* hot orange — second accent / CTA */
+  --amber-2: #E85C2B;
+  --amber-soft: #FDE6DA;     /* peach tint */
+  --amber-rgb: 249, 124, 60;
+  --success: #21A179;        /* green stays semantic */
+  --success-soft: #DCF3EA;
+  --warning: #F97C3C;        /* orange, ties to the accent */
+  --warning-soft: #FDE6DA;
+  --danger: #E5484D;         /* clear red (distinct from brand pink) */
+  --danger-soft: #FBDDDE;
+  --border: #E8DFF0;         /* light lavender border */
+  --border-strong: #D6C9E4;
+
+  /* Signature sunset gradients */
+  --grad-primary: linear-gradient(135deg, #833AB4 0%, #C13584 55%, #E1306C 100%);
+  --grad-accent: linear-gradient(135deg, #C13584 0%, #E1306C 42%, #F77737 100%);
+  --grad-hero: linear-gradient(135deg, #5B2BD4 0%, #833AB4 20%, #C13584 42%, #E1306C 62%, #F56040 82%, #FCAF45 100%);
+  --grad-card: linear-gradient(180deg, #FFFFFF 0%, #FAF7FC 100%);
+
+  /* Soft layered shadows (plum-tinted) */
+  --shadow-sm: 0 1px 2px 0 rgba(33, 26, 46, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(33, 26, 46, 0.08), 0 2px 4px -2px rgba(33, 26, 46, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(33, 26, 46, 0.1), 0 4px 6px -4px rgba(33, 26, 46, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(33, 26, 46, 0.12), 0 8px 10px -6px rgba(33, 26, 46, 0.05);
+  --shadow-glow: 0 0 20px rgba(181, 23, 158, 0.3);
+  /* Two-layer pink + orange cast for the FAB / CTA glow. */
+  --shadow-accent-glow: 0 6px 20px rgba(225, 48, 108, 0.4), 0 8px 30px rgba(247, 119, 55, 0.3);
+
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Re-skin reused .oh-* components inside the sales subtree where they
+   hardcode the rust colour rather than reading a variable. */
+.oh-sales .oh-brand span { color: var(--accent); }
+.oh-sales .oh-h1 em { color: var(--accent); }
+.oh-sales .oh-btn.accent { background: var(--accent); }
+.oh-sales .oh-btn.accent:hover { background: var(--accent-2); }
+.oh-sales .oh-input:focus,
+.oh-sales .oh-select:focus,
+.oh-sales .oh-textarea:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(20, 112, 124, 0.16);
+}
+.oh-sales .oh-mic-btn { background: var(--amber); box-shadow: 0 6px 28px rgba(245, 158, 11, 0.34); }
+.oh-sales .oh-mic-btn.recording { background: var(--danger); box-shadow: 0 0 0 0 rgba(220, 40, 40, 0.5); }
+.oh-sales .oh-wave span { background: var(--amber); }
+.oh-sales .oh-mobile-bottom .item.active { color: var(--accent); background: var(--accent-soft); }
+
+/* ---- Sales gradient hero (dashboard greeting + primary CTA) ---- */
+.sx-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 26px 26px 24px;
+  color: #EAFBFC;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(245, 158, 11, 0.28) 0%, rgba(245, 158, 11, 0) 46%),
+    linear-gradient(135deg, #0E5660 0%, #14707C 58%, #1B8A93 100%);
+  box-shadow: 0 14px 34px rgba(14, 86, 96, 0.28);
+}
+.sx-hero .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: rgba(234, 251, 252, 0.7); }
+.sx-hero h1 { font-family: var(--font-sans); font-weight: 700; font-size: 34px; line-height: 1.08; letter-spacing: -0.01em; margin: 6px 0 2px; color: #fff; }
+.sx-hero h1 em { font-style: italic; color: #FCD7A0; }
+.sx-hero .sub { font-size: 13.5px; color: rgba(234, 251, 252, 0.82); margin: 0; }
+.sx-hero-cta {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 18px; padding: 12px 18px; border-radius: 11px;
+  background: var(--amber); color: #3A2606; font-weight: 600; font-size: 14.5px;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.34);
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+.sx-hero-cta:hover { background: #FFB02E; }
+.sx-hero-cta:active { transform: scale(0.97); }
+
+/* ---- Section heading inside the sales app ---- */
+.sx-section { margin-top: 28px; }
+.sx-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.sx-section-head h2 { font-family: var(--font-sans); font-weight: 700; font-size: 21px; letter-spacing: -0.01em; margin: 0; }
+.sx-section-head a { all: unset; cursor: pointer; font-size: 12.5px; color: var(--accent); font-weight: 500; }
+
+/* ---- Stat tiles (2x2 on mobile) ---- */
+.sx-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.sx-stat { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; padding: 16px 16px 15px; display: flex; flex-direction: column; gap: 2px; }
+.sx-stat .ico { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 8px; }
+.sx-stat .ico.amber { background: var(--amber-soft); color: var(--amber-2); }
+.sx-stat .ico.green { background: var(--success-soft); color: var(--success); }
+.sx-stat .v { font-family: var(--font-sans); font-weight: 700; font-size: 32px; line-height: 1; }
+.sx-stat .l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); margin-top: 3px; }
+
+/* ---- List card (CP rows, visit rows, follow-ups) ---- */
+.sx-list { background: var(--paper); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.sx-row { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px 16px; border-bottom: 1px solid var(--border); transition: background 0.12s; }
+.sx-row:last-child { border-bottom: none; }
+.sx-row:hover { background: var(--paper-2); }
+.sx-row .avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-family: var(--font-sans); font-weight: 700; font-size: 18px; color: var(--accent); background: var(--accent-soft); }
+.sx-row .body { flex: 1; min-width: 0; }
+.sx-row .title { font-size: 14.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-row .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.sx-row .meta .code { font-family: var(--font-mono), monospace; color: var(--ink-2); }
+.sx-row .chev { flex-shrink: 0; color: var(--ink-3); display: flex; }
+
+/* ---- Pills (engagement / outcome / status) ---- */
+.sx-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 100px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.sx-pill.positive, .sx-pill.onboarded { background: var(--success-soft); color: var(--success); }
+.sx-pill.neutral, .sx-pill.future { background: var(--amber-soft); color: var(--amber-2); }
+.sx-pill.disengaged, .sx-pill.not_interested { background: var(--danger-soft); color: var(--danger); }
+.sx-pill.follow_up { background: var(--accent-soft); color: var(--accent); }
+.sx-pill.processing { background: var(--paper-2); color: var(--ink-2); border: 1px dashed var(--border-strong); }
+.sx-pill.failed { background: var(--danger-soft); color: var(--danger); }
+.sx-pill.first { background: var(--accent-soft); color: var(--accent); }
+.sx-pill.repeat { background: var(--paper-2); color: var(--ink-2); }
+
+/* ---- Search bar ---- */
+.sx-search { position: relative; }
+.sx-search .ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; display: flex; }
+.sx-search input { width: 100%; padding-left: 38px !important; }
+
+/* ---- Selectable chips (business type, engagement, outcome) ---- */
+.sx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sx-chip { all: unset; box-sizing: border-box; cursor: pointer; padding: 9px 14px; border-radius: 100px; border: 1.5px solid var(--border-strong); background: var(--paper); font-size: 13px; font-weight: 500; color: var(--ink-2); transition: all 0.13s; }
+.sx-chip:hover { border-color: var(--accent); color: var(--ink); }
+.sx-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+
+/* ---- Boolean toggle row ---- */
+.sx-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 15px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--paper); }
+.sx-toggle .sx-toggle-text { font-size: 14px; font-weight: 500; color: var(--ink); }
+.sx-switch { all: unset; box-sizing: border-box; cursor: pointer; position: relative; width: 46px; height: 27px; border-radius: 100px; background: var(--border-strong); transition: background 0.15s; flex-shrink: 0; }
+.sx-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.sx-switch.on { background: var(--accent); }
+.sx-switch.on::after { transform: translateX(19px); }
+
+/* ---- Empty state ---- */
+.sx-empty { text-align: center; padding: 44px 22px; color: var(--ink-2); background: var(--paper); border: 1px dashed var(--border-strong); border-radius: 14px; }
+.sx-empty .ico { width: 46px; height: 46px; border-radius: 13px; background: var(--accent-soft); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.sx-empty .t { font-family: var(--font-sans); font-weight: 700; font-size: 22px; color: var(--ink); margin-bottom: 4px; }
+.sx-empty .s { font-size: 13px; }
+
+@media (max-width: 768px) {
+  .sx-stats { grid-template-columns: repeat(2, 1fr); }
+  .sx-hero { border-radius: 16px; padding: 22px 20px; }
+  .sx-hero h1 { font-size: 30px; }
+}
+
+/* ---- Loading skeleton (instant nav feedback for the /sales tree) ---- */
+@keyframes sxShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.sx-skel {
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--paper-2) 25%, var(--border) 37%, var(--paper-2) 63%);
+  background-size: 200% 100%;
+  animation: sxShimmer 1.4s ease-in-out infinite;
+}
+.sx-skel-nav { height: 34px; border-radius: 8px; }
+.sx-skel-hero { height: 150px; border-radius: 18px; }
+.sx-skel-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
+.sx-skel-tile { height: 92px; }
+.sx-skel-rows { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; }
+.sx-skel-row { height: 64px; }
+@media (max-width: 768px) { .sx-skel-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* ============================================================
+   V2 — Field Connect Pro visual layer (scoped to .oh-sales).
+   Upgrades the existing sx-* components to FCP's look: gradients,
+   soft layered shadows, larger radii, glass chrome, amber FAB.
+   ============================================================ */
+
+/* Glass chrome */
+.oh-sales .oh-side { background: rgba(255, 255, 255, 0.92); border-right-color: var(--border); }
+.oh-sales .oh-mobile-top {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom-color: var(--border);
+}
+.oh-sales .oh-mobile-bottom {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-top-color: var(--border);
+}
+.oh-sales .oh-nav.active { background: var(--accent); color: #fff; }
+
+/* Gradient hero */
+.oh-sales .sx-hero {
+  background: var(--grad-hero);
+  box-shadow: var(--shadow-lg);
+  border-radius: 20px;
+}
+.oh-sales .sx-hero-cta {
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-accent-glow);
+  color: #3A2606;
+}
+
+/* Soft-shadow rounded cards everywhere */
+.oh-sales .sx-list,
+.oh-sales .sx-stat,
+.oh-sales .sx-detail-card,
+.oh-sales .sx-ai-card {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border);
+  border-radius: 16px;
+}
+.oh-sales .sx-stat { background: var(--grad-card); }
+.oh-sales .sx-row:hover { background: rgba(var(--accent-rgb), 0.04); }
+
+/* Stat tiles — bolder FCP colored icon chips */
+.oh-sales .sx-stat .ico { width: 34px; height: 34px; border-radius: 11px; }
+.oh-sales .sx-stat .v { font-weight: 800; letter-spacing: -0.02em; }
+
+/* Buttons — teal gradient for primary, amber gradient+glow for the headline CTA */
+.oh-sales .oh-btn.accent {
+  background: var(--grad-primary);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.oh-sales .oh-btn.accent:hover { background: var(--grad-primary); filter: brightness(1.06); }
+.oh-sales .oh-btn.amber {
+  background: var(--grad-accent);
+  color: #3A2606;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: var(--shadow-accent-glow);
+}
+.oh-sales .oh-btn.amber:hover { filter: brightness(1.04); }
+
+/* Avatar / CP-icon → gradient-primary square (FCP CP card icon) */
+.oh-sales .sx-row .avatar {
+  background: var(--grad-primary);
+  color: #fff;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+/* Inputs / chips a touch rounder to match radius 12 */
+.oh-sales .oh-input, .oh-sales .oh-select, .oh-sales .oh-textarea { border-radius: 12px; }
+.oh-sales .sx-pill { border-radius: 100px; font-weight: 600; }
+
+/* Central amber FAB for the mobile bottom nav */
+.oh-sales .oh-fab-wrap { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: center; }
+.oh-sales .oh-fab {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin-top: -20px;
+  background: var(--grad-accent);
+  box-shadow: var(--shadow-accent-glow);
+  color: #3A2606;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease;
+}
+.oh-sales .oh-fab:active { transform: scale(0.93); }
+.oh-sales .oh-fab span { display: none; }
+
+/* When demand/direct RM screens are wrapped in .oh-sales (V2 restyle), give the
+   reused oh-* components the FCP soft-shadow + rounded treatment too. */
+.oh-sales .oh-card { box-shadow: var(--shadow-md); border-radius: 14px; }
+.oh-sales .oh-recorder { box-shadow: var(--shadow-md); border-radius: 16px; }
+.oh-sales .oh-mic-btn { background: var(--grad-accent); box-shadow: var(--shadow-accent-glow); }
+.oh-sales .oh-meeting-row:hover { background: rgba(var(--accent-rgb), 0.04); }
+.oh-sales .oh-meeting-card:active { background: rgba(var(--accent-rgb), 0.06); }
+.oh-sales .oh-h1 em, .oh-sales .oh-brand span { color: var(--accent); }

@@ -250,7 +250,7 @@ function OnlinePanel({ online }) {
           margin-bottom: 10px;
         }
         .oh-online-count {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 22px;
           color: var(--ink);
         }
@@ -348,7 +348,7 @@ function LogRow({ entry }) {
           margin-bottom: 2px;
         }
         .oh-log-event-tag {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 10.5px;
           color: var(--ink-3);
           background: var(--paper-2);
@@ -367,7 +367,7 @@ function LogRow({ entry }) {
         .oh-log-user { font-weight: 500; }
         .oh-log-mid { font-size: 11.5px; color: var(--ink-3); }
         .oh-log-payload {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           background: var(--paper-2);
           padding: 6px 8px;

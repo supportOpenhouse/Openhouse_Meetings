@@ -29,6 +29,9 @@ export async function GET(request) {
     city,
     search,
     includeTranscript: true,
+    // The CSV expands the AI summary into ~10 columns, so it needs the full
+    // summary jsonb (lists get only list_sentiment after the Phase 6 trim).
+    includeSummary: true,
   };
   if (startStr) {
     const d = new Date(startStr);

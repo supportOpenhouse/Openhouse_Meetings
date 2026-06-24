@@ -715,9 +715,9 @@ export default function NewMeetingClient({ user }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    background: 'rgba(196, 122, 26, 0.08)',
-                    border: '1px solid rgba(196, 122, 26, 0.25)',
-                    color: '#b97417',
+                    background: 'rgba(var(--amber-rgb), 0.1)',
+                    border: '1px solid rgba(var(--amber-rgb), 0.3)',
+                    color: 'var(--amber)',
                     borderRadius: 9,
                     padding: '9px 12px',
                     fontSize: 13,
@@ -1159,12 +1159,12 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-onboard-toggle:hover {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.03);
+          background: rgba(var(--accent-rgb), 0.03);
         }
         .oh-onboard-toggle.on {
           border-style: solid;
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.06);
+          background: rgba(var(--accent-rgb), 0.06);
         }
         .oh-onboard-toggle .check {
           flex-shrink: 0;
@@ -1179,7 +1179,7 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-onboard-toggle.on .check {
           color: var(--accent);
-          background: rgba(184, 52, 28, 0.1);
+          background: rgba(var(--accent-rgb), 0.1);
         }
         .oh-onboard-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
         .oh-onboard-title { font-size: 14px; font-weight: 500; color: var(--ink); }
@@ -1237,7 +1237,7 @@ export default function NewMeetingClient({ user }) {
         }
         .oh-mtype-card.selected {
           border-color: var(--accent);
-          background: rgba(184, 52, 28, 0.04);
+          background: rgba(var(--accent-rgb), 0.04);
         }
         .oh-mtype-label {
           font-size: 14px;
@@ -1287,7 +1287,7 @@ export default function NewMeetingClient({ user }) {
           line-height: 1.5;
         }
         .oh-hint code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 12px;
           background: rgba(0,0,0,0.05);
           padding: 1px 4px;

@@ -190,8 +190,8 @@ export default function SalestrailClient({ initial }) {
           display: flex;
           gap: 9px;
           align-items: flex-start;
-          background: rgba(184, 52, 28, 0.06);
-          border: 1px solid rgba(184, 52, 28, 0.25);
+          background: rgba(var(--accent-rgb), 0.06);
+          border: 1px solid rgba(var(--accent-rgb), 0.25);
           color: var(--ink);
           border-radius: 10px;
           padding: 11px 13px;
@@ -199,7 +199,7 @@ export default function SalestrailClient({ initial }) {
           margin-bottom: 16px;
         }
         .st-warn code {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           background: var(--paper-2);
           padding: 1px 5px;
@@ -266,7 +266,7 @@ export default function SalestrailClient({ initial }) {
           color: #2f6f2f;
         }
         .st-flash.err {
-          background: rgba(184, 52, 28, 0.07);
+          background: rgba(var(--accent-rgb), 0.07);
           color: #b03021;
         }
         .st-section {
@@ -318,7 +318,7 @@ function Stat({ label, value, tone }) {
         padding: '12px 14px',
       }}
     >
-      <div style={{ fontFamily: "'Geist Mono', monospace", fontSize: 22, color }}>
+      <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: 22, color }}>
         {(value ?? 0).toLocaleString('en-IN')}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 2 }}>{label}</div>

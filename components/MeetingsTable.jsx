@@ -291,7 +291,7 @@ function DesktopRow({ m, showRM, cols, onClick }) {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {m.cp_code ? (
-            <span style={{ fontWeight: 500, fontFamily: "'Geist Mono', monospace", fontSize: 13.5 }}>
+            <span style={{ fontWeight: 500, fontFamily: "var(--font-mono), monospace", fontSize: 13.5 }}>
               {m.cp_code}
             </span>
           ) : (
@@ -459,6 +459,10 @@ function getSentVisuals(sent) {
 // under summary.onboarding.sentiment.
 function getSentiment(meeting) {
   return (
+    // List endpoints now ship a lean `list_sentiment` (extracted in SQL) instead
+    // of the full summary jsonb. Detail views still carry the full summary, so
+    // keep the object-path fallbacks for those.
+    meeting.list_sentiment ||
     meeting.summary?.score?.classification ||
     meeting.summary?.engagement?.sentiment ||
     meeting.summary?.onboarding?.sentiment ||

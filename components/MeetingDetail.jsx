@@ -240,7 +240,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 
       <style jsx>{`
         .oh-detail-title {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 28px;
           letter-spacing: -0.01em;
           margin: 4px 0 6px;
@@ -475,7 +475,7 @@ function ScorePanel({ score }) {
           padding: 16px 18px;
           margin-bottom: 22px;
         }
-        .oh-score-panel.hot { border-color: rgba(184, 52, 28, 0.35); }
+        .oh-score-panel.hot { border-color: rgba(var(--accent-rgb), 0.35); }
         .oh-score-panel.warm { border-color: rgba(196, 122, 26, 0.35); }
         .oh-score-head {
           display: flex;
@@ -486,7 +486,7 @@ function ScorePanel({ score }) {
           flex-wrap: wrap;
         }
         .oh-score-value {
-          font-family: 'Instrument Serif', serif;
+          font-family: var(--font-sans); font-weight: 700;
           font-size: 32px;
           line-height: 1;
           margin-top: 2px;
@@ -506,7 +506,7 @@ function ScorePanel({ score }) {
           border-radius: 999px;
           border: 1.5px solid;
         }
-        .oh-score-pill.hot { color: #b8341c; background: rgba(184, 52, 28, 0.08); border-color: rgba(184, 52, 28, 0.35); }
+        .oh-score-pill.hot { color: var(--accent); background: rgba(var(--accent-rgb), 0.08); border-color: rgba(var(--accent-rgb), 0.35); }
         .oh-score-pill.warm { color: #b97417; background: rgba(196, 122, 26, 0.08); border-color: rgba(196, 122, 26, 0.35); }
         .oh-score-pill.cold { color: #4a6b7a; background: rgba(74, 107, 122, 0.08); border-color: rgba(74, 107, 122, 0.35); }
         .oh-score-grid {
@@ -546,7 +546,7 @@ function ScorePanel({ score }) {
           border-color: #2f6f2f;
         }
         .oh-score-pts {
-          font-family: 'Geist Mono', monospace;
+          font-family: var(--font-mono), monospace;
           font-size: 11.5px;
           color: var(--ink-3);
         }

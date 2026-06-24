@@ -30,6 +30,8 @@ async function run() {
   }
   // Idempotently ensure the direct_rm value exists on an older enum.
   await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'direct_rm'`;
+  // Field-sales executive role (separate /sales experience + own tables).
+  await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'sales_rm'`;
 
   console.log('Creating users table...');
   await sql`
@@ -223,6 +225,137 @@ async function run() {
   // Idempotent add for DBs created before the pause kill-switch existed.
   await sql`ALTER TABLE salestrail_sync_state ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false`;
   await sql`INSERT INTO salestrail_sync_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+
+  // ── Sales RM tables (separate data island from meetings) ──
+  console.log('Creating sales_channel_partners table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_channel_partners (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      cp_id text NOT NULL,
+      cp_name text NOT NULL,
+      phone_primary text NOT NULL,
+      phone_secondary text,
+      email text,
+      primary_business jsonb,
+      team_size integer,
+      monthly_deal_volume integer,
+      other_platforms jsonb,
+      office_address text,
+      office_lat double precision,
+      office_lng double precision,
+      office_verification_status text,
+      societies jsonb,
+      created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS sales_cp_cp_id_uq ON sales_channel_partners(cp_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_cp_phone_idx ON sales_channel_partners(phone_primary)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_cp_created_by_idx ON sales_channel_partners(created_by)`;
+
+  console.log('Creating sales_visits table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_visits (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      sales_cp_id uuid REFERENCES sales_channel_partners(id) ON DELETE SET NULL,
+      cp_code text,
+      cp_name text,
+      meeting_type text NOT NULL DEFAULT 'first_visit',
+      check_in_time timestamptz NOT NULL,
+      check_out_time timestamptz,
+      duration_seconds integer NOT NULL DEFAULT 0,
+      meeting_lat double precision,
+      meeting_lng double precision,
+      location_accuracy double precision,
+      key_discussion_points text,
+      cp_engagement_level text,
+      competitive_update text,
+      inventory_received boolean NOT NULL DEFAULT false,
+      inventory_pipeline_count integer,
+      next_followup_date date,
+      next_action_required text,
+      meeting_outcome text,
+      selfie_url text,
+      audio_url text,
+      transcript_text text,
+      transcript_words jsonb,
+      summary jsonb,
+      language text,
+      status text NOT NULL DEFAULT 'processing',
+      error_message text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_visits_rm_idx ON sales_visits(sales_rm_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_visits_cp_idx ON sales_visits(sales_cp_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_visits_followup_idx ON sales_visits(next_followup_date)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_visits_status_idx ON sales_visits(status)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_visits_check_in_idx ON sales_visits(check_in_time)`;
+
+  console.log('Creating sales_clock_sessions table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_clock_sessions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      clock_in_time timestamptz NOT NULL DEFAULT now(),
+      clock_out_time timestamptz,
+      clock_in_lat double precision,
+      clock_in_lng double precision,
+      clock_out_lat double precision,
+      clock_out_lng double precision,
+      distance_meters double precision DEFAULT 0,
+      status text NOT NULL DEFAULT 'open',
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_rm_idx ON sales_clock_sessions(sales_rm_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_status_idx ON sales_clock_sessions(status)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_clock_in_idx ON sales_clock_sessions(clock_in_time)`;
+
+  console.log('Creating sales_location_pings table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_location_pings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      clock_session_id uuid REFERENCES sales_clock_sessions(id) ON DELETE SET NULL,
+      lat double precision NOT NULL,
+      lng double precision NOT NULL,
+      accuracy double precision,
+      recorded_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_pings_rm_time_idx ON sales_location_pings(sales_rm_id, recorded_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_pings_session_idx ON sales_location_pings(clock_session_id)`;
+
+  console.log('Creating sales_inventory table...');
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_inventory (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      sales_cp_id uuid REFERENCES sales_channel_partners(id) ON DELETE SET NULL,
+      sales_rm_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      cp_code text,
+      cp_name text,
+      city text,
+      society_name text,
+      configuration text,
+      size_sqft integer,
+      price integer,
+      facing text,
+      flat_status text,
+      floor integer,
+      unit_number text,
+      furnishing text,
+      comments text,
+      ok_to_visit boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_cp_idx ON sales_inventory(sales_cp_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_rm_idx ON sales_inventory(sales_rm_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS sales_inventory_created_idx ON sales_inventory(created_at)`;
 
   console.log('\n✓ Done. Schema is ready.');
 }
