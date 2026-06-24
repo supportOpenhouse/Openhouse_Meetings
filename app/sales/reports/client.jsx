@@ -12,16 +12,18 @@ const FILTERS = [
 ];
 
 // Groups visits under a human date heading (Today / Yesterday / date).
+// Absolute IST date heading — deterministic given the timestamp, so SSR and the
+// client render identically (no hydration mismatch). Relative "Today/Yesterday"
+// is intentionally avoided here because it depends on the render moment.
 function dayHeading(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round((today - that) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
 export default function SalesReportsClient({ initialVisits }) {

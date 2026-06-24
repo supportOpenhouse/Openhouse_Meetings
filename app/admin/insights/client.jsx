@@ -1876,5 +1876,5 @@ function shortLabel(s) {
 function shortWeek(week) {
   const d = new Date(week);
   if (isNaN(d)) return week;
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' });
 }

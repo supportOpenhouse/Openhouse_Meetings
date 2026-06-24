@@ -413,10 +413,14 @@ function computeWindowStats(meetings) {
   // Calendar-aligned windows (local timezone), so the cards match the date
   // presets exactly. "Today" = since local midnight — NOT a rolling 24h
   // window, which previously over-counted by pulling in late-yesterday.
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  // IST calendar midnight, computed deterministically (independent of the
+  // server's runtime timezone) so SSR and the client agree → no hydration
+  // mismatch (#422) and "today" means IST-today everywhere.
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
   const dayMs = 24 * 60 * 60 * 1000;
-  const todayCut = startOfToday.getTime();
+  const todayCut =
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate()) - IST_OFFSET_MS;
   const week = todayCut - 6 * dayMs; // 7 calendar days incl. today
   const month = todayCut - 29 * dayMs; // 30 calendar days
   const ninety = todayCut - 89 * dayMs; // 90 calendar days
