@@ -5,6 +5,7 @@ import { getSalesVisitForProcessing, updateSalesVisit } from '@/lib/salesQueries
 import { transcribeWithElevenLabs } from '@/lib/elevenlabs';
 import { summarizeSalesVisit } from '@/lib/salesClaude';
 import { logActivity } from '@/lib/activityLog';
+import { captureServer } from '@/lib/posthogServer';
 
 export const runtime = 'nodejs';
 // I/O wait (ElevenLabs, Claude) doesn't bill as active CPU on Fluid Compute.
@@ -83,6 +84,15 @@ export async function POST(request, { params }) {
       request,
     });
 
+    await captureServer(session.user.id, 'sales_visit_processed', {
+      status: 'ready',
+      cp_code: visit.cp_code,
+      transcript_length: (transcript.text || '').length,
+      cp_sentiment: summary?.cp_sentiment || null,
+      onboarding_stage: summary?.onboarding_stage || null,
+      duration_seconds: visit.duration_seconds,
+    });
+
     return NextResponse.json({ ok: true, status: updated.status });
   } catch (e) {
     console.error('[sales/visits/process] failed', { id, message: e?.message });
@@ -107,6 +117,12 @@ export async function POST(request, { params }) {
         await del(visit.audio_url, { token: process.env.BLOB_READ_WRITE_TOKEN });
       } catch {}
     }
+
+    await captureServer(session.user.id, 'sales_visit_processed', {
+      status: 'failed',
+      cp_code: visit.cp_code,
+      error: (e?.message || 'Processing failed').slice(0, 200),
+    });
 
     return NextResponse.json({ error: e?.message || 'Processing failed' }, { status: 500 });
   }

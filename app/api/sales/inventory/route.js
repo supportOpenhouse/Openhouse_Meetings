@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { listInventoryForRm, insertInventory } from '@/lib/salesInventoryQueries';
-import { getSalesCpById } from '@/lib/salesQueries';
+import { getInventoryCpByCode } from '@/lib/salesCp';
+import { captureServer } from '@/lib/posthogServer';
 
 export const runtime = 'nodejs';
 
@@ -45,25 +46,25 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const sales_cp_id = nz(body.sales_cp_id);
+  const cp_code = nz(body.cp_code);
   const society_name = nz(body.society_name);
-  if (!sales_cp_id) {
-    return NextResponse.json({ error: 'sales_cp_id required' }, { status: 400 });
+  if (!cp_code) {
+    return NextResponse.json({ error: 'cp_code required' }, { status: 400 });
   }
   if (!society_name) {
     return NextResponse.json({ error: 'society_name required' }, { status: 400 });
   }
 
-  const cp = await getSalesCpById(sales_cp_id);
-  if (!cp) {
-    return NextResponse.json({ error: 'Channel partner not found' }, { status: 404 });
-  }
+  // Resolve the canonical name from the external inventory (fall back to the
+  // client's snapshot if the inventory DB isn't reachable).
+  const cp = await getInventoryCpByCode(cp_code);
+  const cpName = cp?.cp_name || nz(body.cp_name) || null;
 
   const data = {
-    sales_cp_id,
+    sales_cp_id: null,
     sales_rm_id: session.user.id,
-    cp_code: cp.cp_id,
-    cp_name: cp.cp_name,
+    cp_code: cp?.cp_code || cp_code,
+    cp_name: cpName,
     city: nz(body.city),
     society_name,
     configuration: oneOf(body.configuration, CONFIGURATIONS),
@@ -85,6 +86,13 @@ export async function POST(request) {
     console.error('[sales/inventory] insert failed', { message: e?.message });
     return NextResponse.json({ error: 'Could not save inventory' }, { status: 500 });
   }
+
+  await captureServer(session.user.id, 'sales_inventory_added', {
+    cp_code: data.cp_code,
+    configuration: data.configuration,
+    has_price: data.price != null,
+    society_name: data.society_name,
+  });
 
   return NextResponse.json({ inventory: row }, { status: 201 });
 }

@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { LayoutDashboard, Users, Plus, BarChart3, LogOut, MapPin, Search, ClipboardList, BookOpen } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
+import Logo from './Logo';
+import AnalyticsIdentify from './AnalyticsIdentify';
 
 // The field-sales experience lives entirely under /sales. This shell reuses the
 // shared .oh-shell / .oh-side / .oh-mobile-* layout primitives but wraps them in
@@ -27,11 +29,12 @@ export default function SalesShell({ user, current, children }) {
       <div className="oh-shell">
         <Heartbeat />
         <RecordingGuard />
+        <AnalyticsIdentify user={user} />
 
         {/* Desktop sidebar */}
         <aside className="oh-side">
           <div className="oh-brand">
-            Open<span>house</span>
+            <Logo />
             <div
               style={{
                 fontFamily: "var(--font-sans), sans-serif",
@@ -101,7 +104,7 @@ export default function SalesShell({ user, current, children }) {
           {/* Mobile top bar */}
           <header className="oh-mobile-top">
             <div className="oh-brand">
-              Open<span>house</span>
+              <Logo />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <UserAvatar user={user} size={32} />

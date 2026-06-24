@@ -57,7 +57,7 @@ export default function DailyTargets({ targets }) {
         target={t.meetingTarget || 5}
       />
       <TargetBar
-        label="New partners today"
+        label="Partners visited today"
         value={t.cpsToday || 0}
         target={t.cpTarget || 5}
       />

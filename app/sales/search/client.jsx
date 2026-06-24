@@ -79,10 +79,9 @@ export default function SearchClient() {
     return () => debounce.current && clearTimeout(debounce.current);
   }, [q]);
 
-  const filtered =
-    biz === 'all'
-      ? results
-      : results.filter((cp) => (cp.primary_business || []).includes(biz));
+  // Partners come from the shared inventory, which doesn't carry a business
+  // type, so results are shown as-is.
+  const filtered = results;
 
   return (
     <div>
@@ -113,19 +112,6 @@ export default function SearchClient() {
         )}
       </div>
 
-      <div className="sx-chips" style={{ marginBottom: 18 }}>
-        {BIZ_CHIPS.map((c) => (
-          <button
-            key={c.key}
-            type="button"
-            className={`sx-chip ${biz === c.key ? 'on' : ''}`}
-            onClick={() => setBiz(c.key)}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
       {!searched && !loading ? (
         <div className="sx-empty">
           <div className="ico">
@@ -154,7 +140,7 @@ export default function SearchClient() {
             const primarySociety =
               (cp.societies || []).find((s) => s.is_primary) || (cp.societies || [])[0];
             return (
-              <Link key={cp.id} href={`/sales/cps/${cp.id}`} className="sx-row">
+              <Link key={cp.id} href={`/sales/cps/${encodeURIComponent(cp.id)}`} className="sx-row">
                 <div className="avatar">{initials(cp.cp_name)}</div>
                 <div className="body">
                   <div className="title">{cp.cp_name}</div>

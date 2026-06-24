@@ -16,7 +16,7 @@ const GURGAON = { lat: 28.4595, lng: 77.0266 };
 // One color per active rep (cycled). Teal + amber lead, then a spread that
 // stays legible on the light map.
 const PALETTE = [
-  '#1B6F5F',
+  '#B5179E',
   '#F59E0B',
   '#2A5E8C',
   '#9E2A2F',
@@ -293,10 +293,10 @@ function RepMap({ initial, mapsKey }) {
                 disableDefaultUI={false}
                 style={{ width: '100%', height: '100%' }}
               >
-                <RoutePolyline path={route} color="#1B6F5F" />
+                <RoutePolyline path={route} color="#B5179E" />
                 {me && (
                   <AdvancedMarker position={me}>
-                    <RepMarker color="#1B6F5F" label="•" pulsing={isOpen} />
+                    <RepMarker color="#B5179E" label="•" pulsing={isOpen} />
                   </AdvancedMarker>
                 )}
               </GoogleMap>

@@ -1527,7 +1527,7 @@ function Stat({ label, value, accent, onClick }) {
           border-radius: 10px;
           padding: 12px 14px;
         }
-        .oh-ins-stat.accent { border-color: var(--accent); background: rgba(184, 52, 28, 0.04); }
+        .oh-ins-stat.accent { border-color: var(--accent); background: rgba(var(--accent-rgb), 0.04); }
         .oh-ins-stat.clickable {
           cursor: pointer;
           transition: border-color 0.12s, transform 0.05s;
@@ -1583,7 +1583,7 @@ function TempStat({ mix, onSegmentClick }) {
         }
         button.seg { cursor: pointer; transition: background 0.12s; }
         button.seg:hover { background: var(--paper-2); }
-        .hot { color: #b8341c; }
+        .hot { color: var(--accent); }
         .warm { color: #b97417; }
         .cold { color: #4a6b7a; }
         .l { font-size: 11.5px; color: var(--ink-3); margin-top: 7px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -1742,7 +1742,7 @@ function Sparkbars({ data }) {
         }
         .oh-chart-bar {
           width: 100%;
-          background: linear-gradient(180deg, var(--accent), rgba(184, 52, 28, 0.78));
+          background: linear-gradient(180deg, var(--accent), rgba(var(--accent-rgb), 0.78));
           border-radius: 4px 4px 0 0;
           transition: opacity 0.12s;
         }

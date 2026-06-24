@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { LogIn, LogOut, Loader2 } from 'lucide-react';
+import { track } from '@/lib/track';
 
 // Big clock in / clock out control. Reads the device geolocation, POSTs to
 // /api/sales/clock, and hands the new session (or null) back to the parent.
@@ -38,6 +39,7 @@ export default function CheckInButton({ open, onChanged }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Clock action failed');
+      track(action === 'in' ? 'clock_in' : 'clock_out', { has_location: lat != null });
       onChanged?.(data.session ?? null);
     } catch (e) {
       onChanged?.(open, e?.message || 'Something went wrong');

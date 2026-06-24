@@ -40,7 +40,7 @@ function fmtPrice(n) {
 }
 
 const emptyForm = {
-  sales_cp_id: '',
+  cp_code: '',
   city: '',
   society_name: '',
   configuration: '',
@@ -73,7 +73,7 @@ export default function InventoryClient({ initial, cps }) {
   async function submit(e) {
     e.preventDefault();
     setError('');
-    if (!form.sales_cp_id) {
+    if (!form.cp_code) {
       setError('Pick a channel partner.');
       return;
     }
@@ -141,7 +141,7 @@ export default function InventoryClient({ initial, cps }) {
             <div className="grid">
               <div className="oh-field span-2">
                 <label>Channel partner</label>
-                <select className="oh-select" value={form.sales_cp_id} onChange={set('sales_cp_id')}>
+                <select className="oh-select" value={form.cp_code} onChange={set('cp_code')}>
                   <option value="">Select a partner…</option>
                   {cps.map((cp) => (
                     <option key={cp.id} value={cp.id}>

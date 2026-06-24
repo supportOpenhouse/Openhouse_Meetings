@@ -475,7 +475,7 @@ function ScorePanel({ score }) {
           padding: 16px 18px;
           margin-bottom: 22px;
         }
-        .oh-score-panel.hot { border-color: rgba(184, 52, 28, 0.35); }
+        .oh-score-panel.hot { border-color: rgba(var(--accent-rgb), 0.35); }
         .oh-score-panel.warm { border-color: rgba(196, 122, 26, 0.35); }
         .oh-score-head {
           display: flex;
@@ -506,7 +506,7 @@ function ScorePanel({ score }) {
           border-radius: 999px;
           border: 1.5px solid;
         }
-        .oh-score-pill.hot { color: #b8341c; background: rgba(184, 52, 28, 0.08); border-color: rgba(184, 52, 28, 0.35); }
+        .oh-score-pill.hot { color: var(--accent); background: rgba(var(--accent-rgb), 0.08); border-color: rgba(var(--accent-rgb), 0.35); }
         .oh-score-pill.warm { color: #b97417; background: rgba(196, 122, 26, 0.08); border-color: rgba(196, 122, 26, 0.35); }
         .oh-score-pill.cold { color: #4a6b7a; background: rgba(74, 107, 122, 0.08); border-color: rgba(74, 107, 122, 0.35); }
         .oh-score-grid {

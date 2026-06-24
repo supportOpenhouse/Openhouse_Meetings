@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { insertSalesVisit, listSalesVisits, getSalesCpById } from '@/lib/salesQueries';
+import { insertSalesVisit, listSalesVisits } from '@/lib/salesQueries';
+import { getInventoryCpByCode } from '@/lib/salesCp';
 import { logActivity } from '@/lib/activityLog';
+import { captureServer } from '@/lib/posthogServer';
 
 export const runtime = 'nodejs';
 
@@ -55,8 +57,10 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const sales_cp_id = nz(body.sales_cp_id);
-  if (!sales_cp_id) return NextResponse.json({ error: 'sales_cp_id required' }, { status: 400 });
+  // Partners come from the external inventory now — a visit keys off the real
+  // cp_code (e.g. CP05443), not a local uuid.
+  const cp_code = nz(body.cp_code);
+  if (!cp_code) return NextResponse.json({ error: 'cp_code required' }, { status: 400 });
 
   const audio_url = nz(body.audio_url);
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
@@ -76,8 +80,10 @@ export async function POST(request) {
     return NextResponse.json({ error: 'audio_url must be a Vercel Blob URL' }, { status: 400 });
   }
 
-  const cp = await getSalesCpById(sales_cp_id);
-  if (!cp) return NextResponse.json({ error: 'Channel partner not found' }, { status: 404 });
+  // Resolve the canonical partner name from the inventory; fall back to the
+  // name the client snapshotted if the inventory DB isn't reachable.
+  const cp = await getInventoryCpByCode(cp_code);
+  const cpName = cp?.cp_name || nz(body.cp_name) || null;
 
   const meeting_type = MEETING_TYPES.includes(body.meeting_type)
     ? body.meeting_type
@@ -92,9 +98,9 @@ export async function POST(request) {
 
   const visit = await insertSalesVisit({
     sales_rm_id: session.user.id,
-    sales_cp_id: cp.id,
-    cp_code: cp.cp_id,
-    cp_name: cp.cp_name,
+    sales_cp_id: null, // partners live in the external inventory; we key on cp_code
+    cp_code: cp?.cp_code || cp_code,
+    cp_name: cpName,
     meeting_type,
     check_in_time: checkIn,
     check_out_time: checkOut && !isNaN(checkOut) ? checkOut : null,
@@ -126,6 +132,15 @@ export async function POST(request) {
       cp_name: visit.cp_name,
     },
     request,
+  });
+
+  await captureServer(session.user.id, 'sales_visit_created', {
+    cp_code: visit.cp_code,
+    meeting_type,
+    duration_seconds: visit.duration_seconds,
+    inventory_received: visit.inventory_received === true,
+    outcome: meeting_outcome,
+    engagement: cp_engagement_level,
   });
 
   return NextResponse.json({ id: visit.id }, { status: 201 });

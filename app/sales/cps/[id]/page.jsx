@@ -1,11 +1,13 @@
 import { redirect, notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import SalesShell from '@/components/SalesShell';
-import { getSalesCpById, listSalesVisits } from '@/lib/salesQueries';
+import { getInventoryCpByCode } from '@/lib/salesCp';
+import { listSalesVisitsByCpCode, listInventoryByCpCode } from '@/lib/salesQueries';
 import SalesCpDetailClient from './client';
 
 export const dynamic = 'force-dynamic';
 
+// The dynamic segment is the real cp_code (CP05443…) from the external inventory.
 export default async function SalesCpDetailPage({ params }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -16,16 +18,21 @@ export default async function SalesCpDetailPage({ params }) {
   }
 
   const { id } = await params;
-  const cp = await getSalesCpById(id);
+  const code = decodeURIComponent(id || '');
+  const cp = await getInventoryCpByCode(code);
   if (!cp) notFound();
 
-  const visits = await listSalesVisits({ cpId: id, limit: 50 });
+  const [visits, inventory] = await Promise.all([
+    listSalesVisitsByCpCode(cp.cp_code, 50),
+    listInventoryByCpCode(cp.cp_code, 50),
+  ]);
 
   return (
     <SalesShell user={session.user} current="cps">
       <SalesCpDetailClient
         cp={JSON.parse(JSON.stringify(cp))}
         visits={JSON.parse(JSON.stringify(visits))}
+        inventory={JSON.parse(JSON.stringify(inventory))}
       />
     </SalesShell>
   );

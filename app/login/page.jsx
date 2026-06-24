@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { Mic, Sparkles, MapPin } from 'lucide-react';
 import LoginPanel from '@/components/LoginPanel';
+import Logo from '@/components/Logo';
 
 // Where each role lands after sign-in. Mirrors middleware's homeFor() so the
 // post-login hop is direct (no bounce through /dashboard for sales reps).
@@ -28,13 +29,13 @@ export default async function LoginPage({ searchParams }) {
   }
 
   return (
-    // oh-teal scopes the form accent to teal so the whole page is cohesive with
-    // the teal brand panel (and the new Sales identity).
-    <div className="oh-auth oh-teal">
+    // oh-sales scopes the page to the Instagram-sunset palette so the form and
+    // brand panel share the same identity as the rest of the app.
+    <div className="oh-auth oh-sales">
       {/* Brand panel (desktop) */}
       <aside className="oh-auth-brand">
         <div className="wordmark">
-          Open<em>house</em>
+          <Logo />
         </div>
 
         <div>
@@ -73,7 +74,7 @@ export default async function LoginPage({ searchParams }) {
       <main className="oh-auth-side">
         <div className="oh-auth-form">
           <div className="wm">
-            Open<span>house</span>
+            <Logo />
           </div>
 
           <div className="eyebrow">Internal access</div>

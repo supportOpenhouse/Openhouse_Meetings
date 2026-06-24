@@ -174,7 +174,8 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
 
     const checkIn = recordStartRef.current || new Date();
     const visit = {
-      sales_cp_id: cp.id,
+      cp_code: cp.cp_code,
+      cp_name: cp.cp_name,
       meeting_type: meetingType,
       check_in_time: checkIn.toISOString(),
       check_out_time: (checkOut || new Date()).toISOString(),

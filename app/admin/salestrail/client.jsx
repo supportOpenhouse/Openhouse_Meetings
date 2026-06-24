@@ -190,8 +190,8 @@ export default function SalestrailClient({ initial }) {
           display: flex;
           gap: 9px;
           align-items: flex-start;
-          background: rgba(184, 52, 28, 0.06);
-          border: 1px solid rgba(184, 52, 28, 0.25);
+          background: rgba(var(--accent-rgb), 0.06);
+          border: 1px solid rgba(var(--accent-rgb), 0.25);
           color: var(--ink);
           border-radius: 10px;
           padding: 11px 13px;
@@ -266,7 +266,7 @@ export default function SalestrailClient({ initial }) {
           color: #2f6f2f;
         }
         .st-flash.err {
-          background: rgba(184, 52, 28, 0.07);
+          background: rgba(var(--accent-rgb), 0.07);
           color: #b03021;
         }
         .st-section {

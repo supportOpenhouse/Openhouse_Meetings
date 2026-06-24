@@ -1,13 +1,15 @@
 // Shown instantly on navigation to any /sales route while the server component
 // fetches — so clicks feel responsive instead of frozen. Mirrors the SalesShell
 // chrome so there's no shell-less flash.
+import Logo from '@/components/Logo';
+
 export default function SalesLoading() {
   return (
     <div className="oh-sales">
       <div className="oh-shell">
         <aside className="oh-side">
           <div className="oh-brand">
-            Open<span>house</span>
+            <Logo />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
             {Array.from({ length: 4 }).map((_, i) => (

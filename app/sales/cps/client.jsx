@@ -12,14 +12,21 @@ export default function SalesCpsClient({ initialCps }) {
   const debounce = useRef(null);
   const seq = useRef(0);
 
-  // Debounced server search. Empty query falls back to the initial full list.
+  // Empty box → the rep's recently-visited partners (initial list). Typing →
+  // debounced search against the shared CP inventory.
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
+    const query = q.trim();
+    if (!query) {
+      setCps(initialCps || []);
+      setLoading(false);
+      return;
+    }
     debounce.current = setTimeout(async () => {
       const mySeq = ++seq.current;
       setLoading(true);
       try {
-        const res = await fetch(`/api/sales/cps?search=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/sales/cps?search=${encodeURIComponent(query)}`);
         const data = await res.json();
         if (mySeq === seq.current) setCps(data?.cps ?? []);
       } catch {
@@ -29,7 +36,7 @@ export default function SalesCpsClient({ initialCps }) {
       }
     }, 220);
     return () => debounce.current && clearTimeout(debounce.current);
-  }, [q]);
+  }, [q, initialCps]);
 
   return (
     <div>
@@ -47,7 +54,7 @@ export default function SalesCpsClient({ initialCps }) {
             Channel <em>partners</em>
           </h1>
           <p className="oh-sub" style={{ margin: 0 }}>
-            The shared registry of brokers you work with.
+            Search the shared partner inventory, or pick up where you left off.
           </p>
         </div>
         <Link href="/sales/cps/new" className="oh-btn accent" style={{ flexShrink: 0 }}>
@@ -72,9 +79,11 @@ export default function SalesCpsClient({ initialCps }) {
           <div className="ico">
             <Users size={22} />
           </div>
-          <div className="t">{q ? 'No matches' : 'No partners yet'}</div>
+          <div className="t">{q ? 'No matches' : 'Search the inventory'}</div>
           <div className="s">
-            {q ? 'Try a different search.' : 'Register your first channel partner to get started.'}
+            {q
+              ? 'Try a different name, CP code, or phone.'
+              : 'Type a partner name, CP code, or phone to find them. Partners you visit show up here.'}
           </div>
         </div>
       ) : (
@@ -86,7 +95,7 @@ export default function SalesCpsClient({ initialCps }) {
             const primarySociety = (cp.societies || []).find((s) => s.is_primary) ||
               (cp.societies || [])[0];
             return (
-              <Link key={cp.id} href={`/sales/cps/${cp.id}`} className="sx-row">
+              <Link key={cp.id} href={`/sales/cps/${encodeURIComponent(cp.id)}`} className="sx-row">
                 <div className="avatar">{initials(cp.cp_name)}</div>
                 <div className="body">
                   <div className="title">{cp.cp_name}</div>

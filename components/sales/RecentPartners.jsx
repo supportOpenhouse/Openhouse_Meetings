@@ -30,10 +30,10 @@ export default function RecentPartners({ cps }) {
           )}
 
           <div className="rp-actions">
-            <Link href={`/sales/cps/${cp.id}`} className="oh-btn ghost rp-btn">
+            <Link href={`/sales/cps/${encodeURIComponent(cp.id)}`} className="oh-btn ghost rp-btn">
               <Eye size={15} /> View
             </Link>
-            <Link href={`/sales/visits/new?cp=${cp.id}`} className="oh-btn amber rp-btn">
+            <Link href={`/sales/visits/new?cp=${encodeURIComponent(cp.id)}`} className="oh-btn amber rp-btn">
               <Plus size={15} /> Log visit
             </Link>
           </div>

@@ -57,11 +57,6 @@ export default function SalesCpDetailClient({ cp, visits }) {
             {!cp.is_active && <span className="sx-pill not_interested">Inactive</span>}
           </div>
         </div>
-        {!editing && (
-          <button className="oh-btn ghost" onClick={() => setEditing(true)}>
-            <Pencil size={15} /> Edit
-          </button>
-        )}
       </div>
 
       {editing ? (

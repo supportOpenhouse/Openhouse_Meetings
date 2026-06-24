@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { LayoutDashboard, Plus, Users, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
+import Logo from './Logo';
+import AnalyticsIdentify from './AnalyticsIdentify';
 
 export default function AppShell({ user, current, children }) {
   const isAdmin = user.role === 'admin';
@@ -41,16 +43,16 @@ export default function AppShell({ user, current, children }) {
   }
 
   return (
-    // Phase 5: non-admin roles (demand RM, direct RM) get the full Field
-    // Connect Pro teal/amber scope so the recording screens match the new
-    // Sales app. Admin stays rust.
-    <div className={`oh-shell ${isAdmin ? '' : 'oh-sales'}`}>
+    // V2: every role (admin, demand RM, direct RM) gets the full Field Connect
+    // Pro teal/amber scope, so the whole app shares one design language.
+    <div className="oh-shell oh-sales">
       <Heartbeat />
       <RecordingGuard />
+      <AnalyticsIdentify user={user} />
       {/* Desktop sidebar */}
       <aside className="oh-side">
         <div className="oh-brand">
-          Open<span>house</span>
+          <Logo />
         </div>
 
         {navItems.map((it) => {
@@ -107,7 +109,7 @@ export default function AppShell({ user, current, children }) {
         {/* Mobile top bar */}
         <header className="oh-mobile-top">
           <div className="oh-brand">
-            Open<span>house</span>
+            <Logo />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <UserAvatar user={user} size={32} />
