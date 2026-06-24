@@ -438,6 +438,10 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 .oh-mobile-bottom .item.active { color: var(--accent); background: var(--accent-soft); }
 .oh-mobile-bottom .item:active { background: var(--paper-2); }
 .oh-mobile-bottom .item.signout { color: var(--ink-3); }
+/* Icons-only bottom bar — labels hidden for a cleaner, app-like nav. */
+.oh-mobile-bottom .item span { display: none; }
+.oh-mobile-bottom .item { gap: 0; font-size: 0; }
+.oh-mobile-bottom .item svg { width: 23px; height: 23px; }
 
 /* ---------- Meeting card (used on mobile in place of grid row) ---------- */
 .oh-meeting-card {

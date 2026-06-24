@@ -127,6 +127,7 @@ export default function AppShell({ user, current, children }) {
             <Link
               key={it.key}
               href={it.href}
+              aria-label={it.label}
               className={`item ${current === it.key ? 'active' : ''}`}
             >
               <Icon size={20} />

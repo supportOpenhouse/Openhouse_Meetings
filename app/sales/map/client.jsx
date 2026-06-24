@@ -34,14 +34,24 @@ function colorFor(i) {
 // Route polyline — the lib doesn't ship a Polyline component, so we create a
 // raw google.maps.Polyline via useMap() and clean it up on unmount / change.
 // ─────────────────────────────────────────────────────────────────────────────
+// Normalize to plain {lat, lng} numbers. DB ping rows carry extra fields
+// (recorded_at) and occasionally a null coordinate (geolocation was denied) —
+// feeding those to the Maps SDK throws "Cannot read 'setAt'" inside setPath.
+// Filtering to finite lat/lng is the real fix.
+function toLatLngs(path) {
+  return (Array.isArray(path) ? path : [])
+    .map((p) => ({ lat: Number(p?.lat), lng: Number(p?.lng) }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+}
+
 function RoutePolyline({ path, color }) {
   const map = useMap();
   const lineRef = useRef(null);
 
   useEffect(() => {
-    if (!map || typeof google === 'undefined') return undefined;
+    if (!map || typeof google === 'undefined' || !google.maps) return undefined;
     const line = new google.maps.Polyline({
-      path: path || [],
+      path: toLatLngs(path),
       geodesic: true,
       strokeColor: color,
       strokeOpacity: 0.9,
@@ -53,12 +63,19 @@ function RoutePolyline({ path, color }) {
       line.setMap(null);
       lineRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, color]);
 
-  // Update the path in place when it grows (rep's live trail) without
-  // recreating the polyline.
+  // Update the path in place when it grows (rep's live trail). Guarded — a bad
+  // point or a torn-down line must never crash the map page.
   useEffect(() => {
-    if (lineRef.current) lineRef.current.setPath(path || []);
+    const line = lineRef.current;
+    if (!line) return;
+    try {
+      line.setPath(toLatLngs(path));
+    } catch {
+      /* ignore — the next update will resync */
+    }
   }, [path]);
 
   return null;
