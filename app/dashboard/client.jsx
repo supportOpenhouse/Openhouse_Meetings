@@ -23,6 +23,15 @@ export default function RMDashboardClient({ initialMeetings, user }) {
   const [openThread, setOpenThread] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // "Today" / "this week" depend on the viewer's clock + timezone, which the
+  // server (UTC) can't know — computing them during SSR makes the server and
+  // client render different numbers → hydration mismatch (React #422). Defer to
+  // after mount so both first renders agree, then fill in the real counts.
+  const [nowMs, setNowMs] = useState(null);
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
+
   function showToast(msg, type) {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 4000);
@@ -56,15 +65,16 @@ export default function RMDashboardClient({ initialMeetings, user }) {
 
   const totalMin =
     meetings.reduce((sum, m) => sum + (m.duration_seconds || 0), 0) / 60;
-  const todayCount = meetings.filter((m) => {
-    const d = new Date(m.started_at);
-    return d.toDateString() === new Date().toDateString();
-  }).length;
-  const weekCount = meetings.filter((m) => {
-    const d = new Date(m.started_at);
-    const weekAgo = new Date(Date.now() - 7 * 86400000);
-    return d >= weekAgo;
-  }).length;
+  const todayCount =
+    nowMs == null
+      ? null
+      : meetings.filter(
+          (m) => new Date(m.started_at).toDateString() === new Date(nowMs).toDateString()
+        ).length;
+  const weekCount =
+    nowMs == null
+      ? null
+      : meetings.filter((m) => new Date(m.started_at) >= new Date(nowMs - 7 * 86400000)).length;
 
   return (
     <div>
@@ -85,8 +95,8 @@ export default function RMDashboardClient({ initialMeetings, user }) {
 
       <div className="oh-stats-grid">
         <Stat label="Total meetings" value={meetings.length} />
-        <Stat label="Today" value={todayCount} />
-        <Stat label="This week" value={weekCount} />
+        <Stat label="Today" value={todayCount ?? '—'} />
+        <Stat label="This week" value={weekCount ?? '—'} />
         <Stat label="Total minutes" value={Math.round(totalMin)} />
       </div>
 
