@@ -17,10 +17,10 @@ import {
 // components apply — giving the admin sales section the product's identity.
 
 const TABS = [
-  { href: '/admin/sales', key: 'overview', label: 'Overview' },
-  { href: '/admin/sales/reps', key: 'reps', label: 'Reps' },
-  { href: '/admin/sales/visits', key: 'visits', label: 'Visits' },
-  { href: '/admin/sales/cps', key: 'cps', label: 'Partners' },
+  { href: '/admin/supply', key: 'overview', label: 'Overview' },
+  { href: '/admin/supply/reps', key: 'reps', label: 'Reps' },
+  { href: '/admin/supply/visits', key: 'visits', label: 'Visits' },
+  { href: '/admin/supply/cps', key: 'cps', label: 'Partners' },
 ];
 
 export function AdminSalesTabs({ current }) {
@@ -50,7 +50,7 @@ export function StatTile({ icon, tone, value, label }) {
 export function AdminVisitRow({ v }) {
   const outcomeClass = OUTCOME_PILL[v.meeting_outcome];
   return (
-    <Link href={`/sales/visits/${v.id}`} className="sx-row">
+    <Link href={`/supply/visits/${v.id}`} className="sx-row">
       <div className="avatar">{initials(v.cp_name)}</div>
       <div className="body">
         <div className="title">{v.cp_name || 'Channel partner'}</div>

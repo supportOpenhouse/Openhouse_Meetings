@@ -27,7 +27,7 @@ export default auth((req) => {
 
   // Where each role lands after login / when bounced off a forbidden page.
   const homeFor = (role) =>
-    role === 'admin' ? '/admin' : role === 'sales_rm' ? '/sales' : '/dashboard';
+    role === 'admin' ? '/admin' : role === 'supply_rm' ? '/supply' : '/dashboard';
 
   if (isAuthRoute) {
     if (isLoggedIn) {
@@ -50,18 +50,18 @@ export default auth((req) => {
   }
 
   // Sales RM area — only sales reps (and admins, for oversight) may enter.
-  if (pathname.startsWith('/sales') || pathname.startsWith('/api/sales')) {
-    if (role !== 'sales_rm' && role !== 'admin') {
+  if (pathname.startsWith('/supply') || pathname.startsWith('/api/supply')) {
+    if (role !== 'supply_rm' && role !== 'admin') {
       return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }
   }
 
   // Keep sales reps out of the demand/direct recording app entirely — their
-  // whole experience lives under /sales.
-  if (role === 'sales_rm') {
+  // whole experience lives under /supply.
+  if (role === 'supply_rm') {
     const recordingPages = ['/dashboard', '/new-meeting', '/direct', '/upload-recording'];
     if (recordingPages.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-      return NextResponse.redirect(new URL('/sales', nextUrl));
+      return NextResponse.redirect(new URL('/supply', nextUrl));
     }
   }
 

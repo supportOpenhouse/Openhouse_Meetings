@@ -1,4 +1,4 @@
-// Seeds realistic Sales-RM demo data so the /sales experience can be reviewed
+// Seeds realistic Sales-RM demo data so the /supply experience can be reviewed
 // (and screenshotted) with content. Idempotent: it upserts a demo sales rep and
 // replaces that rep's demo CPs/visits each run. Demo CPs use the SCP9xx code
 // range so they never collide with real SCP001.. registrations.
@@ -44,8 +44,8 @@ async function run() {
   // 1) Demo sales rep
   const [rep] = await sql`
     INSERT INTO users (email, name, role, is_active)
-    VALUES (${DEMO_EMAIL}, 'Demo Sales RM', 'sales_rm', true)
-    ON CONFLICT (email) DO UPDATE SET role = 'sales_rm', is_active = true, name = 'Demo Sales RM'
+    VALUES (${DEMO_EMAIL}, 'Demo Sales RM', 'supply_rm', true)
+    ON CONFLICT (email) DO UPDATE SET role = 'supply_rm', is_active = true, name = 'Demo Sales RM'
     RETURNING id
   `;
   const repId = rep.id;

@@ -19,7 +19,7 @@ export default function AppShell({ user, current, children }) {
     navItems = [
       { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
       { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3, iconName: 'BarChart3', primary: true },
-      { href: '/admin/sales', key: 'sales', label: 'Field sales', icon: Footprints, iconName: 'Footprints', primary: true },
+      { href: '/admin/supply', key: 'sales', label: 'Supply', icon: Footprints, iconName: 'Footprints', primary: true },
       { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2, iconName: 'Building2' },
       { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users, iconName: 'Users' },
       { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: UserCog, iconName: 'UserCog' },

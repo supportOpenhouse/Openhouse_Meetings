@@ -7,7 +7,7 @@ import Logo from './Logo';
 import AnalyticsIdentify from './AnalyticsIdentify';
 import MobileNav from './MobileNav';
 
-// The field-sales experience lives entirely under /sales. This shell reuses the
+// The field-sales experience lives entirely under /supply. This shell reuses the
 // shared .oh-shell / .oh-side / .oh-mobile-* layout primitives but wraps them in
 // .oh-sales, which remaps the CSS variables to the teal/amber palette — so the
 // reused nav/cards pick up the new look without touching the demand/direct RM UI.
@@ -17,14 +17,14 @@ export default function SalesShell({ user, current, children }) {
   // `primary: true` → mobile bottom bar (Home, Partners, Live map); the central
   // FAB is New visit; the rest live in the Menu drawer. Desktop shows them all.
   const navItems = [
-    { href: '/sales', key: 'home', label: 'Home', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
-    { href: '/sales/cps', key: 'cps', label: 'Partners', icon: Users, iconName: 'Users', primary: true },
-    { href: '/sales/visits/new', key: 'new', label: 'New visit', icon: Plus, iconName: 'Plus' },
-    { href: '/sales/map', key: 'map', label: 'Live map', icon: MapPin, iconName: 'MapPin', primary: true },
-    { href: '/sales/performance', key: 'performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
-    { href: '/sales/search', key: 'search', label: 'Search', icon: Search, iconName: 'Search' },
-    { href: '/sales/reports', key: 'reports', label: 'Reports', icon: ClipboardList, iconName: 'ClipboardList' },
-    { href: '/sales/guide', key: 'guide', label: 'Guide', icon: BookOpen, iconName: 'BookOpen' },
+    { href: '/supply', key: 'home', label: 'Home', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+    { href: '/supply/cps', key: 'cps', label: 'Partners', icon: Users, iconName: 'Users', primary: true },
+    { href: '/supply/visits/new', key: 'new', label: 'New visit', icon: Plus, iconName: 'Plus' },
+    { href: '/supply/map', key: 'map', label: 'Live map', icon: MapPin, iconName: 'MapPin', primary: true },
+    { href: '/supply/performance', key: 'performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
+    { href: '/supply/search', key: 'search', label: 'Search', icon: Search, iconName: 'Search' },
+    { href: '/supply/reports', key: 'reports', label: 'Reports', icon: ClipboardList, iconName: 'ClipboardList' },
+    { href: '/supply/guide', key: 'guide', label: 'Guide', icon: BookOpen, iconName: 'BookOpen' },
   ];
 
   // Serializable copy (no icon component) for the client MobileNav.
@@ -56,7 +56,7 @@ export default function SalesShell({ user, current, children }) {
                 fontStyle: 'normal',
               }}
             >
-              Field Sales
+              Supply
             </div>
           </div>
 
@@ -90,7 +90,7 @@ export default function SalesShell({ user, current, children }) {
               >
                 {user.name || user.email}
               </div>
-              <div className="role">{isAdmin ? 'Admin · Sales' : 'Sales RM'}</div>
+              <div className="role">{isAdmin ? 'Admin · Supply' : 'Supply RM'}</div>
             </div>
             <form
               action={async () => {
@@ -145,9 +145,9 @@ export default function SalesShell({ user, current, children }) {
           items={mobileItems}
           current={current}
           user={{ name: user.name, email: user.email, image: user.image, role: user.role }}
-          roleLabel={isAdmin ? 'Admin' : 'Field sales'}
+          roleLabel={isAdmin ? 'Admin' : 'Supply'}
           signOutAction={handleSignOut}
-          fab={{ href: '/sales/visits/new', label: 'New visit' }}
+          fab={{ href: '/supply/visits/new', label: 'New visit' }}
         />
       </div>
     </div>

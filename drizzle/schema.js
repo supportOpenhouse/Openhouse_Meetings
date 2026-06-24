@@ -15,11 +15,11 @@ import {
 
 // 'direct_rm' — a lightweight RM who only uploads phone call recordings
 // (MP3s) and sees a stripped-down dashboard. No live recording, no CP tools.
-// 'sales_rm' — a field-sales executive on a completely separate flow: a CP
+// 'supply_rm' — a field-sales executive on a completely separate flow: a CP
 // registry + on-site visit logging (record audio + manual visit form + AI
 // summary). Their data lives in its own tables (sales_channel_partners,
-// sales_visits) and they see the /sales experience, never /dashboard.
-export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm', 'sales_rm']);
+// sales_visits) and they see the /supply experience, never /dashboard.
+export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm', 'supply_rm']);
 
 export const users = pgTable(
   'users',

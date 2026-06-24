@@ -5,10 +5,10 @@ import LoginPanel from '@/components/LoginPanel';
 import Logo from '@/components/Logo';
 
 // Where each role lands after sign-in. Mirrors middleware's homeFor() so the
-// post-login hop is direct (no bounce through /dashboard for sales reps).
+// post-login hop is direct (no bounce through /dashboard for supply reps).
 function homeFor(role) {
   if (role === 'admin') return '/admin';
-  if (role === 'sales_rm') return '/sales';
+  if (role === 'supply_rm') return '/supply';
   return '/dashboard';
 }
 
@@ -83,7 +83,7 @@ export default async function LoginPage({ searchParams }) {
           </h1>
           <p className="sub">
             Sign in with your Openhouse Google account. Access is invite-only — for admins, RMs, and
-            field sales.
+            supply.
           </p>
 
           {errorMsg && (

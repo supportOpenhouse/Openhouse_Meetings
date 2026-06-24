@@ -22,7 +22,7 @@ export async function POST(req) {
   const body = await req.json();
   const email = body.email?.toString().trim().toLowerCase();
   const name = body.name?.toString().trim() || null;
-  const role = ['admin', 'direct_rm', 'rm', 'sales_rm'].includes(body.role) ? body.role : 'rm';
+  const role = ['admin', 'direct_rm', 'rm', 'supply_rm'].includes(body.role) ? body.role : 'rm';
 
   if (!email || !email.includes('@')) {
     return NextResponse.json({ error: 'valid email required' }, { status: 400 });

@@ -3,7 +3,7 @@ import Logo from '@/components/Logo';
 // Instant loading chrome for the demand/admin/direct routes — mirrors the
 // AppShell layout so clicking a nav item shows a skeleton immediately instead
 // of freezing on the old page while the server component fetches. (Same idea as
-// app/sales/loading.jsx, which is why the old side felt sluggish without it.)
+// app/supply/loading.jsx, which is why the old side felt sluggish without it.)
 export default function AppSkeleton() {
   return (
     <div className="oh-shell oh-sales">

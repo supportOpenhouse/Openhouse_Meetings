@@ -30,8 +30,8 @@ async function run() {
   }
   // Idempotently ensure the direct_rm value exists on an older enum.
   await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'direct_rm'`;
-  // Field-sales executive role (separate /sales experience + own tables).
-  await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'sales_rm'`;
+  // Field-sales executive role (separate /supply experience + own tables).
+  await sql`ALTER TYPE role ADD VALUE IF NOT EXISTS 'supply_rm'`;
 
   console.log('Creating users table...');
   await sql`

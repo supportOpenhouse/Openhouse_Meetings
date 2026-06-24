@@ -17,7 +17,7 @@ export async function PATCH(req, { params }) {
   const body = await req.json();
   const patch = {};
   if (typeof body.is_active === 'boolean') patch.is_active = body.is_active;
-  if (['admin', 'rm', 'direct_rm', 'sales_rm'].includes(body.role)) patch.role = body.role;
+  if (['admin', 'rm', 'direct_rm', 'supply_rm'].includes(body.role)) patch.role = body.role;
   if (typeof body.name === 'string') patch.name = body.name.trim() || null;
 
   if (Object.keys(patch).length === 0) {

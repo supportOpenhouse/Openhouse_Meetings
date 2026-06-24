@@ -56,8 +56,8 @@ async function run() {
   // Sanity: what real sales data remains.
   const [rv] = await sql`SELECT count(*)::int n FROM sales_visits`;
   const [rc] = await sql`SELECT count(*)::int n FROM sales_channel_partners`;
-  const [ru] = await sql`SELECT count(*)::int n FROM users WHERE role = 'sales_rm'`;
-  console.log(`\nRemaining → sales_visits:${rv.n}  sales_channel_partners:${rc.n}  sales_rm users:${ru.n}`);
+  const [ru] = await sql`SELECT count(*)::int n FROM users WHERE role = 'supply_rm'`;
+  console.log(`\nRemaining → sales_visits:${rv.n}  sales_channel_partners:${rc.n}  supply_rm users:${ru.n}`);
   console.log('✓ Demo data cleaned.');
 }
 

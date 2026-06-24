@@ -655,7 +655,7 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 }
 
 /* ============================================================
-   SALES RM — scoped teal/amber design system.
+   SUPPLY RM — scoped teal/amber design system.
    Everything under .oh-sales REMAPS the shared CSS variables, so the
    reused .oh-* components (cards, inputs, buttons, recorder) adopt the
    new palette automatically. Sales-only structures use .sx-* classes.
@@ -821,7 +821,7 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
   .sx-hero h1 { font-size: 30px; }
 }
 
-/* ---- Loading skeleton (instant nav feedback for the /sales tree) ---- */
+/* ---- Loading skeleton (instant nav feedback for the /supply tree) ---- */
 @keyframes sxShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 .sx-skel {
   border-radius: 12px;
