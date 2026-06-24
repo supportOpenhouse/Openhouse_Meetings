@@ -3,6 +3,7 @@ import './globals.css';
 import ErrorReporter from '@/components/ErrorReporter';
 import StagingBanner from '@/components/StagingBanner';
 import PostHogProvider from '@/components/PostHogProvider';
+import VersionGate from '@/components/VersionGate';
 
 // Self-hosted via next/font — no render-blocking Google Fonts request, subset +
 // preloaded. Inter (matches the Field Connect Pro design language) for
@@ -39,6 +40,7 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="oh">
         <ErrorReporter />
+        <VersionGate />
         <StagingBanner />
         <PostHogProvider>{children}</PostHogProvider>
       </body>

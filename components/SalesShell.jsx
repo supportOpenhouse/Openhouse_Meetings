@@ -5,6 +5,7 @@ import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 import Logo from './Logo';
 import AnalyticsIdentify from './AnalyticsIdentify';
+import MobileNav from './MobileNav';
 
 // The field-sales experience lives entirely under /sales. This shell reuses the
 // shared .oh-shell / .oh-side / .oh-mobile-* layout primitives but wraps them in
@@ -13,16 +14,25 @@ import AnalyticsIdentify from './AnalyticsIdentify';
 export default function SalesShell({ user, current, children }) {
   const isAdmin = user.role === 'admin';
 
+  // `primary: true` → mobile bottom bar (Home, Partners, Live map); the central
+  // FAB is New visit; the rest live in the Menu drawer. Desktop shows them all.
   const navItems = [
-    { href: '/sales', key: 'home', label: 'Home', icon: LayoutDashboard },
-    { href: '/sales/cps', key: 'cps', label: 'Partners', icon: Users },
-    { href: '/sales/visits/new', key: 'new', label: 'New visit', icon: Plus },
-    { href: '/sales/map', key: 'map', label: 'Live map', icon: MapPin },
-    { href: '/sales/performance', key: 'performance', label: 'Performance', icon: BarChart3 },
-    { href: '/sales/search', key: 'search', label: 'Search', icon: Search },
-    { href: '/sales/reports', key: 'reports', label: 'Reports', icon: ClipboardList },
-    { href: '/sales/guide', key: 'guide', label: 'Guide', icon: BookOpen },
+    { href: '/sales', key: 'home', label: 'Home', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+    { href: '/sales/cps', key: 'cps', label: 'Partners', icon: Users, iconName: 'Users', primary: true },
+    { href: '/sales/visits/new', key: 'new', label: 'New visit', icon: Plus, iconName: 'Plus' },
+    { href: '/sales/map', key: 'map', label: 'Live map', icon: MapPin, iconName: 'MapPin', primary: true },
+    { href: '/sales/performance', key: 'performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
+    { href: '/sales/search', key: 'search', label: 'Search', icon: Search, iconName: 'Search' },
+    { href: '/sales/reports', key: 'reports', label: 'Reports', icon: ClipboardList, iconName: 'ClipboardList' },
+    { href: '/sales/guide', key: 'guide', label: 'Guide', icon: BookOpen, iconName: 'BookOpen' },
   ];
+
+  // Serializable copy (no icon component) for the client MobileNav.
+  const mobileItems = navItems.map(({ icon, ...rest }) => rest);
+  async function handleSignOut() {
+    'use server';
+    await signOut({ redirectTo: '/login' });
+  }
 
   return (
     <div className="oh-sales">
@@ -130,44 +140,15 @@ export default function SalesShell({ user, current, children }) {
           {children}
         </main>
 
-        {/* Mobile bottom nav with central amber FAB (FCP signature) */}
-        <nav className="oh-mobile-bottom" aria-label="Primary">
-          {[navItems[0], navItems[1]].map((it) => {
-            const Icon = it.icon;
-            return (
-              <Link
-                key={it.key}
-                href={it.href}
-                aria-label={it.label}
-                className={`item ${current === it.key ? 'active' : ''}`}
-              >
-                <Icon size={20} />
-                <span>{it.label}</span>
-              </Link>
-            );
-          })}
-
-          <div className="oh-fab-wrap">
-            <Link href="/sales/visits/new" className="oh-fab" aria-label="New visit">
-              <Plus size={26} />
-            </Link>
-          </div>
-
-          {[navItems[3], navItems[4]].map((it) => {
-            const Icon = it.icon;
-            return (
-              <Link
-                key={it.key}
-                href={it.href}
-                aria-label={it.label}
-                className={`item ${current === it.key ? 'active' : ''}`}
-              >
-                <Icon size={20} />
-                <span>{it.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        {/* Mobile bottom bar: primary CTAs + central FAB + Menu drawer */}
+        <MobileNav
+          items={mobileItems}
+          current={current}
+          user={{ name: user.name, email: user.email, image: user.image, role: user.role }}
+          roleLabel={isAdmin ? 'Admin' : 'Field sales'}
+          signOutAction={handleSignOut}
+          fab={{ href: '/sales/visits/new', label: 'New visit' }}
+        />
       </div>
     </div>
   );

@@ -437,14 +437,12 @@ export default function NewMeetingClient({ user }) {
 
       // 2. Fire-and-forget the heavy processing. keepalive:true ensures the request
       // survives the navigation we're about to do. We don't await — the user is free.
-      try {
-        fetch(`/api/meetings/${meetingId}/process`, {
-          method: 'POST',
-          keepalive: true,
-        });
-      } catch {
-        // Even if the fetch synchronously throws, the row exists and an admin can retry.
-      }
+      // Fire-and-forget — .catch swallows a dropped network (mobile) so it
+      // doesn't surface as an unhandled rejection. The row exists; admin can retry.
+      fetch(`/api/meetings/${meetingId}/process`, {
+        method: 'POST',
+        keepalive: true,
+      }).catch(() => {});
 
       // Upload + create both succeeded — drop the local safety copy.
       if (localId) {

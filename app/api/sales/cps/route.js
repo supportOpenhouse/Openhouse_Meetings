@@ -24,7 +24,13 @@ export async function GET(request) {
     visit_count: stats[c.cp_code]?.visit_count || 0,
     last_visit_at: stats[c.cp_code]?.last_visit_at || null,
   }));
-  return NextResponse.json({ cps: merged, configured: true });
+  return NextResponse.json(
+    { cps: merged, configured: true },
+    // Same-user browser cache: serve the last result instantly while it
+    // revalidates, so repeating a search feels instant. Pairs with the server
+    // inventory cache.
+    { headers: { 'Cache-Control': 'private, max-age=0, stale-while-revalidate=60' } }
+  );
 }
 
 // POST — registering a NEW partner will hand off to an external system. Not

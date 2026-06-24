@@ -23,10 +23,25 @@ export default function ErrorReporter() {
       } catch {}
     }
 
+    // Transient network blips (offline, navigation-aborted fetch) aren't bugs —
+    // don't spam the error log with them. Mobile devices throw these constantly.
+    function isNetworkNoise(message) {
+      const m = (message || '').toLowerCase();
+      return (
+        m.includes('failed to fetch') ||
+        m.includes('load failed') ||
+        m.includes('networkerror') ||
+        m.includes('network request failed') ||
+        m.includes('aborted')
+      );
+    }
+
     function onError(event) {
       const e = event?.error;
+      const message = (e?.message || event?.message || '').slice(0, 500);
+      if (isNetworkNoise(message)) return;
       send('window.error', {
-        message: (e?.message || event?.message || '').slice(0, 500),
+        message,
         stack: (e?.stack || '').slice(0, 2000),
         filename: (event?.filename || '').slice(0, 200),
         lineno: event?.lineno || null,
@@ -36,10 +51,10 @@ export default function ErrorReporter() {
 
     function onRejection(event) {
       const r = event?.reason;
+      const message = (typeof r === 'string' ? r : r?.message || '').slice(0, 500);
+      if (isNetworkNoise(message)) return;
       send('window.unhandledRejection', {
-        message: typeof r === 'string'
-          ? r.slice(0, 500)
-          : (r?.message || '').slice(0, 500),
+        message,
         stack: (r?.stack || '').slice(0, 2000),
       });
     }
