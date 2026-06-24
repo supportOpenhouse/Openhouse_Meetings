@@ -50,17 +50,28 @@ function RoutePolyline({ path, color }) {
 
   useEffect(() => {
     if (!map || typeof google === 'undefined' || !google.maps) return undefined;
-    const line = new google.maps.Polyline({
-      path: toLatLngs(path),
-      geodesic: true,
-      strokeColor: color,
-      strokeOpacity: 0.9,
-      strokeWeight: 4,
-      map,
-    });
+    let line = null;
+    try {
+      // Construct WITHOUT a path, then set it through the guarded setPath below —
+      // so neither construction nor update can ever throw into the page.
+      line = new google.maps.Polyline({
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        map,
+      });
+      line.setPath(toLatLngs(path));
+    } catch {
+      /* a trail that can't draw still leaves the markers — never crash the map */
+    }
     lineRef.current = line;
     return () => {
-      line.setMap(null);
+      try {
+        if (line) line.setMap(null);
+      } catch {
+        /* ignore */
+      }
       lineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
