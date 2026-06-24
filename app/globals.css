@@ -77,6 +77,34 @@ html { -webkit-text-size-adjust: 100%; }
 .oh-nav.active { background: var(--ink); color: var(--paper); }
 .oh-nav.active:hover { background: var(--ink); }
 
+/* Demand ↔ Supply section switch (admin sidebar + drawer) */
+.oh-section-switch {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 2px 6px 16px;
+  background: var(--paper-2);
+  border-radius: 12px;
+}
+.oh-section-switch a {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  text-align: center;
+  padding: 7px 8px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  transition: background 0.15s, color 0.15s;
+}
+.oh-section-switch a.on {
+  background: var(--paper);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.oh-section-switch.drawer { margin: 12px 10px 2px; }
+
 .oh-side-user { padding: 12px 8px; border-top: 1px solid var(--border); margin-top: 8px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
 .oh-side-user img { width: 28px; height: 28px; border-radius: 50%; }
 .oh-side-user .role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }

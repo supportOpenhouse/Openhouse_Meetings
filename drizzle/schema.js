@@ -19,7 +19,10 @@ import {
 // registry + on-site visit logging (record audio + manual visit form + AI
 // summary). Their data lives in its own tables (sales_channel_partners,
 // sales_visits) and they see the /supply experience, never /dashboard.
-export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm', 'supply_rm']);
+// 'supply_manager' — oversight of the supply side only (a bird's-eye of all
+// supply reps' visits/partners/performance under /admin/supply). A normal admin
+// sees the demand side by default and can switch into this supply view.
+export const roleEnum = pgEnum('role', ['admin', 'rm', 'direct_rm', 'supply_rm', 'supply_manager']);
 
 export const users = pgTable(
   'users',

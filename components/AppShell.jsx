@@ -7,25 +7,36 @@ import Logo from './Logo';
 import AnalyticsIdentify from './AnalyticsIdentify';
 import MobileNav from './MobileNav';
 
-export default function AppShell({ user, current, children }) {
+export default function AppShell({ user, current, section = 'demand', children }) {
   const isAdmin = user.role === 'admin';
-
+  const isSupplyManager = user.role === 'supply_manager';
   const isDirectRm = user.role === 'direct_rm';
+  // Supply oversight view: always for a supply_manager; for an admin only when
+  // they've switched into it (section="supply", set by the /admin/supply pages).
+  const inSupply = isSupplyManager || (isAdmin && section === 'supply');
 
-  // `primary: true` → shown in the mobile bottom bar (max 3). Everything else is
-  // reached from the Menu drawer. Desktop sidebar still shows the full list.
+  // Supply-side oversight (bird's-eye of all reps). Shown to supply_managers and
+  // to admins who switch to Supply.
+  const SUPPLY_NAV = [
+    { href: '/admin/supply', key: 'supply', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+    { href: '/admin/supply/visits', key: 'supply-visits', label: 'Visits', icon: Footprints, iconName: 'Footprints', primary: true },
+    { href: '/admin/supply/reps', key: 'supply-reps', label: 'Reps', icon: Users, iconName: 'Users', primary: true },
+    { href: '/admin/supply/cps', key: 'supply-cps', label: 'Partners', icon: Building2, iconName: 'Building2' },
+  ];
+  // Demand-side admin (the normal admin home + all its tools).
+  const DEMAND_ADMIN_NAV = [
+    { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+    { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3, iconName: 'BarChart3', primary: true },
+    { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2, iconName: 'Building2', primary: true },
+    { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users, iconName: 'Users' },
+    { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: UserCog, iconName: 'UserCog' },
+    { href: '/admin/salestrail', key: 'salestrail', label: 'Call sync', icon: Cloud, iconName: 'Cloud' },
+    { href: '/admin/logs', key: 'logs', label: 'Activity logs', icon: Activity, iconName: 'Activity' },
+  ];
+
   let navItems;
-  if (isAdmin) {
-    navItems = [
-      { href: '/admin', key: 'admin', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
-      { href: '/admin/insights', key: 'insights', label: 'Insights', icon: BarChart3, iconName: 'BarChart3', primary: true },
-      { href: '/admin/supply', key: 'sales', label: 'Supply', icon: Footprints, iconName: 'Footprints', primary: true },
-      { href: '/dashboard/cp', key: 'cp', label: 'CP visits', icon: Building2, iconName: 'Building2' },
-      { href: '/admin/cp-assignments', key: 'cp-assignments', label: 'CP assignments', icon: Users, iconName: 'Users' },
-      { href: '/admin/rms', key: 'rms', label: 'Manage RMs', icon: UserCog, iconName: 'UserCog' },
-      { href: '/admin/salestrail', key: 'salestrail', label: 'Call sync', icon: Cloud, iconName: 'Cloud' },
-      { href: '/admin/logs', key: 'logs', label: 'Activity logs', icon: Activity, iconName: 'Activity' },
-    ];
+  if (isAdmin || isSupplyManager) {
+    navItems = inSupply ? SUPPLY_NAV : DEMAND_ADMIN_NAV;
   } else if (isDirectRm) {
     navItems = [
       { href: '/direct', key: 'direct', label: 'Recordings', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
@@ -43,7 +54,11 @@ export default function AppShell({ user, current, children }) {
 
   // Serializable copy (no icon component) for the client MobileNav.
   const mobileItems = navItems.map(({ icon, ...rest }) => rest);
-  const roleLabel = isAdmin ? 'Admin' : isDirectRm ? 'Direct RM' : 'RM';
+  const roleLabel = isAdmin
+    ? inSupply ? 'Admin · Supply' : 'Admin'
+    : isSupplyManager ? 'Supply Manager' : isDirectRm ? 'Direct RM' : 'RM';
+  // Only admins can toggle demand ↔ supply (supply_manager is locked to supply).
+  const sectionSwitch = isAdmin ? { inSupply } : null;
   async function handleSignOut() {
     'use server';
     await signOut({ redirectTo: '/login' });
@@ -61,6 +76,17 @@ export default function AppShell({ user, current, children }) {
         <div className="oh-brand">
           <Logo />
         </div>
+
+        {sectionSwitch && (
+          <div className="oh-section-switch">
+            <Link href="/admin" className={sectionSwitch.inSupply ? '' : 'on'}>
+              Demand
+            </Link>
+            <Link href="/admin/supply" className={sectionSwitch.inSupply ? 'on' : ''}>
+              Supply
+            </Link>
+          </div>
+        )}
 
         {navItems.map((it) => {
           const Icon = it.icon;
@@ -92,7 +118,7 @@ export default function AppShell({ user, current, children }) {
             >
               {user.name || user.email}
             </div>
-            <div className="role">{isAdmin ? 'Admin' : isDirectRm ? 'Direct RM' : 'RM'}</div>
+            <div className="role">{roleLabel}</div>
           </div>
           <form
             action={async () => {
@@ -121,6 +147,7 @@ export default function AppShell({ user, current, children }) {
         user={{ name: user.name, email: user.email, image: user.image, role: user.role }}
         roleLabel={roleLabel}
         signOutAction={handleSignOut}
+        sectionSwitch={sectionSwitch}
       />
     </div>
   );

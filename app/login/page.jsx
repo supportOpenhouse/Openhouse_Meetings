@@ -8,6 +8,7 @@ import Logo from '@/components/Logo';
 // post-login hop is direct (no bounce through /dashboard for supply reps).
 function homeFor(role) {
   if (role === 'admin') return '/admin';
+  if (role === 'supply_manager') return '/admin/supply';
   if (role === 'supply_rm') return '/supply';
   return '/dashboard';
 }

@@ -31,7 +31,7 @@ function BarItem({ it, active }) {
   );
 }
 
-export default function MobileNav({ items, user, roleLabel, signOutAction, fab }) {
+export default function MobileNav({ items, user, roleLabel, signOutAction, fab, sectionSwitch }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const active = (href) => isNavActive(href, pathname);
@@ -144,6 +144,25 @@ export default function MobileNav({ items, user, roleLabel, signOutAction, fab }
             <X size={20} />
           </button>
         </div>
+
+        {sectionSwitch && (
+          <div className="oh-section-switch drawer">
+            <Link
+              href="/admin"
+              className={sectionSwitch.inSupply ? '' : 'on'}
+              onClick={() => setOpen(false)}
+            >
+              Demand
+            </Link>
+            <Link
+              href="/admin/supply"
+              className={sectionSwitch.inSupply ? 'on' : ''}
+              onClick={() => setOpen(false)}
+            >
+              Supply
+            </Link>
+          </div>
+        )}
 
         <nav className="oh-drawer-nav">
           {items.map((it) => {

@@ -9,14 +9,14 @@ export const dynamic = 'force-dynamic';
 export default async function AdminSalesRepsPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'admin') {
+  if (session.user.role !== 'admin' && session.user.role !== 'supply_manager') {
     redirect(session.user.role === 'supply_rm' ? '/supply' : '/dashboard');
   }
 
   const reps = await listSalesReps();
 
   return (
-    <AppShell user={session.user} current="sales">
+    <AppShell user={session.user} current="supply-reps" section="supply">
       <AdminSalesRepsClient reps={JSON.parse(JSON.stringify(reps))} />
     </AppShell>
   );

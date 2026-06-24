@@ -27,7 +27,13 @@ export default auth((req) => {
 
   // Where each role lands after login / when bounced off a forbidden page.
   const homeFor = (role) =>
-    role === 'admin' ? '/admin' : role === 'supply_rm' ? '/supply' : '/dashboard';
+    role === 'admin'
+      ? '/admin'
+      : role === 'supply_manager'
+        ? '/admin/supply'
+        : role === 'supply_rm'
+          ? '/supply'
+          : '/dashboard';
 
   if (isAuthRoute) {
     if (isLoggedIn) {
@@ -42,26 +48,32 @@ export default auth((req) => {
 
   const role = req.auth?.user?.role;
 
-  // Admin-only routes
-  if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin') || pathname.startsWith('/api/rms')) {
+  // Supply oversight (/admin/supply) — admins and supply managers.
+  if (pathname.startsWith('/admin/supply')) {
+    if (role !== 'admin' && role !== 'supply_manager') {
+      return NextResponse.redirect(new URL(homeFor(role), nextUrl));
+    }
+  }
+  // Other admin (demand oversight) — admins only.
+  else if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin') || pathname.startsWith('/api/rms')) {
     if (role !== 'admin') {
       return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }
   }
 
-  // Sales RM area — only sales reps (and admins, for oversight) may enter.
+  // Supply rep app — supply reps + admins (oversight). Supply managers use the
+  // /admin/supply oversight pages, not the rep app.
   if (pathname.startsWith('/supply') || pathname.startsWith('/api/supply')) {
     if (role !== 'supply_rm' && role !== 'admin') {
       return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }
   }
 
-  // Keep sales reps out of the demand/direct recording app entirely — their
-  // whole experience lives under /supply.
-  if (role === 'supply_rm') {
+  // Keep supply reps + supply managers out of the demand/direct recording app.
+  if (role === 'supply_rm' || role === 'supply_manager') {
     const recordingPages = ['/dashboard', '/new-meeting', '/direct', '/upload-recording'];
     if (recordingPages.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-      return NextResponse.redirect(new URL('/supply', nextUrl));
+      return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }
   }
 
