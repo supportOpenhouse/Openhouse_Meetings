@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { salesDashboardData } from '@/lib/salesQueries';
 import { salesHomeExtras } from '@/lib/salesDashboard';
 import SalesDashboardClient from './client';
@@ -24,7 +23,6 @@ export default async function SalesHomePage() {
   const initialData = { ...data, ...extras };
 
   return (
-    <SalesShell user={session.user} current="home">
       <SalesDashboardClient
         initialData={JSON.parse(JSON.stringify(initialData))}
         user={{
@@ -34,6 +32,5 @@ export default async function SalesHomePage() {
           role,
         }}
       />
-    </SalesShell>
   );
 }

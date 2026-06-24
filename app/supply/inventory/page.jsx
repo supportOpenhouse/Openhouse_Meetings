@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { listInventoryForRm } from '@/lib/salesInventoryQueries';
 import { listSalesCps } from '@/lib/salesQueries';
 import InventoryClient from './client';
@@ -22,7 +21,6 @@ export default async function SalesInventoryPage() {
   ]);
 
   return (
-    <SalesShell user={session.user} current="">
       <InventoryClient
         initial={JSON.parse(JSON.stringify(inventory))}
         cps={JSON.parse(JSON.stringify(cps))}
@@ -33,6 +31,5 @@ export default async function SalesInventoryPage() {
           role,
         }}
       />
-    </SalesShell>
   );
 }

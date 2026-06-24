@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { teamMapData, myMapData } from '@/lib/salesMapQueries';
 import SalesMapClient from './client';
 
@@ -19,7 +18,6 @@ export default async function SalesMapPage() {
   const initial = role === 'admin' ? await teamMapData() : await myMapData(session.user.id);
 
   return (
-    <SalesShell user={session.user} current="map">
       <SalesMapClient
         initial={JSON.parse(JSON.stringify(initial))}
         user={{
@@ -30,6 +28,5 @@ export default async function SalesMapPage() {
         }}
         mapsKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}
       />
-    </SalesShell>
   );
 }

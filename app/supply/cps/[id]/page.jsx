@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { getInventoryCpByCode } from '@/lib/salesCp';
 import { listSalesVisitsByCpCode, listInventoryByCpCode } from '@/lib/salesQueries';
 import SalesCpDetailClient from './client';
@@ -28,12 +27,10 @@ export default async function SalesCpDetailPage({ params }) {
   ]);
 
   return (
-    <SalesShell user={session.user} current="cps">
       <SalesCpDetailClient
         cp={JSON.parse(JSON.stringify(cp))}
         visits={JSON.parse(JSON.stringify(visits))}
         inventory={JSON.parse(JSON.stringify(inventory))}
       />
-    </SalesShell>
   );
 }

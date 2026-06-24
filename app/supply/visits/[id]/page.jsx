@@ -1,6 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { getSalesVisitById } from '@/lib/salesQueries';
 import SalesVisitDetailClient from './client';
 
@@ -24,8 +23,6 @@ export default async function SalesVisitDetailPage({ params }) {
   }
 
   return (
-    <SalesShell user={session.user} current="home">
       <SalesVisitDetailClient initialVisit={JSON.parse(JSON.stringify(visit))} />
-    </SalesShell>
   );
 }

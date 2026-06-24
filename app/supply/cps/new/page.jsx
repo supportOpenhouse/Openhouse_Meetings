@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import SalesCpNewClient from './client';
 
 export const dynamic = 'force-dynamic';
@@ -15,8 +14,6 @@ export default async function SalesCpNewPage() {
   }
 
   return (
-    <SalesShell user={session.user} current="cps">
       <SalesCpNewClient />
-    </SalesShell>
   );
 }

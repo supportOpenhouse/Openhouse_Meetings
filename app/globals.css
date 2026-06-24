@@ -410,15 +410,20 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 /* ---------- Mobile-only chrome ---------- */
 .oh-mobile-top {
   display: none;
-  position: sticky; top: 0; z-index: 30;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 45;
   background: var(--paper);
   border-bottom: 1px solid var(--border);
-  padding: 12px 16px;
+  padding: calc(11px + env(safe-area-inset-top)) 16px 11px;
   align-items: center; justify-content: space-between; gap: 12px;
 }
 .oh-mobile-top .oh-brand { font-size: 22px; margin: 0; padding: 0; }
-.oh-mobile-top .avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--paper-2); font-size: 12px; color: var(--ink-2); }
-.oh-mobile-top .avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Logo + avatar buttons in the top bar — both open the Menu drawer. */
+.oh-mtop-btn, .oh-mtop-avatar {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+}
+.oh-mtop-btn:active, .oh-mtop-avatar:active { opacity: 0.6; }
+.oh-mtop-avatar .oh-drawer-avatar { width: 32px; height: 32px; }
 
 .oh-mobile-bottom {
   display: none;
@@ -584,7 +589,8 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
   .oh-mobile-bottom { display: flex; }
 
   .oh-main {
-    padding: 18px 16px calc(96px + env(safe-area-inset-bottom)) 16px;
+    /* top padding clears the fixed mobile top bar; bottom clears the nav bar */
+    padding: calc(62px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom)) 16px;
     max-width: 100%;
     overflow-y: visible;
   }
@@ -846,10 +852,12 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 /* Glass chrome */
 .oh-sales .oh-side { background: rgba(255, 255, 255, 0.92); border-right-color: var(--border); }
 .oh-sales .oh-mobile-top {
-  background: rgba(255, 255, 255, 0.85);
+  /* Near-opaque so scrolling content doesn't bleed through the sticky header. */
+  background: rgba(255, 255, 255, 0.97);
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
   border-bottom-color: var(--border);
+  box-shadow: 0 1px 0 rgba(33, 26, 46, 0.04), 0 6px 16px -12px rgba(33, 26, 46, 0.2);
 }
 .oh-sales .oh-mobile-bottom {
   background: rgba(255, 255, 255, 0.88);

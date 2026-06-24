@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import SearchClient from './client';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +14,6 @@ export default async function SalesSearchPage() {
   }
 
   return (
-    <SalesShell user={session.user} current="search">
       <SearchClient
         user={{
           id: session.user.id,
@@ -24,6 +22,5 @@ export default async function SalesSearchPage() {
           role,
         }}
       />
-    </SalesShell>
   );
 }

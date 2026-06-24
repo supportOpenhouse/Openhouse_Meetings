@@ -1,9 +1,9 @@
 'use client';
 
-// Mobile bottom bar + slide-in drawer ("sidebar"). The bar holds only the few
-// primary CTAs (+ optional central FAB) with small labels; everything else lives
-// in the drawer opened via the Menu button — so the bar never gets cramped or
-// cryptic. Used by AppShell (admin/demand/direct) and SalesShell.
+// Mobile chrome: a fixed top bar (logo + avatar both open the drawer), a fixed
+// bottom bar (a few primary CTAs + optional central FAB + Menu), and the slide-in
+// drawer with the full nav. All fixed + self-contained, so it stays put while the
+// page content loads. Used by SalesShell (supply) and AppShell (admin/demand).
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
@@ -12,9 +12,10 @@ import {
   Cloud, Activity, Plus, Upload, LogOut, Menu as MenuIcon, X, MapPin,
   Search, ClipboardList, BookOpen, Home,
 } from 'lucide-react';
+import Logo from './Logo';
+import { isNavActive } from '@/lib/navActive';
 
-// Icons are resolved by name so the (server) shells can pass plain serializable
-// nav data across the client boundary.
+// Icons resolved by name so the shells can pass plain serializable nav data.
 const ICONS = {
   LayoutDashboard, BarChart3, Footprints, Building2, Users, UserCog,
   Cloud, Activity, Plus, Upload, MapPin, Search, ClipboardList, BookOpen, Home,
@@ -30,9 +31,10 @@ function BarItem({ it, active }) {
   );
 }
 
-export default function MobileNav({ items, current, user, roleLabel, signOutAction, fab }) {
+export default function MobileNav({ items, user, roleLabel, signOutAction, fab }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const active = (href) => isNavActive(href, pathname);
 
   // Close on navigation.
   useEffect(() => {
@@ -63,13 +65,44 @@ export default function MobileNav({ items, current, user, roleLabel, signOutActi
     </button>
   );
 
+  const avatar = user?.image ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className="oh-drawer-avatar" src={user.image} alt="" />
+  ) : (
+    <div className="oh-drawer-avatar fallback">
+      {(user?.name || user?.email || '?').charAt(0).toUpperCase()}
+    </div>
+  );
+
   return (
     <>
+      {/* Fixed top bar — logo + avatar both open the drawer */}
+      <header className="oh-mobile-top">
+        <button
+          type="button"
+          className="oh-mtop-btn"
+          aria-label="Open menu"
+          aria-expanded={open}
+          onClick={() => setOpen(true)}
+        >
+          <Logo />
+        </button>
+        <button
+          type="button"
+          className="oh-mtop-avatar"
+          aria-label="Open menu"
+          onClick={() => setOpen(true)}
+        >
+          {avatar}
+        </button>
+      </header>
+
+      {/* Fixed bottom bar */}
       <nav className="oh-mobile-bottom" aria-label="Primary">
         {fab ? (
           <>
             {primary.slice(0, 2).map((it) => (
-              <BarItem key={it.key} it={it} active={current === it.key} />
+              <BarItem key={it.key} it={it} active={active(it.href)} />
             ))}
             <div className="oh-fab-wrap">
               <Link href={fab.href} className="oh-fab" aria-label={fab.label}>
@@ -77,14 +110,14 @@ export default function MobileNav({ items, current, user, roleLabel, signOutActi
               </Link>
             </div>
             {primary.slice(2).map((it) => (
-              <BarItem key={it.key} it={it} active={current === it.key} />
+              <BarItem key={it.key} it={it} active={active(it.href)} />
             ))}
             {menuBtn}
           </>
         ) : (
           <>
             {primary.map((it) => (
-              <BarItem key={it.key} it={it} active={current === it.key} />
+              <BarItem key={it.key} it={it} active={active(it.href)} />
             ))}
             {menuBtn}
           </>
@@ -102,14 +135,7 @@ export default function MobileNav({ items, current, user, roleLabel, signOutActi
 
       <aside className={`oh-drawer ${open ? 'open' : ''}`} aria-hidden={!open}>
         <div className="oh-drawer-head">
-          {user?.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className="oh-drawer-avatar" src={user.image} alt="" />
-          ) : (
-            <div className="oh-drawer-avatar fallback">
-              {(user?.name || user?.email || '?').charAt(0).toUpperCase()}
-            </div>
-          )}
+          {avatar}
           <div className="oh-drawer-meta">
             <div className="nm">{user?.name || user?.email}</div>
             {roleLabel && <div className="rl">{roleLabel}</div>}
@@ -126,7 +152,7 @@ export default function MobileNav({ items, current, user, roleLabel, signOutActi
               <Link
                 key={it.key}
                 href={it.href}
-                className={`oh-drawer-item ${current === it.key ? 'active' : ''}`}
+                className={`oh-drawer-item ${active(it.href) ? 'active' : ''}`}
                 onClick={() => setOpen(false)}
               >
                 <Icon size={18} /> {it.label}

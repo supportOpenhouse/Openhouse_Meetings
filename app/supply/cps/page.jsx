@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { recentVisitedCpCodes } from '@/lib/salesQueries';
 import SalesCpsClient from './client';
 
@@ -30,8 +29,6 @@ export default async function SalesCpsPage() {
   }));
 
   return (
-    <SalesShell user={session.user} current="cps">
       <SalesCpsClient initialCps={JSON.parse(JSON.stringify(initialCps))} />
-    </SalesShell>
   );
 }

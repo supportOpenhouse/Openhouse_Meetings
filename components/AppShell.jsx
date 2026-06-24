@@ -112,19 +112,7 @@ export default function AppShell({ user, current, children }) {
         </div>
       </aside>
 
-      <main className="oh-main">
-        {/* Mobile top bar */}
-        <header className="oh-mobile-top">
-          <div className="oh-brand">
-            <Logo />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <UserAvatar user={user} size={32} />
-          </div>
-        </header>
-
-        {children}
-      </main>
+      <main className="oh-main">{children}</main>
 
       {/* Mobile bottom bar (3 CTAs) + slide-in drawer for everything else */}
       <MobileNav

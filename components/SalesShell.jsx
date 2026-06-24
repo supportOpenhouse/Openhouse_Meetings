@@ -1,38 +1,36 @@
-import { signOut } from '@/auth';
+'use client';
+
+// The supply (field-sales) shell. Client component so it derives the active nav
+// from the pathname — which lets it live in app/supply/layout.jsx and PERSIST
+// across navigation. Only the page content (children) swaps while data loads;
+// the sidebar, top bar, and bottom nav stay put.
 import Link from 'next/link';
-import { LayoutDashboard, Users, Plus, BarChart3, LogOut, MapPin, Search, ClipboardList, BookOpen } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import {
+  LayoutDashboard, Users, Plus, BarChart3, LogOut, MapPin, Search, ClipboardList, BookOpen,
+} from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 import Logo from './Logo';
 import AnalyticsIdentify from './AnalyticsIdentify';
 import MobileNav from './MobileNav';
+import { isNavActive } from '@/lib/navActive';
 
-// The field-sales experience lives entirely under /supply. This shell reuses the
-// shared .oh-shell / .oh-side / .oh-mobile-* layout primitives but wraps them in
-// .oh-sales, which remaps the CSS variables to the teal/amber palette — so the
-// reused nav/cards pick up the new look without touching the demand/direct RM UI.
-export default function SalesShell({ user, current, children }) {
+const NAV = [
+  { href: '/supply', key: 'home', label: 'Home', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+  { href: '/supply/cps', key: 'cps', label: 'Partners', icon: Users, iconName: 'Users', primary: true },
+  { href: '/supply/visits/new', key: 'new', label: 'New visit', icon: Plus, iconName: 'Plus' },
+  { href: '/supply/map', key: 'map', label: 'Live map', icon: MapPin, iconName: 'MapPin', primary: true },
+  { href: '/supply/performance', key: 'performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
+  { href: '/supply/search', key: 'search', label: 'Search', icon: Search, iconName: 'Search' },
+  { href: '/supply/reports', key: 'reports', label: 'Reports', icon: ClipboardList, iconName: 'ClipboardList' },
+  { href: '/supply/guide', key: 'guide', label: 'Guide', icon: BookOpen, iconName: 'BookOpen' },
+];
+
+export default function SalesShell({ user, signOutAction, children }) {
   const isAdmin = user.role === 'admin';
-
-  // `primary: true` → mobile bottom bar (Home, Partners, Live map); the central
-  // FAB is New visit; the rest live in the Menu drawer. Desktop shows them all.
-  const navItems = [
-    { href: '/supply', key: 'home', label: 'Home', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
-    { href: '/supply/cps', key: 'cps', label: 'Partners', icon: Users, iconName: 'Users', primary: true },
-    { href: '/supply/visits/new', key: 'new', label: 'New visit', icon: Plus, iconName: 'Plus' },
-    { href: '/supply/map', key: 'map', label: 'Live map', icon: MapPin, iconName: 'MapPin', primary: true },
-    { href: '/supply/performance', key: 'performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
-    { href: '/supply/search', key: 'search', label: 'Search', icon: Search, iconName: 'Search' },
-    { href: '/supply/reports', key: 'reports', label: 'Reports', icon: ClipboardList, iconName: 'ClipboardList' },
-    { href: '/supply/guide', key: 'guide', label: 'Guide', icon: BookOpen, iconName: 'BookOpen' },
-  ];
-
-  // Serializable copy (no icon component) for the client MobileNav.
-  const mobileItems = navItems.map(({ icon, ...rest }) => rest);
-  async function handleSignOut() {
-    'use server';
-    await signOut({ redirectTo: '/login' });
-  }
+  const pathname = usePathname();
+  const mobileItems = NAV.map(({ icon, ...rest }) => rest);
 
   return (
     <div className="oh-sales">
@@ -47,7 +45,7 @@ export default function SalesShell({ user, current, children }) {
             <Logo />
             <div
               style={{
-                fontFamily: "var(--font-sans), sans-serif",
+                fontFamily: 'var(--font-sans), sans-serif',
                 fontSize: 10,
                 letterSpacing: '0.18em',
                 textTransform: 'uppercase',
@@ -60,13 +58,13 @@ export default function SalesShell({ user, current, children }) {
             </div>
           </div>
 
-          {navItems.map((it) => {
+          {NAV.map((it) => {
             const Icon = it.icon;
             return (
               <Link
                 key={it.key}
                 href={it.href}
-                className={`oh-nav ${current === it.key ? 'active' : ''}`}
+                className={`oh-nav ${isNavActive(it.href, pathname) ? 'active' : ''}`}
               >
                 <Icon size={16} /> {it.label}
               </Link>
@@ -92,12 +90,7 @@ export default function SalesShell({ user, current, children }) {
               </div>
               <div className="role">{isAdmin ? 'Admin · Supply' : 'Supply RM'}</div>
             </div>
-            <form
-              action={async () => {
-                'use server';
-                await signOut({ redirectTo: '/login' });
-              }}
-            >
+            <form action={signOutAction}>
               <button
                 type="submit"
                 className="oh-nav"
@@ -110,43 +103,13 @@ export default function SalesShell({ user, current, children }) {
           </div>
         </aside>
 
-        <main className="oh-main">
-          {/* Mobile top bar */}
-          <header className="oh-mobile-top">
-            <div className="oh-brand">
-              <Logo />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <UserAvatar user={user} size={32} />
-              <form
-                action={async () => {
-                  'use server';
-                  await signOut({ redirectTo: '/login' });
-                }}
-                style={{ display: 'flex' }}
-              >
-                <button
-                  type="submit"
-                  className="oh-nav"
-                  style={{ padding: 6, color: 'var(--ink-3)' }}
-                  aria-label="Sign out"
-                >
-                  <LogOut size={16} />
-                </button>
-              </form>
-            </div>
-          </header>
+        <main className="oh-main">{children}</main>
 
-          {children}
-        </main>
-
-        {/* Mobile bottom bar: primary CTAs + central FAB + Menu drawer */}
         <MobileNav
           items={mobileItems}
-          current={current}
           user={{ name: user.name, email: user.email, image: user.image, role: user.role }}
-          roleLabel={isAdmin ? 'Admin' : 'Supply'}
-          signOutAction={handleSignOut}
+          roleLabel={isAdmin ? 'Admin · Supply' : 'Supply'}
+          signOutAction={signOutAction}
           fab={{ href: '/supply/visits/new', label: 'New visit' }}
         />
       </div>
@@ -157,6 +120,7 @@ export default function SalesShell({ user, current, children }) {
 function UserAvatar({ user, size = 28 }) {
   if (user.image) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={user.image}
         alt={user.name || user.email}

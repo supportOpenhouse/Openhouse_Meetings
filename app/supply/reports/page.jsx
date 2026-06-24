@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import SalesShell from '@/components/SalesShell';
 import { listSalesVisits } from '@/lib/salesQueries';
 import SalesReportsClient from './client';
 
@@ -18,8 +17,6 @@ export default async function SalesReportsPage() {
   const visits = await listSalesVisits({ rmId: session.user.id, limit: 200 });
 
   return (
-    <SalesShell user={session.user} current="reports">
       <SalesReportsClient initialVisits={JSON.parse(JSON.stringify(visits))} />
-    </SalesShell>
   );
 }
