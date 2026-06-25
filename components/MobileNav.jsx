@@ -10,15 +10,15 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BarChart3, Footprints, Building2, Users, UserCog,
   Cloud, Activity, Plus, Upload, LogOut, Menu as MenuIcon, X, MapPin,
-  Search, ClipboardList, BookOpen, Home,
+  Search, ClipboardList, BookOpen, Home, Sparkles,
 } from 'lucide-react';
 import Logo from './Logo';
-import { isNavActive } from '@/lib/navActive';
+import { activeHref } from '@/lib/navActive';
 
 // Icons resolved by name so the shells can pass plain serializable nav data.
 const ICONS = {
   LayoutDashboard, BarChart3, Footprints, Building2, Users, UserCog,
-  Cloud, Activity, Plus, Upload, MapPin, Search, ClipboardList, BookOpen, Home,
+  Cloud, Activity, Plus, Upload, MapPin, Search, ClipboardList, BookOpen, Home, Sparkles,
 };
 
 function BarItem({ it, active }) {
@@ -34,7 +34,8 @@ function BarItem({ it, active }) {
 export default function MobileNav({ items, user, roleLabel, signOutAction, fab, sectionSwitch }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const active = (href) => isNavActive(href, pathname);
+  const current = activeHref(items.map((i) => i.href), pathname);
+  const active = (href) => href === current;
 
   // Close on navigation.
   useEffect(() => {

@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { listAllSalesVisits, listSalesReps } from '@/lib/salesQueries';
 import AdminSalesVisitsClient from './client';
 
@@ -19,11 +18,11 @@ export default async function AdminSalesVisitsPage() {
   ]);
 
   return (
-    <AppShell user={session.user} current="supply-visits" section="supply">
+    <>
       <AdminSalesVisitsClient
         initialVisits={JSON.parse(JSON.stringify(visits))}
         reps={JSON.parse(JSON.stringify(reps.map((r) => ({ id: r.id, name: r.name, email: r.email }))))}
       />
-    </AppShell>
+    </>
   );
 }

@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import {
   getVisitMetrics,
   getEngagementMetrics,
@@ -72,9 +71,9 @@ export default async function InsightsPage() {
   };
 
   return (
-    <AppShell user={session.user} current="insights">
+    <>
       <InsightsClient initialData={JSON.parse(JSON.stringify(initial))} />
-    </AppShell>
+    </>
   );
 }
 

@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import { getCpFocusList } from '@/lib/analytics';
 import RmInsightsClient from './client';
 
@@ -33,11 +32,11 @@ export default async function RmInsightsPage() {
   }
 
   return (
-    <AppShell user={session.user} current="insights">
+    <>
       <RmInsightsClient
         initial={JSON.parse(JSON.stringify({ cpFocus, standard }))}
         user={{ name: session.user.name }}
       />
-    </AppShell>
+    </>
   );
 }

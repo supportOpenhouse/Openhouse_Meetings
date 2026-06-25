@@ -1,5 +1,5 @@
-import AppSkeleton from '@/components/AppSkeleton';
+import PageLoading from '@/components/PageLoading';
 
-export default function DashboardLoading() {
-  return <AppSkeleton />;
+export default function Loading() {
+  return <PageLoading title="My meetings" kind="dashboard" />;
 }

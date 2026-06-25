@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import { getCpDashboardData } from '@/lib/cpQueries';
 import CpDashboardClient from './client';
 
@@ -26,7 +25,7 @@ export default async function CpDashboardPage({ searchParams }) {
   ]);
 
   return (
-    <AppShell user={session.user} current="cp">
+    <>
       <CpDashboardClient
         initialData={JSON.parse(JSON.stringify(data))}
         initialMonths={monthsToShow}
@@ -34,6 +33,6 @@ export default async function CpDashboardPage({ searchParams }) {
         user={{ id: session.user.id, name: session.user.name }}
         rms={JSON.parse(JSON.stringify(rms))}
       />
-    </AppShell>
+    </>
   );
 }

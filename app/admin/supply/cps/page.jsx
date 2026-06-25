@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { listSalesCps } from '@/lib/salesQueries';
 import AdminSalesCpsClient from './client';
 
@@ -16,8 +15,8 @@ export default async function AdminSalesCpsPage() {
   const cps = await listSalesCps({});
 
   return (
-    <AppShell user={session.user} current="supply-cps" section="supply">
+    <>
       <AdminSalesCpsClient initialCps={JSON.parse(JSON.stringify(cps))} />
-    </AppShell>
+    </>
   );
 }

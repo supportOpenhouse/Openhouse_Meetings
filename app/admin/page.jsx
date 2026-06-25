@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { listAllMeetings, listDistinctCities, listRMs } from '@/lib/queries';
-import AppShell from '@/components/AppShell';
 import AdminOverviewClient from './client';
 
 export default async function AdminPage() {
@@ -16,12 +15,12 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <AppShell user={session.user} current="admin">
+    <>
       <AdminOverviewClient
         initialMeetings={JSON.parse(JSON.stringify(meetings))}
         rms={JSON.parse(JSON.stringify(rms))}
         cities={cities}
       />
-    </AppShell>
+    </>
   );
 }

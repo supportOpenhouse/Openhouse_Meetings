@@ -48,8 +48,8 @@ export default auth((req) => {
 
   const role = req.auth?.user?.role;
 
-  // Supply oversight (/admin/supply) — admins and supply managers.
-  if (pathname.startsWith('/admin/supply')) {
+  // Supply oversight (/admin/supply pages + /api/admin/supply) — admins and supply managers.
+  if (pathname.startsWith('/admin/supply') || pathname.startsWith('/api/admin/supply')) {
     if (role !== 'admin' && role !== 'supply_manager') {
       return NextResponse.redirect(new URL(homeFor(role), nextUrl));
     }

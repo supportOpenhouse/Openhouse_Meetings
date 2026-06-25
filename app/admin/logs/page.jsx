@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import { listRecentActivity, listOnlineUsers } from '@/lib/activityLog';
 import LogsClient from './client';
 
@@ -18,12 +17,12 @@ export default async function AdminLogsPage() {
   ]);
 
   return (
-    <AppShell user={session.user} current="logs">
+    <>
       <LogsClient
         initialActivity={JSON.parse(JSON.stringify(activity))}
         initialOnline={JSON.parse(JSON.stringify(online))}
         users={JSON.parse(JSON.stringify(rms))}
       />
-    </AppShell>
+    </>
   );
 }

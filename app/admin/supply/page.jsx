@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { salesAdminOverview } from '@/lib/salesQueries';
 import AdminSalesOverviewClient from './client';
 
@@ -16,8 +15,8 @@ export default async function AdminSalesPage() {
   const data = await salesAdminOverview();
 
   return (
-    <AppShell user={session.user} current="supply" section="supply">
+    <>
       <AdminSalesOverviewClient initial={JSON.parse(JSON.stringify(data))} />
-    </AppShell>
+    </>
   );
 }

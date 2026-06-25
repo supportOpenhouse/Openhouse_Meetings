@@ -1,26 +1,36 @@
-import { signOut } from '@/auth';
+'use client';
+
+// The demand / admin / direct shell. Client component so it derives the active
+// nav AND the demand↔supply section from the pathname — which lets it live in a
+// layout (app/{admin,dashboard,direct,new-meeting,upload-recording}/layout.jsx)
+// and PERSIST across navigation. Only the page content (children) swaps while
+// data loads; the sidebar, top bar, and bottom nav stay put. Mirrors SalesShell.
 import Link from 'next/link';
-import { LayoutDashboard, Plus, Users, UserCog, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints, MapPin } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { LayoutDashboard, Plus, Users, UserCog, LogOut, Building2, Activity, BarChart3, Upload, Cloud, Footprints, MapPin, Sparkles } from 'lucide-react';
 import Heartbeat from './Heartbeat';
 import RecordingGuard from './RecordingGuard';
 import Logo from './Logo';
 import AnalyticsIdentify from './AnalyticsIdentify';
 import MobileNav from './MobileNav';
+import { activeHref } from '@/lib/navActive';
 
-export default function AppShell({ user, current, section = 'demand', children }) {
+export default function AppShell({ user, signOutAction, children }) {
+  const pathname = usePathname();
   const isAdmin = user.role === 'admin';
   const isSupplyManager = user.role === 'supply_manager';
   const isDirectRm = user.role === 'direct_rm';
-  // Supply oversight view: always for a supply_manager; for an admin only when
-  // they've switched into it (section="supply", set by the /admin/supply pages).
-  const inSupply = isSupplyManager || (isAdmin && section === 'supply');
+  // Supply oversight view: always for a supply_manager; for an admin only while
+  // they're on a /admin/supply route (the section switch just navigates there).
+  const inSupply = isSupplyManager || (isAdmin && pathname.startsWith('/admin/supply'));
 
   // Supply-side oversight (bird's-eye of all reps). Shown to supply_managers and
   // to admins who switch to Supply.
   const SUPPLY_NAV = [
     { href: '/admin/supply', key: 'supply', label: 'Overview', icon: LayoutDashboard, iconName: 'LayoutDashboard', primary: true },
+    { href: '/admin/supply/insights', key: 'supply-insights', label: 'Insights', icon: Sparkles, iconName: 'Sparkles', primary: true },
     { href: '/admin/supply/visits', key: 'supply-visits', label: 'Visits', icon: Footprints, iconName: 'Footprints', primary: true },
-    { href: '/admin/supply/reps', key: 'supply-reps', label: 'Reps', icon: Users, iconName: 'Users', primary: true },
+    { href: '/admin/supply/reps', key: 'supply-reps', label: 'Reps', icon: Users, iconName: 'Users' },
     { href: '/admin/supply/map', key: 'supply-map', label: 'Live map', icon: MapPin, iconName: 'MapPin' },
     { href: '/admin/supply/performance', key: 'supply-performance', label: 'Performance', icon: BarChart3, iconName: 'BarChart3' },
     { href: '/admin/supply/cps', key: 'supply-cps', label: 'Partners', icon: Building2, iconName: 'Building2' },
@@ -54,6 +64,7 @@ export default function AppShell({ user, current, section = 'demand', children }
     ];
   }
 
+  const currentHref = activeHref(navItems.map((i) => i.href), pathname);
   // Serializable copy (no icon component) for the client MobileNav.
   const mobileItems = navItems.map(({ icon, ...rest }) => rest);
   const roleLabel = isAdmin
@@ -61,14 +72,8 @@ export default function AppShell({ user, current, section = 'demand', children }
     : isSupplyManager ? 'Supply Manager' : isDirectRm ? 'Direct RM' : 'RM';
   // Only admins can toggle demand ↔ supply (supply_manager is locked to supply).
   const sectionSwitch = isAdmin ? { inSupply } : null;
-  async function handleSignOut() {
-    'use server';
-    await signOut({ redirectTo: '/login' });
-  }
 
   return (
-    // V2: every role (admin, demand RM, direct RM) gets the full Field Connect
-    // Pro teal/amber scope, so the whole app shares one design language.
     <div className="oh-shell oh-sales">
       <Heartbeat />
       <RecordingGuard />
@@ -96,7 +101,7 @@ export default function AppShell({ user, current, section = 'demand', children }
             <Link
               key={it.key}
               href={it.href}
-              className={`oh-nav ${current === it.key ? 'active' : ''}`}
+              className={`oh-nav ${it.href === currentHref ? 'active' : ''}`}
             >
               <Icon size={16} /> {it.label}
             </Link>
@@ -122,12 +127,7 @@ export default function AppShell({ user, current, section = 'demand', children }
             </div>
             <div className="role">{roleLabel}</div>
           </div>
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/login' });
-            }}
-          >
+          <form action={signOutAction}>
             <button
               type="submit"
               className="oh-nav"
@@ -145,10 +145,9 @@ export default function AppShell({ user, current, section = 'demand', children }
       {/* Mobile bottom bar (3 CTAs) + slide-in drawer for everything else */}
       <MobileNav
         items={mobileItems}
-        current={current}
         user={{ name: user.name, email: user.email, image: user.image, role: user.role }}
         roleLabel={roleLabel}
-        signOutAction={handleSignOut}
+        signOutAction={signOutAction}
         sectionSwitch={sectionSwitch}
       />
     </div>
@@ -158,6 +157,7 @@ export default function AppShell({ user, current, section = 'demand', children }
 function UserAvatar({ user, size = 28 }) {
   if (user.image) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={user.image}
         alt={user.name || user.email}

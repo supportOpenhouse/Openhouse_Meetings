@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { teamPerformanceData } from '@/lib/salesPerf';
 import SalesPerformanceClient from '@/app/supply/performance/client';
 
@@ -18,12 +17,12 @@ export default async function AdminSupplyPerformancePage() {
   const data = await teamPerformanceData();
 
   return (
-    <AppShell user={session.user} current="supply-performance" section="supply">
+    <>
       <SalesPerformanceClient
         initial={JSON.parse(JSON.stringify(data))}
         isAdmin
         user={{ id: session.user.id, name: session.user.name || '', email: session.user.email, role }}
       />
-    </AppShell>
+    </>
   );
 }

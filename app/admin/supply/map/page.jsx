@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { teamMapData } from '@/lib/salesMapQueries';
 import SalesMapClient from '@/app/supply/map/client';
 
@@ -18,12 +17,12 @@ export default async function AdminSupplyMapPage() {
   const initial = await teamMapData();
 
   return (
-    <AppShell user={session.user} current="supply-map" section="supply">
+    <>
       <SalesMapClient
         initial={JSON.parse(JSON.stringify(initial))}
         user={{ id: session.user.id, name: session.user.name || '', email: session.user.email, role }}
         mapsKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}
       />
-    </AppShell>
+    </>
   );
 }

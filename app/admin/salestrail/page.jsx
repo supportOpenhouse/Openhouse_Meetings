@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import SalestrailClient from './client';
 
 // Admin Call-sync page — observe + manually trigger the Salestrail sync.
@@ -30,12 +29,12 @@ export default async function AdminSalestrailPage() {
   );
 
   return (
-    <AppShell user={session.user} current="salestrail">
+    <>
       <SalestrailClient
         initial={JSON.parse(
           JSON.stringify({ state: stateRow || null, counts: counts || {}, configured })
         )}
       />
-    </AppShell>
+    </>
   );
 }

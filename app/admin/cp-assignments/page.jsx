@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
-import AppShell from '@/components/AppShell';
 import { listAssignmentsForAdmin } from '@/lib/cpQueries';
 import CpAssignmentsClient from './client';
 
@@ -17,11 +16,11 @@ export default async function CpAssignmentsPage() {
   ]);
 
   return (
-    <AppShell user={session.user} current="cp-assignments">
+    <>
       <CpAssignmentsClient
         initialAssignments={JSON.parse(JSON.stringify(assignments))}
         rms={JSON.parse(JSON.stringify(rms))}
       />
-    </AppShell>
+    </>
   );
 }

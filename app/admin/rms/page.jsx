@@ -1,7 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { listRMs } from '@/lib/queries';
-import AppShell from '@/components/AppShell';
 import RMsClient from './client';
 
 export default async function RMsPage() {
@@ -12,11 +11,11 @@ export default async function RMsPage() {
   const rms = await listRMs();
 
   return (
-    <AppShell user={session.user} current="rms">
+    <>
       <RMsClient
         initialRMs={JSON.parse(JSON.stringify(rms))}
         currentUserId={session.user.id}
       />
-    </AppShell>
+    </>
   );
 }

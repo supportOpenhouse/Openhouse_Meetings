@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import AppShell from '@/components/AppShell';
 import { listSalesReps } from '@/lib/salesQueries';
 import AdminSalesRepsClient from './client';
 
@@ -16,8 +15,8 @@ export default async function AdminSalesRepsPage() {
   const reps = await listSalesReps();
 
   return (
-    <AppShell user={session.user} current="supply-reps" section="supply">
+    <>
       <AdminSalesRepsClient reps={JSON.parse(JSON.stringify(reps))} />
-    </AppShell>
+    </>
   );
 }
