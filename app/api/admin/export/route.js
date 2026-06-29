@@ -1,7 +1,7 @@
 import { auth } from '@/auth';
 import { listAllMeetings } from '@/lib/queries';
 import { fmtDuration } from '@/lib/utils';
-import { csvCell, listOrString, toIsoDate } from '@/lib/csv';
+import { csvCell, listOrString, toIsoDate, meetingSummaryFields } from '@/lib/csv';
 
 export const runtime = 'nodejs';
 // Larger exports can take a while when transcripts are pulled.
@@ -78,13 +78,15 @@ export async function GET(request) {
   const csvRows = [headers.map(csvCell).join(',')];
 
   for (const m of rows) {
-    const s = m.summary || {};
+    // The summary jsonb nests its fields under the meeting_type key with varying
+    // names per type — normalise so the columns aren't blank for visits/calls.
+    const n = meetingSummaryFields(m.summary || {}, m.meeting_type);
 
     // Compose a human-readable "Summary" rollup from the meaty fields.
     const summaryRollup = [
-      s.key_topics && `Topics: ${s.key_topics}`,
-      s.cp_requirements && `Needs: ${s.cp_requirements}`,
-      s.next_action && `Next: ${s.next_action}`,
+      n.keyTopics && `Topics: ${listOrString(n.keyTopics)}`,
+      n.requirements && `Needs: ${listOrString(n.requirements)}`,
+      n.nextAction && `Next: ${listOrString(n.nextAction)}`,
     ]
       .filter(Boolean)
       .join(' · ');
@@ -103,16 +105,16 @@ export async function GET(request) {
         m.duration_seconds || 0,
         m.language || '',
         m.status || '',
-        s.sentiment || '',
+        n.sentiment,
         summaryRollup,
-        s.key_topics || '',
-        s.cp_requirements || '',
-        s.properties_discussed || '',
-        s.budget || '',
-        listOrString(s.objections),
-        listOrString(s.commitments),
-        s.next_action || '',
-        s.follow_up_date || '',
+        listOrString(n.keyTopics),
+        listOrString(n.requirements),
+        listOrString(n.properties),
+        listOrString(n.budget),
+        listOrString(n.objections),
+        listOrString(n.commitments),
+        listOrString(n.nextAction),
+        listOrString(n.followUp),
         m.transcript_text || '',
         m.audio_url || '',
         m.purpose || '',

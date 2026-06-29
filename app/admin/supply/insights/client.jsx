@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Footprints, Briefcase, Handshake, MessageSquareWarning, Sparkles, Loader2, Send, Package, Users,
+  Footprints, Briefcase, Handshake, MessageSquareWarning, Sparkles, Loader2, Send, Package, Users, X,
 } from 'lucide-react';
+import { fmtDate } from '@/lib/utils';
+import DownloadCsv from '@/components/insights/DownloadCsv';
 
 const PERIODS = [
   { value: 30, label: 'Last 30 days' },
@@ -13,12 +15,14 @@ const PERIODS = [
 
 const pct = (n, total) => (total > 0 ? Math.round((n / total) * 100) : 0);
 const initials = (name) => (String(name || '?').trim().charAt(0) || '?').toUpperCase();
+const slug = (s) => (s || 'visits').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'visits';
 
 export default function SupplyInsightsClient({ initial }) {
   const [period, setPeriod] = useState(90);
   const [data, setData] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState('visits');
+  const [drill, setDrill] = useState(null); // { title, jsonUrl, csvUrl }
 
   async function changePeriod(p) {
     if (p === period) return;
@@ -33,6 +37,31 @@ export default function SupplyInsightsClient({ initial }) {
       setLoading(false);
     }
   }
+
+  // Records URL helpers — `period` is passed (stable) and the server derives the
+  // since-date, so the CSV href doesn't depend on Date.now() at render time.
+  function recordsQs(selector) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(selector || {})) {
+      if (v !== null && v !== undefined && v !== '') qs.set(k, String(v));
+    }
+    if (period > 0 && !selector?.ids) qs.set('period', String(period));
+    return qs.toString();
+  }
+  function exportHref(selector, name) {
+    const qs = new URLSearchParams(recordsQs(selector));
+    qs.set('format', 'csv');
+    if (name) qs.set('name', name);
+    return `/api/admin/supply/insights/records?${qs.toString()}`;
+  }
+  function onDrill(title, selector, name) {
+    setDrill({
+      title,
+      jsonUrl: `/api/admin/supply/insights/records?${recordsQs(selector)}`,
+      csvUrl: exportHref(selector, name),
+    });
+  }
+  const helpers = { exportHref, onDrill };
 
   const m = data.agg || {};
 
@@ -69,13 +98,26 @@ export default function SupplyInsightsClient({ initial }) {
         <Tab active={tab === 'ask'} onClick={() => setTab('ask')} icon={Sparkles} label="Ask anything" />
       </div>
 
+      {tab !== 'ask' && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '0 0 -8px' }}>
+          <DownloadCsv
+            variant="button"
+            label="Export this tab"
+            title="Download every visit in scope (current period)"
+            href={exportHref({}, `supply-${tab}`)}
+          />
+        </div>
+      )}
+
       <div style={{ opacity: loading ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-        {tab === 'visits' && <VisitsTab m={m} data={data} />}
-        {tab === 'engagement' && <EngagementTab m={m} />}
-        {tab === 'onboarding' && <OnboardingTab m={m} />}
-        {tab === 'themes' && <ThemesTab themes={data.themes || {}} />}
-        {tab === 'ask' && <AskTab period={period} />}
+        {tab === 'visits' && <VisitsTab m={m} data={data} x={helpers} />}
+        {tab === 'engagement' && <EngagementTab m={m} x={helpers} />}
+        {tab === 'onboarding' && <OnboardingTab m={m} x={helpers} />}
+        {tab === 'themes' && <ThemesTab themes={data.themes || {}} x={helpers} />}
+        {tab === 'ask' && <AskTab period={period} x={helpers} />}
       </div>
+
+      {drill && <VisitsModal drill={drill} onClose={() => setDrill(null)} />}
 
       <style jsx>{`
         .si-periods { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
@@ -140,45 +182,59 @@ function StatGrid({ children }) {
   );
 }
 
-function Section({ title, sub, children }) {
+function Section({ title, sub, action, children }) {
   return (
     <div style={{ marginTop: 28 }}>
       <div className="si-sec-head">
-        {title}
-        {sub && <span>{sub}</span>}
+        <span className="si-sec-title">
+          {title}
+          {sub && <span className="si-sec-sub">{sub}</span>}
+        </span>
+        {action || null}
       </div>
       {children}
       <style jsx>{`
         .si-sec-head {
-          display: flex; align-items: baseline; justify-content: space-between;
+          display: flex; align-items: center; justify-content: space-between; gap: 10px;
           font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 12px;
         }
-        .si-sec-head span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+        .si-sec-title { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+        .si-sec-sub { font-size: 12px; font-weight: 500; color: var(--ink-3); }
       `}</style>
     </div>
   );
 }
 
-// A horizontal bar row: label, fill proportional to n/total, count + pct.
-function BarRow({ label, n, total, tone = 'accent' }) {
+// A horizontal bar row. When `onClick` is set the row is a drill-down trigger.
+function BarRow({ label, n, total, tone = 'accent', onClick }) {
   const p = pct(n, total);
+  const clickable = !!onClick;
   return (
-    <div className="si-bar">
+    <div
+      className={`si-bar ${clickable ? 'clickable' : ''}`}
+      onClick={onClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="top">
         <span className="lbl">{label}</span>
         <span className="cnt">
-          {n} <em>· {p}%</em>
+          {n} <em>· {p}%</em>{clickable && <span className="go"> ›</span>}
         </span>
       </div>
       <div className="track">
         <div className={`fill ${tone}`} style={{ width: `${p}%` }} />
       </div>
       <style jsx>{`
-        .si-bar { margin-bottom: 12px; }
+        .si-bar { margin-bottom: 12px; border-radius: 8px; }
+        .si-bar.clickable { cursor: pointer; padding: 4px 6px; margin: -4px -6px 8px; }
+        .si-bar.clickable:hover { background: var(--paper-2); }
         .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
         .lbl { font-size: 13.5px; color: var(--ink); font-weight: 500; }
         .cnt { font-size: 13px; color: var(--ink); font-weight: 600; }
         .cnt em { font-style: normal; color: var(--ink-3); font-weight: 500; }
+        .cnt .go { color: var(--accent); }
         .track { height: 9px; background: var(--paper-2); border-radius: 100px; overflow: hidden; }
         .fill { height: 100%; border-radius: 100px; }
         .fill.accent { background: var(--grad-primary); }
@@ -206,13 +262,16 @@ function Card({ children }) {
 }
 
 function Empty({ text }) {
-  return (
-    <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '8px 0' }}>{text}</div>
-  );
+  return <div style={{ color: 'var(--ink-3)', fontSize: 13, padding: '8px 0' }}>{text}</div>;
+}
+
+// A small ⤓ for a Section header.
+function SectionCsv({ x, selector, name, title }) {
+  return <DownloadCsv href={x.exportHref(selector, name)} title={title || 'Download these records (current period)'} />;
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
-function VisitsTab({ m, data }) {
+function VisitsTab({ m, data, x }) {
   const total = m.total || 0;
   const weeks = data.volumeByWeek || [];
   const maxWeek = Math.max(1, ...weeks.map((w) => w.n));
@@ -226,29 +285,29 @@ function VisitsTab({ m, data }) {
         <Stat label="Avg visit" value={m.avg_duration ? `${Math.round(m.avg_duration / 60)}m` : '—'} />
       </StatGrid>
 
-      <Section title="Outcomes">
+      <Section title="Outcomes" action={<SectionCsv x={x} selector={{}} name="supply-outcomes" />}>
         <Card>
           {total === 0 ? (
             <Empty text="No ready visits in this period yet." />
           ) : (
             <>
-              <BarRow label="Onboarded" n={m.onboarded || 0} total={total} tone="green" />
-              <BarRow label="Follow-up required" n={m.follow_up || 0} total={total} tone="amber" />
-              <BarRow label="Future potential" n={m.future_potential || 0} total={total} tone="accent" />
-              <BarRow label="Not interested" n={m.not_interested || 0} total={total} tone="red" />
+              <BarRow label="Onboarded" n={m.onboarded || 0} total={total} tone="green" onClick={() => x.onDrill('Onboarded visits', { outcome: 'onboarded' }, 'onboarded')} />
+              <BarRow label="Follow-up required" n={m.follow_up || 0} total={total} tone="amber" onClick={() => x.onDrill('Follow-up required', { outcome: 'follow_up_required' }, 'follow-up')} />
+              <BarRow label="Future potential" n={m.future_potential || 0} total={total} tone="accent" onClick={() => x.onDrill('Future potential', { outcome: 'future_potential' }, 'future-potential')} />
+              <BarRow label="Not interested" n={m.not_interested || 0} total={total} tone="red" onClick={() => x.onDrill('Not interested', { outcome: 'not_interested' }, 'not-interested')} />
             </>
           )}
         </Card>
       </Section>
 
-      <Section title="First vs repeat">
+      <Section title="First vs repeat" action={<SectionCsv x={x} selector={{}} name="supply-first-repeat" />}>
         <Card>
-          <BarRow label="First visit" n={m.first_visits || 0} total={total} tone="accent" />
-          <BarRow label="Repeat visit" n={m.repeat_visits || 0} total={total} tone="amber" />
+          <BarRow label="First visit" n={m.first_visits || 0} total={total} tone="accent" onClick={() => x.onDrill('First visits', { meeting_type: 'first_visit' }, 'first-visit')} />
+          <BarRow label="Repeat visit" n={m.repeat_visits || 0} total={total} tone="amber" onClick={() => x.onDrill('Repeat visits', { meeting_type: 'repeat_visit' }, 'repeat-visit')} />
         </Card>
       </Section>
 
-      <Section title="Visits per week">
+      <Section title="Visits per week" action={<SectionCsv x={x} selector={{}} name="supply-weekly" />}>
         <Card>
           {weeks.length === 0 ? (
             <Empty text="No visit history yet." />
@@ -277,40 +336,40 @@ function VisitsTab({ m, data }) {
         </Card>
       </Section>
 
-      <Leaderboard rows={data.leaderboard || []} />
+      <Leaderboard rows={data.leaderboard || []} x={x} />
     </div>
   );
 }
 
-function EngagementTab({ m }) {
+function EngagementTab({ m, x }) {
   const total = m.total || 0;
   return (
     <div>
-      <Section title="CP sentiment" sub="AI-read from each visit">
+      <Section title="CP sentiment" sub="AI-read from each visit" action={<SectionCsv x={x} selector={{}} name="supply-sentiment" />}>
         <Card>
           {total === 0 ? (
             <Empty text="No data yet." />
           ) : (
             <>
-              <BarRow label="Positive" n={m.sent_positive || 0} total={total} tone="green" />
-              <BarRow label="Neutral" n={m.sent_neutral || 0} total={total} tone="grey" />
-              <BarRow label="Disengaged" n={m.sent_disengaged || 0} total={total} tone="red" />
+              <BarRow label="Positive" n={m.sent_positive || 0} total={total} tone="green" onClick={() => x.onDrill('Positive sentiment', { sentiment: 'positive' }, 'sentiment-positive')} />
+              <BarRow label="Neutral" n={m.sent_neutral || 0} total={total} tone="grey" onClick={() => x.onDrill('Neutral sentiment', { sentiment: 'neutral' }, 'sentiment-neutral')} />
+              <BarRow label="Disengaged" n={m.sent_disengaged || 0} total={total} tone="red" onClick={() => x.onDrill('Disengaged sentiment', { sentiment: 'disengaged' }, 'sentiment-disengaged')} />
             </>
           )}
         </Card>
       </Section>
-      <Section title="Rep-logged engagement">
+      <Section title="Rep-logged engagement" action={<SectionCsv x={x} selector={{}} name="supply-engagement" />}>
         <Card>
-          <BarRow label="Positive" n={m.eng_positive || 0} total={total} tone="green" />
-          <BarRow label="Neutral" n={m.eng_neutral || 0} total={total} tone="grey" />
-          <BarRow label="Disengaged" n={m.eng_disengaged || 0} total={total} tone="red" />
+          <BarRow label="Positive" n={m.eng_positive || 0} total={total} tone="green" onClick={() => x.onDrill('Engagement: positive', { engagement: 'positive' }, 'engagement-positive')} />
+          <BarRow label="Neutral" n={m.eng_neutral || 0} total={total} tone="grey" onClick={() => x.onDrill('Engagement: neutral', { engagement: 'neutral' }, 'engagement-neutral')} />
+          <BarRow label="Disengaged" n={m.eng_disengaged || 0} total={total} tone="red" onClick={() => x.onDrill('Engagement: disengaged', { engagement: 'disengaged' }, 'engagement-disengaged')} />
         </Card>
       </Section>
     </div>
   );
 }
 
-function OnboardingTab({ m }) {
+function OnboardingTab({ m, x }) {
   const total = m.total || 0;
   const conv = pct(m.stage_onboarded || 0, total);
   return (
@@ -321,16 +380,16 @@ function OnboardingTab({ m }) {
         <Stat label="Evaluating" value={m.stage_evaluating || 0} />
         <Stat label="Not interested" value={m.stage_not_interested || 0} />
       </StatGrid>
-      <Section title="Onboarding stage" sub="journey position">
+      <Section title="Onboarding stage" sub="journey position" action={<SectionCsv x={x} selector={{}} name="supply-onboarding-stage" />}>
         <Card>
           {total === 0 ? (
             <Empty text="No data yet." />
           ) : (
             <>
-              <BarRow label="Onboarded" n={m.stage_onboarded || 0} total={total} tone="green" />
-              <BarRow label="Ready to onboard" n={m.stage_ready || 0} total={total} tone="accent" />
-              <BarRow label="Evaluating" n={m.stage_evaluating || 0} total={total} tone="amber" />
-              <BarRow label="Not interested" n={m.stage_not_interested || 0} total={total} tone="red" />
+              <BarRow label="Onboarded" n={m.stage_onboarded || 0} total={total} tone="green" onClick={() => x.onDrill('Stage: onboarded', { stage: 'onboarded' }, 'stage-onboarded')} />
+              <BarRow label="Ready to onboard" n={m.stage_ready || 0} total={total} tone="accent" onClick={() => x.onDrill('Stage: ready to onboard', { stage: 'ready_to_onboard' }, 'stage-ready')} />
+              <BarRow label="Evaluating" n={m.stage_evaluating || 0} total={total} tone="amber" onClick={() => x.onDrill('Stage: evaluating', { stage: 'evaluating' }, 'stage-evaluating')} />
+              <BarRow label="Not interested" n={m.stage_not_interested || 0} total={total} tone="red" onClick={() => x.onDrill('Stage: not interested', { stage: 'not_interested' }, 'stage-not-interested')} />
             </>
           )}
         </Card>
@@ -339,7 +398,7 @@ function OnboardingTab({ m }) {
   );
 }
 
-function ThemeList({ title, icon: Icon, rows }) {
+function ThemeList({ title, rows }) {
   const max = Math.max(1, ...rows.map((r) => r.n));
   return (
     <Section title={title}>
@@ -359,18 +418,18 @@ function ThemesTab({ themes }) {
     <div>
       <p className="oh-sub" style={{ marginTop: 0 }}>
         The most common items the AI pulled from visit summaries. Use “Ask anything” for clustered,
-        cited analysis across transcripts.
+        cited analysis across transcripts (with its own CSV export).
       </p>
-      <ThemeList title="Top objections" icon={MessageSquareWarning} rows={themes.objections || []} />
-      <ThemeList title="What CPs ask for" icon={Package} rows={themes.needs || []} />
-      <ThemeList title="CP commitments" icon={Handshake} rows={themes.commitments || []} />
+      <ThemeList title="Top objections" rows={themes.objections || []} />
+      <ThemeList title="What CPs ask for" rows={themes.needs || []} />
+      <ThemeList title="CP commitments" rows={themes.commitments || []} />
     </div>
   );
 }
 
-function Leaderboard({ rows }) {
+function Leaderboard({ rows, x }) {
   return (
-    <Section title="Rep leaderboard" sub="by visits">
+    <Section title="Rep leaderboard" sub="by visits" action={<SectionCsv x={x} selector={{}} name="supply-rep-leaderboard" />}>
       <Card>
         {rows.length === 0 ? (
           <Empty text="No reps have logged visits yet." />
@@ -414,7 +473,95 @@ function Leaderboard({ rows }) {
   );
 }
 
-function AskTab({ period }) {
+// Drill-down modal: the visits behind a stat + a CSV of exactly those visits.
+function VisitsModal({ drill, onClose }) {
+  const [visits, setVisits] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    document.body.style.overflow = 'hidden';
+    fetch(drill.jsonUrl)
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setVisits(j.visits || []); })
+      .catch(() => { if (!cancelled) setError('Could not load the visits.'); });
+    return () => { cancelled = true; document.body.style.overflow = ''; };
+  }, [drill.jsonUrl]);
+
+  return (
+    <div className="si-modal-bg" onClick={onClose}>
+      <div className="si-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="si-modal-head">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="si-modal-eyebrow">Source visits</div>
+            <div className="si-modal-title">{drill.title}</div>
+            <div className="si-modal-sub">
+              {visits ? `${visits.length} visit${visits.length === 1 ? '' : 's'}` : '…'} in this slice
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            <DownloadCsv variant="button" label="CSV" title="Download these visits as CSV" href={drill.csvUrl} />
+            <button className="si-x" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          </div>
+        </div>
+        <div className="si-modal-body">
+          {!visits && !error && (
+            <div className="si-modal-loading"><Loader2 size={15} className="oh-spin" /> Loading visits…</div>
+          )}
+          {error && <div style={{ color: 'var(--danger)', padding: 12, fontSize: 13 }}>{error}</div>}
+          {visits && visits.length === 0 && (
+            <div style={{ color: 'var(--ink-3)', padding: 12, fontSize: 13 }}>No visits found in this slice.</div>
+          )}
+          {visits && visits.map((v) => (
+            <div key={v.id} className="si-vrow">
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="si-vrow-top">
+                  <b>{v.cp_code || v.cp_name || 'CP'}</b>
+                  {v.cp_code && v.cp_name ? <span className="muted"> · {v.cp_name}</span> : null}
+                </div>
+                <div className="si-vrow-meta">
+                  {fmtDate(v.check_in_time)}
+                  {v.meeting_outcome ? ` · ${v.meeting_outcome.replace(/_/g, ' ')}` : ''}
+                  {v.rm_name ? ` · ${v.rm_name}` : ''}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <style jsx>{`
+        .si-modal-bg {
+          position: fixed; inset: 0; background: rgba(20, 10, 25, 0.45); backdrop-filter: blur(2px);
+          display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100;
+        }
+        .si-modal {
+          background: var(--paper); border-radius: 18px; width: 100%; max-width: 560px;
+          max-height: 84vh; display: flex; flex-direction: column; overflow: hidden;
+          box-shadow: var(--shadow-lg, 0 20px 60px rgba(0,0,0,0.3));
+        }
+        .si-modal-head {
+          display: flex; gap: 12px; align-items: flex-start; padding: 18px 18px 14px;
+          border-bottom: 1px solid var(--border);
+        }
+        .si-modal-eyebrow { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); font-weight: 700; }
+        .si-modal-title { font-size: 18px; font-weight: 700; color: var(--ink); margin: 3px 0; line-height: 1.2; }
+        .si-modal-sub { font-size: 12.5px; color: var(--ink-2); }
+        .si-x { all: unset; cursor: pointer; padding: 6px; border-radius: 8px; color: var(--ink-3); }
+        .si-x:hover { background: var(--paper-2); color: var(--ink); }
+        .si-modal-body { overflow-y: auto; padding: 8px 12px 12px; }
+        .si-modal-loading { display: flex; align-items: center; gap: 8px; color: var(--ink-3); padding: 16px; font-size: 13px; }
+        .si-vrow { padding: 11px 8px; border-bottom: 1px solid var(--border); }
+        .si-vrow:last-child { border-bottom: none; }
+        .si-vrow-top { font-size: 13.5px; color: var(--ink); }
+        .si-vrow-top .muted { color: var(--ink-2); font-weight: 400; }
+        .si-vrow-meta { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+      `}</style>
+    </div>
+  );
+}
+
+function AskTab({ period, x }) {
   const [q, setQ] = useState('');
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState('');
@@ -448,6 +595,9 @@ function AskTab({ period }) {
       setAsking(false);
     }
   }
+
+  const allIds = (result?.items || []).flatMap((it) => it.visitIds || []);
+  const uniqueIds = [...new Set(allIds)];
 
   return (
     <div>
@@ -491,19 +641,40 @@ function AskTab({ period }) {
       {result && (
         <div style={{ marginTop: 18 }}>
           <Card>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>{result.headline}</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>{result.headline}</div>
+              {uniqueIds.length > 0 && (
+                <DownloadCsv
+                  variant="button"
+                  label="Export cited"
+                  title="Download every CP visit cited in this answer"
+                  href={x.exportHref({ ids: uniqueIds.join(',') }, slug(result.headline))}
+                />
+              )}
+            </div>
             {result.narrative && (
               <p style={{ fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, margin: '8px 0 0' }}>{result.narrative}</p>
             )}
             {Array.isArray(result.items) && result.items.length > 0 && (
               <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {result.items.map((it, i) => (
-                  <div key={i} className="si-item">
-                    <div className="t">{it.title}</div>
-                    {it.value && <div className="v">{it.value}</div>}
-                    {it.visitIds?.length > 0 && <div className="r">{it.visitIds.length} visit{it.visitIds.length === 1 ? '' : 's'}</div>}
-                  </div>
-                ))}
+                {result.items.map((it, i) => {
+                  const ids = it.visitIds || [];
+                  return (
+                    <div key={i} className="si-item">
+                      <div className="t">{it.title}</div>
+                      {it.value && <div className="v">{it.value}</div>}
+                      {ids.length > 0 && (
+                        <button
+                          type="button"
+                          className="r"
+                          onClick={() => x.onDrill(it.title, { ids: ids.join(',') }, slug(it.title))}
+                        >
+                          {ids.length} visit{ids.length === 1 ? '' : 's'} ›
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 14 }}>
@@ -524,7 +695,11 @@ function AskTab({ period }) {
         .si-item { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; }
         .si-item .t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
         .si-item .v { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
-        .si-item .r { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+        .si-item .r {
+          all: unset; cursor: pointer; font-size: 11px; color: var(--accent); margin-top: 3px;
+          border-bottom: 1px dashed currentColor;
+        }
+        .si-item .r:hover { opacity: 0.7; }
       `}</style>
     </div>
   );
