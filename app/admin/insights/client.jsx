@@ -26,6 +26,20 @@ import {
 import { ChevronRight } from 'lucide-react';
 import { fmtDate, fmtDuration } from '@/lib/utils';
 import MeetingDetail from '@/components/MeetingDetail';
+import DownloadCsv, { downloadCsv } from '@/components/insights/DownloadCsv';
+
+// Which meeting_type each tab's records map to, for CSV export (cross_cut/ask
+// have no single type).
+const TAB_TYPE = { visit: 'visit', engagement: 'engagement', onboarding: 'onboarding', direct: 'call' };
+
+// Collect the unique meeting ids an AI insight result cites across its items.
+function resultMeetingIds(result) {
+  const set = new Set();
+  for (const it of result?.items || []) {
+    for (const id of it.meeting_ids || []) set.add(id);
+  }
+  return [...set];
+}
 
 const PERIODS = [
   { value: 30, label: 'Last 30 days' },
@@ -267,6 +281,23 @@ export default function InsightsClient({ initialData }) {
     [dateSince, dateUntil, rmFilter]
   );
 
+  // Build a CSV-export URL honoring the current filters. `params` carries the
+  // tab/stat selectors (type, param, outcome, …); `name` becomes the filename.
+  const exportUrl = useCallback(
+    (params, name) => {
+      const qs = new URLSearchParams();
+      for (const [k, v] of Object.entries(params || {})) {
+        if (v !== null && v !== undefined && v !== '') qs.set(k, String(v));
+      }
+      if (dateSince) qs.set('since', `${dateSince}T00:00:00`);
+      if (dateUntil) qs.set('until', `${dateUntil}T23:59:59`);
+      if (rmFilter !== 'all') qs.set('rm', rmFilter);
+      if (name) qs.set('name', name);
+      return `/api/admin/insights/export?${qs.toString()}`;
+    },
+    [dateSince, dateUntil, rmFilter]
+  );
+
   async function ask() {
     const q = question.trim();
     if (q.length < 5) return;
@@ -374,7 +405,18 @@ export default function InsightsClient({ initialData }) {
         <TabBtn active={tab === 'ask'} onClick={() => setTab('ask')} icon={Sparkles} label="Ask anything" />
       </div>
 
-      <StatContext.Provider value={openStat}>
+      {TAB_TYPE[tab] && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '10px 0 -4px' }}>
+          <DownloadCsv
+            variant="button"
+            label="Export this tab"
+            title="Download every record in this tab (current filters)"
+            href={exportUrl({ type: TAB_TYPE[tab] }, `${tab}-records`)}
+          />
+        </div>
+      )}
+
+      <StatContext.Provider value={{ openStat, exportUrl }}>
         {tab === 'visit' && <VisitTab m={t1.visit} />}
         {tab === 'engagement' && <EngagementTab m={t1.engagement} />}
         {tab === 'onboarding' && <OnboardingTab m={t1.onboarding} />}
@@ -552,7 +594,7 @@ function StatGrid({ children }) {
 }
 
 function VisitTab({ m }) {
-  const openStat = useContext(StatContext);
+  const { openStat, exportUrl } = useContext(StatContext);
   return (
     <div>
       <StatGrid>
@@ -582,7 +624,7 @@ function VisitTab({ m }) {
         />
       </StatGrid>
 
-      <Panel title="Visit funnel — what's happening on site">
+      <Panel title="Visit funnel — what's happening on site" action={<DownloadCsv href={exportUrl({ type: 'visit' }, 'visit-funnel')} title="Download all visit records, funnel steps as columns (current filters)" />}>
         {m.funnel.map((f) => (
           <BarRow
             key={f.key}
@@ -619,7 +661,7 @@ function VisitTab({ m }) {
 }
 
 function EngagementTab({ m }) {
-  const openStat = useContext(StatContext);
+  const { openStat, exportUrl } = useContext(StatContext);
   return (
     <div>
       <StatGrid>
@@ -664,7 +706,7 @@ function EngagementTab({ m }) {
 
 function OnboardingTab({ m }) {
   const f = m.outcomeFunnel;
-  const openStat = useContext(StatContext);
+  const { openStat, exportUrl } = useContext(StatContext);
   return (
     <div>
       <StatGrid>
@@ -696,7 +738,7 @@ function OnboardingTab({ m }) {
           }
         />
       </StatGrid>
-      <Panel title="Outcome funnel">
+      <Panel title="Outcome funnel" action={<DownloadCsv href={exportUrl({ type: 'onboarding' }, 'onboarding-outcomes')} title="Download all onboarding records (current filters)" />}>
         <BarRow
           label="Will join"
           pct={pct(f.willJoin, m.total)}
@@ -733,7 +775,7 @@ function OnboardingTab({ m }) {
 }
 
 function DirectTab({ m }) {
-  const openStat = useContext(StatContext);
+  const { openStat, exportUrl } = useContext(StatContext);
   if (!m || m.total === 0) {
     return <Empty text="No direct-RM call recordings in this range yet." />;
   }
@@ -767,28 +809,28 @@ function DirectTab({ m }) {
       </StatGrid>
 
       <div className="oh-ins-2col">
-        <Panel title="Buyer journey stage">
+        <Panel title="Buyer journey stage" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-journey-stage')} title="Download all direct-call records (current filters)" />}>
           <DistBars rows={m.journeyStage} total={m.total} field="journey_stage" onItemClick={onCallField} />
         </Panel>
-        <Panel title="Move-in timeline">
+        <Panel title="Move-in timeline" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-move-in-timeline')} title="Download all direct-call records (current filters)" />}>
           <DistBars rows={m.timeline} total={m.total} field="move_in_timeline" onItemClick={onCallField} />
         </Panel>
       </div>
 
       <div className="oh-ins-2col">
-        <Panel title="Budget demand">
+        <Panel title="Budget demand" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-budget')} title="Download all direct-call records (current filters)" />}>
           <DistBars rows={m.budget} total={m.total} field="budget" onItemClick={onCallField} />
         </Panel>
-        <Panel title="BHK configuration demand">
+        <Panel title="BHK configuration demand" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-bhk-config')} title="Download all direct-call records (current filters)" />}>
           <DistBars rows={m.configuration} total={m.total} field="configuration" onItemClick={onCallField} />
         </Panel>
       </div>
 
-      <Panel title="What's stopping buyers from booking">
+      <Panel title="What's stopping buyers from booking" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-blockers')} title="Download all direct-call records (current filters)" />}>
         <DistBars rows={m.blockers} total={m.total} field="booking_blocker" onItemClick={onCallField} />
       </Panel>
 
-      <Panel title="Top buyer frustrations">
+      <Panel title="Top buyer frustrations" action={<DownloadCsv href={exportUrl({ type: 'call' }, 'direct-frustrations')} title="Download all direct-call records (current filters)" />}>
         <DistBars rows={m.frustrations} total={m.total} field="frustrations" onItemClick={onCallField} />
       </Panel>
 
@@ -842,7 +884,25 @@ function DistBars({ rows, total, field, onItemClick }) {
 function CrossCutTab({ cpFocus }) {
   return (
     <div>
-      <Panel title="CPs to focus on now — recorded visits dropped month-on-month">
+      <Panel
+        title="CPs to focus on now — recorded visits dropped month-on-month"
+        action={
+          cpFocus.length > 0 ? (
+            <DownloadCsv
+              variant="button"
+              label="CSV"
+              title="Download this focus list"
+              onClick={() =>
+                downloadCsv(
+                  'cp-focus.csv',
+                  ['CP Code', 'RM', 'Last 30d', 'Prev 30d', 'Drop', 'Reason'],
+                  cpFocus.map((c) => [c.cp_code, c.rm_name, c.last_30, c.prev_30, c.drop, c.reason])
+                )
+              }
+            />
+          ) : null
+        }
+      >
         {cpFocus.length === 0 && <Empty text="No CPs with a month-on-month visit drop." />}
         {cpFocus.map((c) => (
           <div key={c.cp_code} className="oh-ins-focus-row">
@@ -1183,8 +1243,21 @@ function InsightBody({ result, sourceId, sourceTitle, scope, savedKeys, onSaveIt
   const [openItem, setOpenItem] = useState(null);
   if (!result) return null;
   const canSave = !!onSaveItem && !!sourceId;
+  const allIds = resultMeetingIds(result);
+  const overallSlug =
+    (sourceTitle || 'insight').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'insight';
   return (
     <div className="oh-ins-body">
+      {allIds.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <DownloadCsv
+            variant="button"
+            label="Export cited CPs"
+            title="Download every CP meeting cited across this insight (overall)"
+            href={`/api/admin/insights/export?ids=${allIds.join(',')}&name=${overallSlug}`}
+          />
+        </div>
+      )}
       {result.headline && <div className="oh-ins-headline">{result.headline}</div>}
       {Array.isArray(result.items) && result.items.length > 0 && (
         <div className="oh-ins-items">
@@ -1329,6 +1402,13 @@ function MentionsModal({ label, ids, fetchUrl, subtitle, onClose }) {
     fetchUrl ||
     `/api/admin/insights/meetings?ids=${encodeURIComponent((ids || []).join(','))}`;
 
+  // CSV of exactly these records — reuse the stat filter (or the explicit ids).
+  const nameSlug =
+    (label || 'records').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'records';
+  const exportHref = fetchUrl
+    ? `${fetchUrl.replace('/stat-meetings?', '/export?')}&name=${nameSlug}`
+    : `/api/admin/insights/export?ids=${encodeURIComponent((ids || []).join(','))}&name=${nameSlug}`;
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     let cancelled = false;
@@ -1378,9 +1458,12 @@ function MentionsModal({ label, ids, fetchUrl, subtitle, onClose }) {
                 {subtitle || 'behind this'} — tap one to see its transcript &amp; summary
               </div>
             </div>
-            <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
-              <X size={16} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <DownloadCsv variant="button" label="CSV" title="Download these records as CSV" href={exportHref} />
+              <button className="oh-btn ghost" onClick={onClose} aria-label="Close" style={{ padding: 8 }}>
+                <X size={16} />
+              </button>
+            </div>
           </div>
           <div className="oh-modal-body">
             {!meetings && !error && (
@@ -1592,10 +1675,13 @@ function TempStat({ mix, onSegmentClick }) {
   );
 }
 
-function Panel({ title, children }) {
+function Panel({ title, action, children }) {
   return (
     <div className="oh-ins-panel">
-      <div className="oh-ins-panel-title">{title}</div>
+      <div className="oh-ins-panel-title">
+        <span>{title}</span>
+        {action || null}
+      </div>
       {children}
       <style jsx>{`
         .oh-ins-panel {
@@ -1608,6 +1694,10 @@ function Panel({ title, children }) {
           overflow: hidden;
         }
         .oh-ins-panel-title {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
           font-size: 13px;
           font-weight: 600;
           color: var(--ink);

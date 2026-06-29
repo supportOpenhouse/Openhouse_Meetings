@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { listAllMeetings } from '@/lib/queries';
 import { fmtDuration } from '@/lib/utils';
+import { csvCell, listOrString, toIsoDate } from '@/lib/csv';
 
 export const runtime = 'nodejs';
 // Larger exports can take a while when transcripts are pulled.
@@ -133,27 +134,4 @@ export async function GET(request) {
       'Cache-Control': 'no-store',
     },
   });
-}
-
-function csvCell(v) {
-  if (v === null || v === undefined) return '';
-  const s = String(v);
-  // Quote anything that contains a delimiter, quote, or newline; double internal quotes.
-  if (/[",\r\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
-function listOrString(v) {
-  if (Array.isArray(v)) return v.filter(Boolean).join(' | ');
-  if (v === null || v === undefined) return '';
-  return String(v);
-}
-
-function toIsoDate(d) {
-  if (!d) return '';
-  const dt = d instanceof Date ? d : new Date(d);
-  if (isNaN(dt)) return '';
-  return dt.toISOString();
 }
