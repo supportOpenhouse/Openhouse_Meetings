@@ -1,7 +1,7 @@
 import { auth } from '@/auth';
 import { listAllMeetings } from '@/lib/queries';
 import { fmtDuration } from '@/lib/utils';
-import { csvCell, listOrString, toIsoDate, meetingSummaryFields } from '@/lib/csv';
+import { csvCell, listOrString, toIsoDate, meetingSummaryFields, mapsLink } from '@/lib/csv';
 
 export const runtime = 'nodejs';
 // Larger exports can take a while when transcripts are pulled.
@@ -54,6 +54,9 @@ export async function GET(request) {
     'CP Name',
     'CP Number',
     'City',
+    'Latitude',
+    'Longitude',
+    'Map',
     'RM',
     'RM Email',
     'Duration',
@@ -99,6 +102,9 @@ export async function GET(request) {
         m.cp_name || '',
         m.cp_mobile || '',
         m.cp_city || '',
+        m.location_lat ?? '',
+        m.location_lng ?? '',
+        mapsLink(m.location_lat, m.location_lng),
         m.rm_name || '',
         m.rm_email || '',
         fmtDuration(m.duration_seconds || 0),
