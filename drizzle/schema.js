@@ -328,6 +328,10 @@ export const salesVisits = pgTable(
     inventory_pipeline_count: integer('inventory_pipeline_count'),
     next_followup_date: date('next_followup_date'),
     next_action_required: text('next_action_required'),
+    // Set when the rep marks the follow-up done. Kept separate from
+    // next_followup_date so the scheduled date + action survive for history
+    // (and the CSV exports); a non-null value drops it off the "due" list.
+    followup_done_at: timestamp('followup_done_at', { withTimezone: true }),
     // 'onboarded' | 'follow_up_required' | 'not_interested' | 'future_potential'
     meeting_outcome: text('meeting_outcome'),
     // selfie-with-CP — fast-follow, nullable for v1

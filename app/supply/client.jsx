@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Plus,
   ChevronRight,
@@ -9,6 +10,8 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  Check,
+  Loader2,
   Users,
 } from 'lucide-react';
 import {
@@ -51,7 +54,31 @@ export default function SalesDashboardClient({ initialData, user }) {
     );
   }, []);
 
-  const overdueCount = followups.filter((f) => isOverdue(f.next_followup_date)).length;
+  // Follow-ups the rep has just ticked off disappear immediately (optimistic);
+  // router.refresh() re-pulls the server list so the count stays honest.
+  const router = useRouter();
+  const [doneIds, setDoneIds] = useState(() => new Set());
+  const [busyId, setBusyId] = useState(null);
+  const openFollowups = followups.filter((f) => !doneIds.has(f.id));
+  const overdueCount = openFollowups.filter((f) => isOverdue(f.next_followup_date)).length;
+
+  async function markFollowupDone(id) {
+    setBusyId(id);
+    try {
+      const r = await fetch(`/api/supply/visits/${id}/followup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done: true }),
+      });
+      if (!r.ok) throw new Error('Could not mark it done');
+      setDoneIds((s) => new Set(s).add(id));
+      router.refresh();
+    } catch {
+      // Leave the row in place — the rep can tap again.
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div>
@@ -101,44 +128,53 @@ export default function SalesDashboardClient({ initialData, user }) {
       )}
 
       {/* 5 — Follow-ups due */}
-      {followups.length > 0 && (
+      {openFollowups.length > 0 && (
         <section className="sx-section" id="followups">
           <div className="sx-section-head">
             <h2>Follow-ups due</h2>
           </div>
           <div className="sx-list">
-            {followups.map((f) => {
+            {openFollowups.map((f) => {
               const overdue = isOverdue(f.next_followup_date);
+              const busy = busyId === f.id;
               return (
-                <Link
-                  key={f.id}
-                  href={f.sales_cp_id ? `/supply/cps/${f.sales_cp_id}` : `/supply/visits/${f.id}`}
-                  className="sx-row"
-                >
-                  <div
-                    className="avatar"
-                    style={
-                      overdue
-                        ? { background: 'var(--danger-soft)', color: 'var(--danger)' }
-                        : undefined
-                    }
+                <div key={f.id} className="sx-fu-row">
+                  <Link
+                    href={f.sales_cp_id ? `/supply/cps/${f.sales_cp_id}` : `/supply/visits/${f.id}`}
+                    className="sx-row sx-fu-main"
                   >
-                    {overdue ? <AlertCircle size={18} /> : initials(f.cp_name)}
-                  </div>
-                  <div className="body">
-                    <div className="title">{f.cp_name || 'Channel partner'}</div>
-                    <div className="meta">
-                      {f.cp_code && <span className="code">{f.cp_code}</span>}
-                      {f.next_action_required && <span>{f.next_action_required}</span>}
+                    <div
+                      className="avatar"
+                      style={
+                        overdue
+                          ? { background: 'var(--danger-soft)', color: 'var(--danger)' }
+                          : undefined
+                      }
+                    >
+                      {overdue ? <AlertCircle size={18} /> : initials(f.cp_name)}
                     </div>
-                  </div>
-                  <span className={`sx-pill ${overdue ? 'not_interested' : 'follow_up'}`}>
-                    {followupLabel(f.next_followup_date)}
-                  </span>
-                  <span className="chev">
-                    <ChevronRight size={18} />
-                  </span>
-                </Link>
+                    <div className="body">
+                      <div className="title">{f.cp_name || 'Channel partner'}</div>
+                      <div className="meta">
+                        {f.cp_code && <span className="code">{f.cp_code}</span>}
+                        {f.next_action_required && <span>{f.next_action_required}</span>}
+                      </div>
+                    </div>
+                    <span className={`sx-pill ${overdue ? 'not_interested' : 'follow_up'}`}>
+                      {followupLabel(f.next_followup_date)}
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="sx-fu-done"
+                    onClick={() => markFollowupDone(f.id)}
+                    disabled={busy}
+                    title="Mark this follow-up done"
+                    aria-label={`Mark follow-up for ${f.cp_name || 'this partner'} done`}
+                  >
+                    {busy ? <Loader2 size={17} className="oh-spin" /> : <Check size={17} />}
+                  </button>
+                </div>
               );
             })}
           </div>

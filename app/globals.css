@@ -806,6 +806,14 @@ input.oh-date::-webkit-calendar-picker-indicator { opacity: 0.55; cursor: pointe
 .sx-row { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 13px; width: 100%; padding: 14px 16px; border-bottom: 1px solid var(--border); transition: background 0.12s; }
 .sx-row:last-child { border-bottom: none; }
 .sx-row:hover { background: var(--paper-2); }
+/* Follow-up row = the tappable row + a "mark done" tick beside it. The divider
+   moves to the wrapper so the row and the tick share one border. */
+.sx-fu-row { display: flex; align-items: stretch; gap: 8px; padding-right: 12px; border-bottom: 1px solid var(--border); }
+.sx-fu-row:last-child { border-bottom: none; }
+.sx-fu-row .sx-row { flex: 1; min-width: 0; width: auto; border-bottom: none; }
+.sx-fu-done { all: unset; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 44px; margin: 9px 0; border: 1px solid var(--border); border-radius: 12px; background: var(--paper); color: var(--ink-3); cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; }
+.sx-fu-done:hover:not(:disabled) { color: #fff; border-color: transparent; background: var(--success); }
+.sx-fu-done:disabled { opacity: 0.55; cursor: default; }
 .sx-row .avatar { flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-family: var(--font-sans); font-weight: 700; font-size: 18px; color: var(--accent); background: var(--accent-soft); }
 .sx-row .body { flex: 1; min-width: 0; }
 .sx-row .title { font-size: 14.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
