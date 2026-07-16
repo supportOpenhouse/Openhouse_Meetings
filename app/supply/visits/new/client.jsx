@@ -12,6 +12,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Mic,
+  RefreshCw,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import Recorder from '@/components/Recorder';
@@ -708,6 +709,26 @@ function CpPicker({ onSelect }) {
   const [loading, setLoading] = useState(true);
   const debounce = useRef(null);
   const seq = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // The partner inventory is cached for a few minutes, so a partner registered
+  // moments ago may not be listed yet. Refresh re-runs the lookup with the
+  // cache bypassed.
+  async function doRefresh() {
+    setRefreshing(true);
+    const mySeq = ++seq.current;
+    try {
+      const res = await fetch(`/api/supply/cps?search=${encodeURIComponent(q)}&refresh=1`, {
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (mySeq === seq.current) setCps(data?.cps ?? []);
+    } catch {
+      /* keep the current list */
+    } finally {
+      if (mySeq === seq.current) setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
@@ -750,9 +771,22 @@ function CpPicker({ onSelect }) {
         />
       </div>
 
-      <Link href="/supply/cps/new" className="oh-btn ghost block" style={{ marginBottom: 14 }}>
-        <Plus size={16} /> Register a new partner
-      </Link>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <Link href="/supply/cps/new" className="oh-btn ghost block" style={{ flex: 1 }}>
+          <Plus size={16} /> Register a new partner
+        </Link>
+        <button
+          type="button"
+          className="oh-btn ghost"
+          onClick={doRefresh}
+          disabled={refreshing}
+          title="Refresh — pull the latest partners (use this if one you just registered is missing)"
+          aria-label="Refresh partner list"
+          style={{ flexShrink: 0 }}
+        >
+          <RefreshCw size={15} className={refreshing ? 'oh-spin' : undefined} />
+        </button>
+      </div>
 
       {loading && cps.length === 0 ? (
         <div

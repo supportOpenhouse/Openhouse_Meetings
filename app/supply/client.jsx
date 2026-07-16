@@ -172,7 +172,8 @@ export default function SalesDashboardClient({ initialData, user }) {
                     title="Mark this follow-up done"
                     aria-label={`Mark follow-up for ${f.cp_name || 'this partner'} done`}
                   >
-                    {busy ? <Loader2 size={17} className="oh-spin" /> : <Check size={17} />}
+                    {busy ? <Loader2 size={15} className="oh-spin" /> : <Check size={15} />}
+                    <span>Mark done</span>
                   </button>
                 </div>
               );

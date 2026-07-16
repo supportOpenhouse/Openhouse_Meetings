@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { auth } from '@/auth';
-import { searchInventoryCps } from '@/lib/salesCp';
+import { searchInventoryCps, recentlyAddedCps, INVENTORY_TAG } from '@/lib/salesCp';
 import { cpCodeVisitStats } from '@/lib/salesQueries';
 import { isCpMeetingsConfigured, getNextCpCode, createBroker } from '@/lib/cpMeetingsApi';
 import { captureServer } from '@/lib/posthogServer';
@@ -20,8 +21,16 @@ export async function GET(request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const search = new URL(request.url).searchParams.get('search') || '';
-  const { configured, cps } = await searchInventoryCps(search, 30);
+  const sp = new URL(request.url).searchParams;
+  const search = sp.get('search') || '';
+  // ?refresh=1 → skip the 5-minute inventory cache (and the browser's SWR copy).
+  // The "Refresh" button uses this so a partner registered seconds ago appears.
+  const fresh = sp.get('refresh') === '1';
+  // ?recent=1 → the most recently registered partners (no search term).
+  const { configured, cps } =
+    sp.get('recent') === '1'
+      ? await recentlyAddedCps(12, { fresh })
+      : await searchInventoryCps(search, 30, { fresh });
   if (!configured) {
     return NextResponse.json({ cps: [], configured: false });
   }
@@ -36,8 +45,12 @@ export async function GET(request) {
     { cps: merged, configured: true },
     // Same-user browser cache: serve the last result instantly while it
     // revalidates, so repeating a search feels instant. Pairs with the server
-    // inventory cache.
-    { headers: { 'Cache-Control': 'private, max-age=0, stale-while-revalidate=60' } }
+    // inventory cache. A forced refresh must bypass it too.
+    {
+      headers: {
+        'Cache-Control': fresh ? 'no-store' : 'private, max-age=0, stale-while-revalidate=60',
+      },
+    }
   );
 }
 
@@ -105,6 +118,9 @@ export async function POST(request) {
     });
 
     const finalCode = result?.cpCode || cpCode;
+    // Drop the cached inventory searches so the partner we just created is
+    // findable straight away instead of after the 5-minute TTL.
+    revalidateTag(INVENTORY_TAG);
     await captureServer(session.user.id, 'partner_registered', {
       cp_code: finalCode,
       city,
