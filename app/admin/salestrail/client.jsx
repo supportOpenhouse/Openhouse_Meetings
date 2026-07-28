@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Cloud,
@@ -11,20 +11,96 @@ import {
   History,
   Pause,
   Play,
+  ListFilter,
+  ChevronDown,
+  ChevronRight,
+  Phone,
 } from 'lucide-react';
+
+const SUPPLY_ROLES = ['supply_rm', 'supply_manager'];
+const isSupply = (role) => SUPPLY_ROLES.includes(role);
+const STATUS_LABEL = { ready: 'Ready', fetching: 'Queued', failed: 'Failed', no_recording: 'No recording' };
 
 // Admin Call-sync screen — status + manual control for the Salestrail pull.
 export default function SalestrailClient({ initial }) {
   const router = useRouter();
-  const { state, counts, configured } = initial;
+  const {
+    state,
+    counts,
+    configured,
+    persons = [],
+    defaultSinceDays = 14,
+  } = initial;
   const paused = !!state?.paused;
+
+  // ── Pulled-recordings browser (filters + foldable date groups) ──────────
+  // Fetched client-side (can be thousands of rows) — see the mount effect below.
+  const RECORDINGS_LIMIT = 5000;
+  const [recs, setRecs] = useState([]);
+  const [recsLoading, setRecsLoading] = useState(false);
+  const [recsLoaded, setRecsLoaded] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [person, setPerson] = useState('all');
+  const [division, setDivision] = useState('all');
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const groups = useMemo(() => groupByDate(recs), [recs]);
+  // Newest day open by default; re-applied whenever the result set changes.
+  useEffect(() => {
+    setExpanded(new Set(groups.length ? [groups[0].key] : []));
+  }, [groups]);
+
+  // Fetch the filtered recordings. Runs once the mount effect has set the dates
+  // (skipped while fromDate is empty), then on every filter change (debounced).
+  useEffect(() => {
+    if (!fromDate) return undefined;
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setRecsLoading(true);
+      try {
+        const qs = new URLSearchParams();
+        qs.set('since', `${fromDate}T00:00:00`);
+        if (toDate) qs.set('until', `${toDate}T23:59:59`);
+        if (person !== 'all') qs.set('rm', person);
+        if (division !== 'all') qs.set('division', division);
+        const r = await fetch(`/api/admin/salestrail/recordings?${qs}`, { signal: ctrl.signal });
+        if (r.ok) {
+          setRecs((await r.json()).recordings || []);
+          setRecsLoaded(true);
+        }
+      } catch {
+        /* aborted or failed — keep last */
+      } finally {
+        setRecsLoading(false);
+      }
+    }, 250);
+    return () => {
+      ctrl.abort();
+      clearTimeout(t);
+    };
+  }, [fromDate, toDate, person, division]);
+
+  function toggleGroup(key) {
+    setExpanded((s) => {
+      const n = new Set(s);
+      n.has(key) ? n.delete(key) : n.add(key);
+      return n;
+    });
+  }
   const [busy, setBusy] = useState(null); // 'sync' | 'pause' | 'rescan30' | 'rescan90'
   const [flash, setFlash] = useState(null); // { ok, text }
   // Dates + night-window check are computed client-side only — formatting on
   // the server (UTC) and re-checking in the browser (IST) would otherwise
   // hydration-mismatch.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    // Default the date filters to the same window the server pre-loaded (IST).
+    const now = Date.now();
+    setToDate(istDateKey(now));
+    setFromDate(istDateKey(now - defaultSinceDays * 86400000));
+  }, [defaultSinceDays]);
   const inNightWindow = mounted ? isNightWindowIST() : true;
 
   async function run(label, body) {
@@ -185,6 +261,119 @@ export default function SalestrailClient({ initial }) {
         )}
       </div>
 
+      {mounted && (
+        <div className="st-section">
+          <div className="st-section-head">
+            <ListFilter size={14} /> Pulled recordings
+          </div>
+
+          <div className="rec-filters">
+            <label className="rec-field">
+              <span>From</span>
+              <input
+                className="oh-input"
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+            <label className="rec-field">
+              <span>To</span>
+              <input
+                className="oh-input"
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+            <label className="rec-field">
+              <span>Person</span>
+              <select className="oh-input" value={person} onChange={(e) => setPerson(e.target.value)}>
+                <option value="all">Everyone</option>
+                {persons.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name || p.email}
+                    {isSupply(p.role) ? ' · Supply' : ''} ({p.n})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="rec-seg" role="group" aria-label="Division">
+              {[['all', 'All'], ['supply', 'Supply'], ['demand', 'Demand']].map(([v, l]) => (
+                <button key={v} type="button" className={division === v ? 'on' : ''} onClick={() => setDivision(v)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {recsLoading && <Loader2 size={15} className="oh-spin" style={{ color: 'var(--ink-3)' }} />}
+          </div>
+
+          <div className="rec-summary">
+            <strong>{recs.length.toLocaleString('en-IN')}</strong> recording{recs.length === 1 ? '' : 's'} ·{' '}
+            {groups.length} day{groups.length === 1 ? '' : 's'}
+            {recs.length >= RECORDINGS_LIMIT && (
+              <span className="rec-cap"> · showing the most recent {RECORDINGS_LIMIT.toLocaleString('en-IN')} — narrow the range for older</span>
+            )}
+          </div>
+
+          {!recsLoaded && recsLoading ? (
+            <div className="st-empty" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Loader2 size={15} className="oh-spin" /> Loading recordings…
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="st-empty">No recordings match these filters.</div>
+          ) : (
+            <div className="rec-groups">
+              {groups.map((g) => {
+                const open = expanded.has(g.key);
+                return (
+                  <div key={g.key} className="rec-group">
+                    <button
+                      type="button"
+                      className="rec-ghead"
+                      onClick={() => toggleGroup(g.key)}
+                      aria-expanded={open}
+                    >
+                      {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      <span className="rec-date">{g.label}</span>
+                      <span className="rec-gmeta">
+                        {g.count} call{g.count === 1 ? '' : 's'} · {fmtDur(g.totalDuration)}
+                        {g.supply > 0 && g.demand > 0 ? ` · ${g.supply}S / ${g.demand}D` : ''}
+                        {g.ready ? ` · ${g.ready} ready` : ''}
+                        {g.queued ? ` · ${g.queued} queued` : ''}
+                        {g.failed ? ` · ${g.failed} failed` : ''}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="rec-rows">
+                        {g.items.map((r) => (
+                          <div key={r.id} className="rec-row">
+                            <span className="rec-name">{r.rm_name || r.rm_email || '—'}</span>
+                            <span className={`rec-div ${isSupply(r.rm_role) ? 'supply' : 'demand'}`}>
+                              {isSupply(r.rm_role) ? 'Supply' : 'Demand'}
+                            </span>
+                            <span className="rec-time">{istTime(r.started_at)}</span>
+                            <span className="rec-num">
+                              <Phone size={11} /> {r.cp_mobile || '—'}
+                            </span>
+                            <span className="rec-dur">{fmtDur(r.duration_seconds)}</span>
+                            <span className={`rec-status s-${r.status}`}>
+                              {STATUS_LABEL[r.status] || r.status}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <style jsx>{`
         .st-warn {
           display: flex;
@@ -296,10 +485,45 @@ export default function SalestrailClient({ initial }) {
           border-radius: 11px;
           padding: 6px 16px;
         }
+        .rec-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
+        .rec-field { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; color: var(--ink-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+        .rec-field .oh-input { min-width: 130px; }
+        .rec-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; align-self: flex-end; }
+        .rec-seg button { all: unset; cursor: pointer; padding: 8px 14px; font-size: 12.5px; color: var(--ink-2); }
+        .rec-seg button + button { border-left: 1px solid var(--border); }
+        .rec-seg button.on { background: var(--accent); color: #fff; }
+        .rec-summary { font-size: 12.5px; color: var(--ink-3); margin-bottom: 10px; }
+        .rec-summary strong { color: var(--ink); }
+        .rec-cap { color: #b97417; }
+        .rec-groups { display: flex; flex-direction: column; gap: 8px; }
+        .rec-group { border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: var(--paper); }
+        .rec-ghead { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 9px; padding: 12px 14px; }
+        .rec-ghead:hover { background: var(--paper-2); }
+        .rec-date { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+        .rec-gmeta { font-size: 12px; color: var(--ink-3); margin-left: auto; text-align: right; }
+        .rec-rows { border-top: 1px solid var(--border); }
+        .rec-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; flex-wrap: wrap; }
+        .rec-row:last-child { border-bottom: none; }
+        .rec-name { font-weight: 600; color: var(--ink); }
+        .rec-div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 5px; }
+        .rec-div.supply { background: rgba(var(--accent-rgb), 0.1); color: var(--accent); }
+        .rec-div.demand { background: var(--paper-2); color: var(--ink-2); }
+        .rec-time { color: var(--ink-2); }
+        .rec-num { color: var(--ink-2); display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono), monospace; font-size: 11.5px; }
+        .rec-dur { color: var(--ink-3); font-family: var(--font-mono), monospace; margin-left: auto; }
+        .rec-status { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 5px; }
+        .rec-status.s-ready { background: rgba(47, 111, 47, 0.1); color: #2f6f2f; }
+        .rec-status.s-fetching { background: rgba(196, 122, 26, 0.12); color: #b97417; }
+        .rec-status.s-failed { background: rgba(176, 48, 33, 0.1); color: #b03021; }
+        .rec-status.s-no_recording { background: var(--paper-2); color: var(--ink-3); }
         @media (max-width: 620px) {
           .st-cards {
             grid-template-columns: repeat(2, 1fr);
           }
+          .rec-field, .rec-field .oh-input { min-width: 0; }
+          .rec-field { flex: 1; }
+          .rec-dur { margin-left: 0; }
+          .rec-gmeta { font-size: 11px; }
         }
       `}</style>
     </div>
@@ -368,6 +592,66 @@ function fmtShort(iso) {
   } catch {
     return String(iso);
   }
+}
+
+// 'YYYY-MM-DD' in IST — a stable group/sort key (accepts ms or ISO string).
+function istDateKey(v) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(v));
+}
+
+function istDateLabel(iso) {
+  return new Date(iso).toLocaleDateString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function istTime(iso) {
+  return new Date(iso).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function fmtDur(s) {
+  const n = Math.max(0, Math.round(s || 0));
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+}
+
+// Group DESC-ordered recordings into IST-date buckets (insertion order = newest
+// day first; items within a day stay newest-first).
+function groupByDate(recs) {
+  const map = new Map();
+  for (const r of recs) {
+    const key = istDateKey(r.started_at);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  return [...map.entries()].map(([key, items]) => {
+    const supply = items.filter((i) => isSupply(i.rm_role)).length;
+    return {
+      key,
+      label: istDateLabel(items[0].started_at),
+      items,
+      count: items.length,
+      totalDuration: items.reduce((a, i) => a + (i.duration_seconds || 0), 0),
+      ready: items.filter((i) => i.status === 'ready').length,
+      queued: items.filter((i) => i.status === 'fetching').length,
+      failed: items.filter((i) => i.status === 'failed').length,
+      supply,
+      demand: items.length - supply,
+    };
+  });
 }
 
 // IST night window for the continuous drain — must mirror the server-side

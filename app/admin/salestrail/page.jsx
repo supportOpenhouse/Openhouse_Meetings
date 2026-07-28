@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { neon } from '@neondatabase/serverless';
+import { salestrailPersons } from '@/lib/salestrailRecordings';
 import SalestrailClient from './client';
 
 // Admin Call-sync page — observe + manually trigger the Salestrail sync.
@@ -28,11 +29,21 @@ export default async function AdminSalestrailPage() {
     process.env.SALESTRAIL_API_USERNAME && process.env.SALESTRAIL_API_PASSWORD
   );
 
+  // The recordings list is fetched client-side (it can be thousands of rows —
+  // too heavy to embed in the page HTML). Only the small person list is pre-loaded.
+  const persons = await salestrailPersons();
+
   return (
     <>
       <SalestrailClient
         initial={JSON.parse(
-          JSON.stringify({ state: stateRow || null, counts: counts || {}, configured })
+          JSON.stringify({
+            state: stateRow || null,
+            counts: counts || {},
+            configured,
+            persons,
+            defaultSinceDays: 14,
+          })
         )}
       />
     </>
