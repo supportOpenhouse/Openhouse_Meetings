@@ -46,8 +46,8 @@ export default function SalestrailClient({ initial }) {
   const [division, setDivision] = useState('all');
   const [expanded, setExpanded] = useState(() => new Set());
 
-  const groups = useMemo(() => groupByDate(recs), [recs]);
-  // Newest day open by default; re-applied whenever the result set changes.
+  const groups = useMemo(() => groupByPerson(recs), [recs]);
+  // Busiest person open by default; re-applied whenever the result set changes.
   useEffect(() => {
     setExpanded(new Set(groups.length ? [groups[0].key] : []));
   }, [groups]);
@@ -329,8 +329,8 @@ export default function SalestrailClient({ initial }) {
           </div>
 
           <div className="rec-summary">
-            <strong>{recs.length.toLocaleString('en-IN')}</strong> recording{recs.length === 1 ? '' : 's'} ·{' '}
-            {groups.length} day{groups.length === 1 ? '' : 's'}
+            <strong>{recs.length.toLocaleString('en-IN')}</strong> call{recs.length === 1 ? '' : 's'} ·{' '}
+            {groups.length} {groups.length === 1 ? 'person' : 'people'}
             {recs.length >= RECORDINGS_LIMIT && (
               <span className="rec-cap"> · showing the most recent {RECORDINGS_LIMIT.toLocaleString('en-IN')} — narrow the range for older</span>
             )}
@@ -361,11 +361,12 @@ export default function SalestrailClient({ initial }) {
                     >
                       {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       <span className="rec-date">{g.label}</span>
+                      <span className={`rec-div ${isSupply(g.role) ? 'supply' : 'demand'}`}>
+                        {isSupply(g.role) ? 'Supply' : 'Demand'}
+                      </span>
                       <span className="rec-gmeta">
-                        {g.count} call{g.count === 1 ? '' : 's'} · {fmtDur(g.totalDuration)}
-                        {g.supply > 0 && g.demand > 0 ? ` · ${g.supply}S / ${g.demand}D` : ''}
-                        {g.ready ? ` · ${g.ready} ready` : ''}
-                        {g.queued ? ` · ${g.queued} queued` : ''}
+                        {g.count} call{g.count === 1 ? '' : 's'} · {g.recorded} rec / {g.noRec} no-rec ·{' '}
+                        {fmtMinutes(g.totalDuration)}
                         {g.failed ? ` · ${g.failed} failed` : ''}
                       </span>
                     </button>
@@ -391,11 +392,7 @@ export default function SalestrailClient({ initial }) {
                                   : undefined
                               }
                             >
-                              <span className="rec-name">{r.rm_name || r.rm_email || '—'}</span>
-                              <span className={`rec-div ${isSupply(r.rm_role) ? 'supply' : 'demand'}`}>
-                                {isSupply(r.rm_role) ? 'Supply' : 'Demand'}
-                              </span>
-                              <span className="rec-time">{istTime(r.started_at)}</span>
+                              <span className="rec-when">{istDateTime(r.started_at)}</span>
                               <span className="rec-num">
                                 <Phone size={11} /> {r.cp_mobile || '—'}
                               </span>
@@ -564,7 +561,7 @@ export default function SalestrailClient({ initial }) {
         .rec-div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 5px; }
         .rec-div.supply { background: rgba(var(--accent-rgb), 0.1); color: var(--accent); }
         .rec-div.demand { background: var(--paper-2); color: var(--ink-2); }
-        .rec-time { color: var(--ink-2); }
+        .rec-when { color: var(--ink-2); min-width: 118px; }
         .rec-num { color: var(--ink-2); display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono), monospace; font-size: 11.5px; }
         .rec-dur { color: var(--ink-3); font-family: var(--font-mono), monospace; margin-left: auto; }
         .rec-status { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 5px; }
@@ -660,19 +657,12 @@ function istDateKey(v) {
   }).format(new Date(v));
 }
 
-function istDateLabel(iso) {
-  return new Date(iso).toLocaleDateString('en-IN', {
+// "27 Jul, 7:45 pm" in IST — shown per row now that grouping is by person.
+function istDateTime(iso) {
+  return new Date(iso).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
-    weekday: 'short',
     day: 'numeric',
     month: 'short',
-    year: 'numeric',
-  });
-}
-
-function istTime(iso) {
-  return new Date(iso).toLocaleTimeString('en-IN', {
-    timeZone: 'Asia/Kolkata',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -684,30 +674,35 @@ function fmtDur(s) {
   return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
 }
 
-// Group DESC-ordered recordings into IST-date buckets (insertion order = newest
-// day first; items within a day stay newest-first).
-function groupByDate(recs) {
+// Total talk time as minutes / hours (per-person totals get large).
+function fmtMinutes(s) {
+  const min = Math.round((s || 0) / 60);
+  if (min < 60) return `${min}m`;
+  return `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
+// Group DESC-ordered recordings by the person (RM) who made the call — busiest
+// person first; each person's calls stay newest-first.
+function groupByPerson(recs) {
   const map = new Map();
   for (const r of recs) {
-    const key = istDateKey(r.started_at);
+    const key = r.rm_id || r.rm_email || 'unknown';
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(r);
   }
-  return [...map.entries()].map(([key, items]) => {
-    const supply = items.filter((i) => isSupply(i.rm_role)).length;
-    return {
-      key,
-      label: istDateLabel(items[0].started_at),
-      items,
-      count: items.length,
-      totalDuration: items.reduce((a, i) => a + (i.duration_seconds || 0), 0),
-      ready: items.filter((i) => i.status === 'ready').length,
-      queued: items.filter((i) => i.status === 'fetching').length,
-      failed: items.filter((i) => i.status === 'failed').length,
-      supply,
-      demand: items.length - supply,
-    };
-  });
+  const groups = [...map.entries()].map(([key, items]) => ({
+    key,
+    label: items[0].rm_name || items[0].rm_email || 'Unknown',
+    role: items[0].rm_role,
+    items,
+    count: items.length,
+    totalDuration: items.reduce((a, i) => a + (i.duration_seconds || 0), 0),
+    recorded: items.filter((i) => i.status === 'ready').length,
+    noRec: items.filter((i) => i.status === 'no_recording').length,
+    failed: items.filter((i) => i.status === 'failed').length,
+  }));
+  groups.sort((a, b) => b.count - a.count);
+  return groups;
 }
 
 // IST night window for the continuous drain — must mirror the server-side

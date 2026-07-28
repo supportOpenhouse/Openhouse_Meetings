@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Users, X, Calendar } from 'lucide-react';
+import { Users, X, Calendar, Cloud, ChevronRight } from 'lucide-react';
 import MeetingsTable from '@/components/MeetingsTable';
 import MeetingDetail from '@/components/MeetingDetail';
 import MeetingThreadDetail from '@/components/MeetingThreadDetail';
@@ -41,7 +41,20 @@ function toLocalDateValue(d) {
   return `${y}-${m}-${day}`;
 }
 
-export default function AdminOverviewClient({ initialMeetings, rms, cities = [] }) {
+// One stat tile in the Call-sync box.
+function StBox({ label, value, tone }) {
+  const color = tone === 'good' ? '#2f6f2f' : tone === 'bad' ? '#b03021' : 'var(--ink)';
+  return (
+    <div style={{ background: 'var(--paper)', border: '1px solid var(--border)', borderRadius: 12, padding: '13px 15px' }}>
+      <div style={{ fontFamily: 'var(--font-mono), monospace', fontSize: 22, color, lineHeight: 1 }}>
+        {(value ?? 0).toLocaleString('en-IN')}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+export default function AdminOverviewClient({ initialMeetings, rms, cities = [], salestrail = null }) {
   const [meetings, setMeetings] = useState(initialMeetings);
   usePollWhileProcessing(meetings, setMeetings);
   const [openMeeting, setOpenMeeting] = useState(null);
@@ -282,6 +295,31 @@ export default function AdminOverviewClient({ initialMeetings, rms, cities = [] 
           onClick={() => applyPreset('all')}
         />
       </div>
+
+      {/* Call sync (Salestrail) roll-up */}
+      {salestrail && salestrail.total > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 className="oh-h2" style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <Cloud size={17} /> Call sync
+            </h2>
+            <Link
+              href="/admin/salestrail"
+              style={{ fontSize: 13, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 2, textDecoration: 'none', fontWeight: 600 }}
+            >
+              View all <ChevronRight size={15} />
+            </Link>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
+            <StBox label="Calls pulled" value={salestrail.total} />
+            <StBox label="Recorded" value={salestrail.recorded} tone="good" />
+            <StBox label="No recording" value={salestrail.noRecording} />
+            <StBox label="Recorded minutes" value={salestrail.recordedMinutes} />
+            <StBox label="Total minutes" value={salestrail.totalMinutes} />
+            {salestrail.failed > 0 && <StBox label="Failed" value={salestrail.failed} tone="bad" />}
+          </div>
+        </div>
+      )}
 
       {/* Per-RM cards — reflect the current date filter */}
       {perRm.length > 0 && (
