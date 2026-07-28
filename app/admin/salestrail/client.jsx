@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Phone,
 } from 'lucide-react';
+import MeetingDetail from '@/components/MeetingDetail';
 
 const SUPPLY_ROLES = ['supply_rm', 'supply_manager'];
 const isSupply = (role) => SUPPLY_ROLES.includes(role);
@@ -87,6 +88,23 @@ export default function SalestrailClient({ initial }) {
       n.has(key) ? n.delete(key) : n.add(key);
       return n;
     });
+  }
+
+  // Open a ready call's full recording + transcript + summary (same detail view
+  // the dashboard/insights use). Only 'ready' rows have content to show.
+  const [detail, setDetail] = useState(null);
+  const [detailLoadingId, setDetailLoadingId] = useState(null);
+  async function openDetail(id) {
+    setDetailLoadingId(id);
+    try {
+      const r = await fetch(`/api/meetings/${id}`);
+      const j = await r.json();
+      if (r.ok && j.meeting) setDetail(j.meeting);
+    } catch {
+      /* ignore — the row stays put */
+    } finally {
+      setDetailLoadingId(null);
+    }
   }
   const [busy, setBusy] = useState(null); // 'sync' | 'pause' | 'rescan30' | 'rescan90'
   const [flash, setFlash] = useState(null); // { ok, text }
@@ -317,6 +335,11 @@ export default function SalestrailClient({ initial }) {
               <span className="rec-cap"> · showing the most recent {RECORDINGS_LIMIT.toLocaleString('en-IN')} — narrow the range for older</span>
             )}
           </div>
+          <div className="rec-note">
+            <strong>Ready</strong> calls are clickable — open the recording, transcript &amp; summary.{' '}
+            <strong>No recording</strong> means Salestrail has no audio for that call: usually a
+            missed / unanswered call, or one the recorder didn&apos;t capture.
+          </div>
 
           {!recsLoaded && recsLoading ? (
             <div className="st-empty" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -348,22 +371,48 @@ export default function SalestrailClient({ initial }) {
                     </button>
                     {open && (
                       <div className="rec-rows">
-                        {g.items.map((r) => (
-                          <div key={r.id} className="rec-row">
-                            <span className="rec-name">{r.rm_name || r.rm_email || '—'}</span>
-                            <span className={`rec-div ${isSupply(r.rm_role) ? 'supply' : 'demand'}`}>
-                              {isSupply(r.rm_role) ? 'Supply' : 'Demand'}
-                            </span>
-                            <span className="rec-time">{istTime(r.started_at)}</span>
-                            <span className="rec-num">
-                              <Phone size={11} /> {r.cp_mobile || '—'}
-                            </span>
-                            <span className="rec-dur">{fmtDur(r.duration_seconds)}</span>
-                            <span className={`rec-status s-${r.status}`}>
-                              {STATUS_LABEL[r.status] || r.status}
-                            </span>
-                          </div>
-                        ))}
+                        {g.items.map((r) => {
+                          const openable = r.status === 'ready';
+                          return (
+                            <div
+                              key={r.id}
+                              className={`rec-row ${openable ? 'clickable' : ''}`}
+                              onClick={openable ? () => openDetail(r.id) : undefined}
+                              role={openable ? 'button' : undefined}
+                              tabIndex={openable ? 0 : undefined}
+                              onKeyDown={
+                                openable
+                                  ? (e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        openDetail(r.id);
+                                      }
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <span className="rec-name">{r.rm_name || r.rm_email || '—'}</span>
+                              <span className={`rec-div ${isSupply(r.rm_role) ? 'supply' : 'demand'}`}>
+                                {isSupply(r.rm_role) ? 'Supply' : 'Demand'}
+                              </span>
+                              <span className="rec-time">{istTime(r.started_at)}</span>
+                              <span className="rec-num">
+                                <Phone size={11} /> {r.cp_mobile || '—'}
+                              </span>
+                              <span className="rec-dur">{fmtDur(r.duration_seconds)}</span>
+                              <span className={`rec-status s-${r.status}`}>
+                                {STATUS_LABEL[r.status] || r.status}
+                              </span>
+                              <span className="rec-go">
+                                {detailLoadingId === r.id ? (
+                                  <Loader2 size={14} className="oh-spin" />
+                                ) : openable ? (
+                                  <ChevronRight size={14} />
+                                ) : null}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -373,6 +422,8 @@ export default function SalestrailClient({ initial }) {
           )}
         </div>
       )}
+
+      {detail && <MeetingDetail meeting={detail} onClose={() => setDetail(null)} />}
 
       <style jsx>{`
         .st-warn {
@@ -492,9 +543,11 @@ export default function SalestrailClient({ initial }) {
         .rec-seg button { all: unset; cursor: pointer; padding: 8px 14px; font-size: 12.5px; color: var(--ink-2); }
         .rec-seg button + button { border-left: 1px solid var(--border); }
         .rec-seg button.on { background: var(--accent); color: #fff; }
-        .rec-summary { font-size: 12.5px; color: var(--ink-3); margin-bottom: 10px; }
+        .rec-summary { font-size: 12.5px; color: var(--ink-3); margin-bottom: 6px; }
         .rec-summary strong { color: var(--ink); }
         .rec-cap { color: #b97417; }
+        .rec-note { font-size: 11.5px; color: var(--ink-3); line-height: 1.55; margin-bottom: 12px; }
+        .rec-note strong { color: var(--ink-2); font-weight: 600; }
         .rec-groups { display: flex; flex-direction: column; gap: 8px; }
         .rec-group { border: 1px solid var(--border); border-radius: 11px; overflow: hidden; background: var(--paper); }
         .rec-ghead { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 9px; padding: 12px 14px; }
@@ -504,6 +557,9 @@ export default function SalestrailClient({ initial }) {
         .rec-rows { border-top: 1px solid var(--border); }
         .rec-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; flex-wrap: wrap; }
         .rec-row:last-child { border-bottom: none; }
+        .rec-row.clickable { cursor: pointer; }
+        .rec-row.clickable:hover { background: var(--paper-2); }
+        .rec-go { display: inline-flex; align-items: center; color: var(--ink-3); width: 14px; }
         .rec-name { font-weight: 600; color: var(--ink); }
         .rec-div { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 5px; }
         .rec-div.supply { background: rgba(var(--accent-rgb), 0.1); color: var(--accent); }
