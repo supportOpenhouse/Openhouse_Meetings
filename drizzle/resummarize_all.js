@@ -9,6 +9,8 @@
 //   --legacy-only   only meetings whose summary is the old flat shape
 //   --since=YYYY-MM-DD   only meetings started on/after this date
 //   --type=call     only meetings of this meeting_type (call|engagement|visit|onboarding)
+//   --max-duration=N only meetings this many seconds or shorter (e.g. the
+//                    content-free calls that were fabricated: --max-duration=60)
 //   --limit=N       safety cap (default 1000)
 //   --concurrency=N  parallel Claude calls (default 3)
 //   --dry-run       fetch + log, don't write or call Claude
@@ -36,6 +38,7 @@ const args = Object.fromEntries(
 const LEGACY_ONLY = !!args['legacy-only'];
 const SINCE = args.since ? new Date(args.since) : null;
 const TYPE = args.type ? String(args.type) : null;
+const MAX_DURATION = args['max-duration'] != null ? parseInt(args['max-duration'], 10) : null;
 const LIMIT = parseInt(args.limit || '1000', 10);
 const CONCURRENCY = Math.max(1, parseInt(args.concurrency || '3', 10));
 const DRY = !!args['dry-run'];
@@ -48,36 +51,26 @@ function isLegacyShape(summary) {
 }
 
 async function pickMeetings() {
-  const sinceClause = SINCE ? sql`AND m.started_at >= ${SINCE.toISOString()}` : sql``;
-  // We can't conditionally splice SQL with the neon HTTP driver cleanly, so
-  // branch in JS.
-  const rows = SINCE
-    ? await sql`
-        SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
-               m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
-        FROM meetings m
-        LEFT JOIN users u ON u.id = m.rm_id
-        WHERE m.status = 'ready'
-          AND m.transcript_text IS NOT NULL
-          AND length(m.transcript_text) > 0
-          AND m.started_at >= ${SINCE.toISOString()}
-        ORDER BY m.started_at DESC
-        LIMIT ${LIMIT}
-      `
-    : await sql`
-        SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
-               m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
-        FROM meetings m
-        LEFT JOIN users u ON u.id = m.rm_id
-        WHERE m.status = 'ready'
-          AND m.transcript_text IS NOT NULL
-          AND length(m.transcript_text) > 0
-        ORDER BY m.started_at DESC
-        LIMIT ${LIMIT}
-      `;
-  let result = LEGACY_ONLY ? rows.filter((r) => isLegacyShape(r.summary)) : rows;
-  if (TYPE) result = result.filter((r) => (r.meeting_type || 'engagement') === TYPE);
-  return result;
+  // All filters pushed into SQL (NULL-guard pattern) so LIMIT applies to the
+  // filtered set — e.g. --type=call gets N *calls*, not N recent meetings.
+  const since = SINCE ? SINCE.toISOString() : null;
+  const type = TYPE || null;
+  const maxDur = Number.isFinite(MAX_DURATION) ? MAX_DURATION : null;
+  const rows = await sql`
+    SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
+           m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
+    FROM meetings m
+    LEFT JOIN users u ON u.id = m.rm_id
+    WHERE m.status = 'ready'
+      AND m.transcript_text IS NOT NULL
+      AND length(m.transcript_text) > 0
+      AND (${since}::timestamptz IS NULL OR m.started_at >= ${since}::timestamptz)
+      AND (${type}::text IS NULL OR coalesce(m.meeting_type, 'engagement') = ${type}::text)
+      AND (${maxDur}::int IS NULL OR m.duration_seconds <= ${maxDur}::int)
+    ORDER BY m.started_at DESC
+    LIMIT ${LIMIT}
+  `;
+  return LEGACY_ONLY ? rows.filter((r) => isLegacyShape(r.summary)) : rows;
 }
 
 async function runOne(m) {
