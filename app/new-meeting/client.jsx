@@ -179,6 +179,8 @@ export default function NewMeetingClient({ user }) {
     // can put the page back together if the user navigates away. The
     // accumSec/lastResumeMs fields are owned by NativeRecorder itself.
     setRecordingSession({
+      flow: 'demand',
+      returnPath: '/new-meeting',
       form,
       isOnboarding,
       startedAtMs: now,

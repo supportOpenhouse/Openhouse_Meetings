@@ -20,6 +20,8 @@ import NativeRecorder from '@/components/NativeRecorder';
 import { uploadVisitAudio, createSalesVisit } from '@/lib/salesUpload';
 import { fmtDuration } from '@/lib/utils';
 import { initials } from '@/lib/salesFormat';
+import { getMicStatus } from '@/lib/micRecorder';
+import { getRecordingSession, setRecordingSession, clearRecordingSession } from '@/lib/recordingSession';
 
 const ENGAGEMENT = [
   { key: 'positive', label: 'Positive' },
@@ -72,40 +74,80 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   const [uploadStatus, setUploadStatus] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    try {
-      setIsNative(Capacitor.isNativePlatform());
-    } catch {}
-  }, []);
+  // Set on mount when we restore an in-progress recording — NativeRecorder reads
+  // it to rebuild its timer without touching the still-running mic.
+  const [resumeSession, setResumeSession] = useState(null);
 
-  // Preselected CP: fetch it, then jump straight to recording.
+  // Mount: detect the native platform, then either RESTORE an in-progress visit
+  // recording (survived a screen-lock / WebView reload via the foreground
+  // service) or run the normal preselected-CP flow.
   useEffect(() => {
-    if (!preselectedCpId) return;
+    let native = false;
+    try { native = Capacitor.isNativePlatform(); } catch {}
+    setIsNative(native);
+
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch(`/api/supply/cps/${preselectedCpId}`);
-        const data = await res.json();
+      if (native) {
+        let status = 'idle';
+        try { status = await getMicStatus(); } catch {}
         if (cancelled) return;
-        if (data?.cp) {
-          selectCp(data.cp);
-        } else {
-          setStep('cp');
+        if (status === 'recording' || status === 'paused') {
+          const sess = getRecordingSession();
+          if (sess?.flow === 'supply' && sess.cp) {
+            // Put the page back exactly where the rep left it.
+            setCp(sess.cp);
+            if (sess.startedAtMs) recordStartRef.current = new Date(sess.startedAtMs);
+            setResumeSession(sess);
+            if (status === 'paused') {
+              setReviewDuration(sess.accumSec || 0);
+              setStep('review');
+            } else {
+              setStep('record');
+            }
+            return; // restored — skip the preselect flow
+          }
+          // Orphan (a demand recording, or no CP context) — free the mic so a
+          // fresh visit can be recorded cleanly.
+          try { const { discardMicRecording } = await import('@/lib/micRecorder'); await discardMicRecording(); } catch {}
+          try { const { stopMicForeground } = await import('@/lib/micForeground'); await stopMicForeground(); } catch {}
         }
-      } catch {
-        if (!cancelled) setStep('cp');
+      }
+
+      // Preselected CP: fetch it, then jump straight to recording.
+      if (preselectedCpId && !cancelled) {
+        try {
+          const res = await fetch(`/api/supply/cps/${preselectedCpId}`);
+          const data = await res.json();
+          if (cancelled) return;
+          if (data?.cp) selectCp(data.cp);
+          else setStep('cp');
+        } catch {
+          if (!cancelled) setStep('cp');
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectedCpId]);
+  }, []);
 
   function selectCp(selected) {
     setCp(selected);
     recordStartRef.current = new Date();
     setStep('record');
+    // Persist enough context that RecordingGuard sends the rep back HERE (not
+    // the demand recorder) and the recording can be restored after a screen
+    // lock / WebView reload. NativeRecorder adds accumSec/lastResumeMs on start.
+    setRecordingSession({
+      flow: 'supply',
+      returnPath: '/supply/visits/new',
+      cp: selected,
+      startedAtMs: recordStartRef.current.getTime(),
+      accumSec: 0,
+      lastResumeMs: recordStartRef.current.getTime(),
+    });
   }
 
   // ---- recorder callbacks ----
@@ -118,6 +160,9 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
     setDurSec(dur);
     setCheckOut(new Date());
     setStep('form');
+    // Recording is finalized and the mic is stopped — no in-progress recording
+    // left to recover, so drop the session.
+    clearRecordingSession();
     startBackgroundUpload(b, dur);
   }
   function startBackgroundUpload(b, dur) {
@@ -294,7 +339,8 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
                 onLocation={setLocation}
                 onPause={onRecorderPaused}
                 onDone={onRecorded}
-                onCancel={() => setStep('cp')}
+                onCancel={() => { clearRecordingSession(); setStep('cp'); }}
+                resumeSession={resumeSession}
               />
             ) : (
               <Recorder
@@ -303,7 +349,7 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
                 onLocation={setLocation}
                 onPause={onRecorderPaused}
                 onDone={onRecorded}
-                onCancel={() => setStep('cp')}
+                onCancel={() => { clearRecordingSession(); setStep('cp'); }}
               />
             )}
           </div>
