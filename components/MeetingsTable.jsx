@@ -19,6 +19,7 @@ import {
   Handshake,
   PhoneCall,
   Cloud,
+  Scale,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, normalizeCpCode } from '@/lib/utils';
 
@@ -477,11 +478,13 @@ function getSentiment(meeting) {
 export function MeetingTypePill({ type, small = false }) {
   const cls =
     type === 'visit' ? 'visit'
+    : type === 'negotiation' ? 'negotiation'
     : type === 'onboarding' ? 'onboarding'
     : type === 'call' ? 'call'
     : 'engagement';
   const Icon =
     cls === 'visit' ? Home
+    : cls === 'negotiation' ? Scale
     : cls === 'onboarding' ? Handshake
     : cls === 'call' ? PhoneCall
     : Briefcase;
@@ -523,6 +526,11 @@ export function MeetingTypePill({ type, small = false }) {
           color: #2f6f6f;
           background: rgba(47, 111, 111, 0.08);
           border-color: rgba(47, 111, 111, 0.25);
+        }
+        .oh-mtype-pill.negotiation {
+          color: #a63a5b;
+          background: rgba(166, 58, 91, 0.08);
+          border-color: rgba(166, 58, 91, 0.25);
         }
         .oh-mtype-pill.small {
           font-size: 9.5px;

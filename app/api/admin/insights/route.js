@@ -6,6 +6,7 @@ import {
   getEngagementMetrics,
   getOnboardingMetrics,
   getCallMetrics,
+  getNegotiationMetrics,
   getCpFocusList,
 } from '@/lib/analytics';
 
@@ -31,11 +32,12 @@ export async function GET(request) {
 
   const sql = neon(process.env.DATABASE_URL);
 
-  const [visit, engagement, onboarding, direct, cpFocus, standardRows, custom, pinnedList, savedItems] = await Promise.all([
+  const [visit, engagement, onboarding, direct, negotiation, cpFocus, standardRows, custom, pinnedList, savedItems] = await Promise.all([
     getVisitMetrics(period, opts),
     getEngagementMetrics(period, opts),
     getOnboardingMetrics(period, opts),
     getCallMetrics(period, opts),
+    getNegotiationMetrics(period, opts),
     // CP focus is RM-assignment scoped, not meeting-RM-scoped — pass rmId through.
     getCpFocusList(15, rmId),
     // Standard insights: latest row per (scope, insight_key).
@@ -77,7 +79,7 @@ export async function GET(request) {
   return NextResponse.json({
     period,
     filters: { since, until, rmId },
-    tier1: { visit, engagement, onboarding, direct, cpFocus },
+    tier1: { visit, engagement, onboarding, direct, negotiation, cpFocus },
     standard,
     custom,
     pinned: pinnedList,

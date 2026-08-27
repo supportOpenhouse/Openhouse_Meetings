@@ -195,6 +195,30 @@ export const CALL_QUESTIONS = [
 ];
 
 // Legacy export — defaults to the engagement set so any old import keeps
+// Negotiation / deal-closing meeting with a buyer — descriptive answers, plus a
+// separate "deal score" (see NEGOTIATION_SCORE_PARAMETERS in lib/scoring.js).
+export const NEGOTIATION_QUESTIONS = [
+  // Deal terms
+  { key: 'price_discussion', label: 'Price negotiation — asking price, buyer offer, and the gap', group: 'Deal terms' },
+  { key: 'payment_plan', label: 'Payment / financing plan (down payment, loan, construction-linked)', group: 'Deal terms' },
+  { key: 'agreed_terms', label: 'Terms both sides have agreed so far', list: true, group: 'Deal terms' },
+  { key: 'concessions_offered', label: 'Concessions the RM offered (discount, freebies, flexibility)', list: true, group: 'Deal terms' },
+  { key: 'concessions_requested', label: 'Concessions the buyer asked for', list: true, group: 'Deal terms' },
+
+  // Buyer
+  { key: 'decision_makers', label: 'Who decides — decision-maker present, or needs family/spouse sign-off', group: 'Buyer' },
+  { key: 'buyer_intent', label: "Buyer's intent to proceed", group: 'Buyer' },
+  { key: 'close_timeline', label: 'Likely close / booking timeline', group: 'Buyer' },
+
+  // Blockers
+  { key: 'objections', label: 'Objections / sticking points raised', list: true, group: 'Blockers' },
+  { key: 'main_blocker', label: 'The single biggest blocker to closing right now', group: 'Blockers' },
+
+  // Outcome
+  { key: 'discussion_summary', label: 'What was discussed', group: 'Outcome' },
+  { key: 'next_action', label: 'Single most useful next step to close the deal', group: 'Outcome' },
+];
+
 // working without behavioural change.
 export const DEFAULT_QUESTIONS = ENGAGEMENT_QUESTIONS;
 
@@ -202,11 +226,13 @@ export function getQuestionsForType(type) {
   if (type === 'visit') return VISIT_QUESTIONS;
   if (type === 'onboarding') return ONBOARDING_QUESTIONS;
   if (type === 'call') return CALL_QUESTIONS;
+  if (type === 'negotiation') return NEGOTIATION_QUESTIONS;
   return ENGAGEMENT_QUESTIONS;
 }
 
 export const MEETING_TYPES = [
   { value: 'engagement', label: 'Engagement meeting', description: 'CP working-relationship conversation' },
   { value: 'visit', label: 'Site visit assessment', description: 'Buyer at-site qualification (BVA)' },
+  { value: 'negotiation', label: 'Negotiation meeting', description: 'Closing / deal-terms negotiation with a buyer' },
   { value: 'onboarding', label: 'CP onboarding pitch', description: 'Pitch to a prospective CP (not yet onboarded)' },
 ];

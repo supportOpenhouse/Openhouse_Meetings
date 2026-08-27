@@ -23,9 +23,10 @@ import {
   Home,
   Handshake,
   Cloud,
+  Scale,
 } from 'lucide-react';
 import { fmtDate, fmtDuration, buildSpeakerTurns } from '@/lib/utils';
-import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, CALL_QUESTIONS, MEETING_TYPES } from './questions';
+import { ENGAGEMENT_QUESTIONS, VISIT_QUESTIONS, ONBOARDING_QUESTIONS, CALL_QUESTIONS, NEGOTIATION_QUESTIONS, MEETING_TYPES } from './questions';
 import { SCORE_PARAMETERS, SCORE_TOTAL_POSSIBLE } from '@/lib/scoring';
 import WebmAudio from './WebmAudio';
 
@@ -138,11 +139,14 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 
           {/* Score panel only renders for visit meetings. Engagement meetings
               use Claude's gut-call sentiment shown inline in the summary. */}
-          {meetingType === 'visit' && view.score && <ScorePanel score={view.score} />}
+          {(meetingType === 'visit' || meetingType === 'negotiation') && view.score && (
+            <ScorePanel score={view.score} title={meetingType === 'negotiation' ? 'Deal score' : 'Lead score'} />
+          )}
 
           <div className="oh-tabs">
             <TabBtn active={tab === 'summary'} onClick={() => setTab('summary')}>
               {meetingType === 'visit' && <><Home size={13} /> Visit summary</>}
+              {meetingType === 'negotiation' && <><Scale size={13} /> Negotiation summary</>}
               {meetingType === 'onboarding' && <><Handshake size={13} /> Onboarding summary</>}
               {meetingType === 'engagement' && <><Briefcase size={13} /> Engagement summary</>}
               {meetingType === 'call' && <><Sparkles size={13} /> Buyer survey</>}
@@ -158,13 +162,15 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
               questions={
                 meetingType === 'visit'
                   ? VISIT_QUESTIONS
+                  : meetingType === 'negotiation'
+                  ? NEGOTIATION_QUESTIONS
                   : meetingType === 'onboarding'
                   ? ONBOARDING_QUESTIONS
                   : meetingType === 'call'
                   ? CALL_QUESTIONS
                   : ENGAGEMENT_QUESTIONS
               }
-              grouped={meetingType === 'visit'}
+              grouped={meetingType === 'visit' || meetingType === 'negotiation'}
               emptyHint={
                 view.missing
                   ? meetingType === 'call'
@@ -327,6 +333,7 @@ export default function MeetingDetail({ meeting, onClose, onDelete, canDelete })
 function MeetingTypeBadge({ type }) {
   const meta = {
     visit:       { Icon: Home,      label: 'visit',       cls: 'visit' },
+    negotiation: { Icon: Scale,     label: 'negotiation', cls: 'negotiation' },
     onboarding:  { Icon: Handshake, label: 'onboarding',  cls: 'onboarding' },
     engagement:  { Icon: Briefcase, label: 'engagement',  cls: 'engagement' },
     call:        { Icon: Phone,     label: 'call',        cls: 'call' },
@@ -367,6 +374,11 @@ function MeetingTypeBadge({ type }) {
           color: #2f6f6f;
           background: rgba(47, 111, 111, 0.08);
           border-color: rgba(47, 111, 111, 0.25);
+        }
+        .oh-type-badge.negotiation {
+          color: #a63a5b;
+          background: rgba(166, 58, 91, 0.08);
+          border-color: rgba(166, 58, 91, 0.25);
         }
       `}</style>
     </span>
@@ -430,22 +442,22 @@ function TabBtn({ active, onClick, children }) {
   );
 }
 
-function ScorePanel({ score }) {
+function ScorePanel({ score, title = 'Lead score' }) {
   const cls = score.classification || 'cold';
   const Icon = cls === 'hot' ? Flame : cls === 'warm' ? TrendingUp : Snowflake;
   const params = score.parameters || {};
-  const ordered = SCORE_PARAMETERS.map((p) => ({
-    key: p.key,
-    label: p.label,
-    points: p.points,
-    met: params[p.key]?.met === true,
-  }));
+  // Iterate the score's OWN stored parameters (each carries label/points/met),
+  // so this renders any scored type — the visit funnel or the negotiation rubric.
+  const ordered =
+    Object.keys(params).length > 0
+      ? Object.entries(params).map(([key, p]) => ({ key, label: p.label, points: p.points, met: p.met === true }))
+      : SCORE_PARAMETERS.map((p) => ({ key: p.key, label: p.label, points: p.points, met: false }));
 
   return (
     <div className={`oh-score-panel ${cls}`}>
       <div className="oh-score-head">
         <div>
-          <div className="oh-eyebrow"><Sparkles size={11} style={{ display: 'inline', marginRight: 4 }} /> Lead score</div>
+          <div className="oh-eyebrow"><Sparkles size={11} style={{ display: 'inline', marginRight: 4 }} /> {title}</div>
           <div className="oh-score-value">
             <span className="num">{score.total}</span>
             <span className="den"> / {score.out_of || SCORE_TOTAL_POSSIBLE}</span>
@@ -667,6 +679,13 @@ function pickSummaryView(summary, meetingType) {
 
   if (meetingType === 'call') {
     if (summary.call) return { answers: summary.call, score: null, missing: false };
+    return { answers: null, score: null, missing: true };
+  }
+
+  if (meetingType === 'negotiation') {
+    if (summary.negotiation) {
+      return { answers: summary.negotiation, score: summary.score || null, missing: false };
+    }
     return { answers: null, score: null, missing: true };
   }
 

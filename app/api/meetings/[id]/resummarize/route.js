@@ -34,10 +34,8 @@ export async function POST(request, { params }) {
   let body = {};
   try { body = await request.json(); } catch {}
   const requested = body?.meeting_type;
-  const newType =
-    requested === 'engagement' || requested === 'visit'
-      ? requested
-      : meeting.meeting_type || 'engagement';
+  const ALLOWED_TYPES = ['engagement', 'visit', 'onboarding', 'call', 'negotiation'];
+  const newType = ALLOWED_TYPES.includes(requested) ? requested : meeting.meeting_type || 'engagement';
 
   try {
     const summary = await summarizeWithClaude(

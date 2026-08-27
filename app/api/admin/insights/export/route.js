@@ -18,7 +18,7 @@ export async function GET(request) {
   const idsParam = searchParams.get('ids');
   const ids = idsParam ? idsParam.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const type = searchParams.get('type');
-  if (!ids && !['visit', 'engagement', 'onboarding', 'call'].includes(type)) {
+  if (!ids && !['visit', 'engagement', 'onboarding', 'call', 'negotiation'].includes(type)) {
     return new Response('invalid type', { status: 400 });
   }
   const rm = searchParams.get('rm');

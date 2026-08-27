@@ -19,7 +19,7 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const type = searchParams.get('type');
-  if (!['visit', 'engagement', 'onboarding', 'call'].includes(type)) {
+  if (!['visit', 'engagement', 'onboarding', 'call', 'negotiation'].includes(type)) {
     return NextResponse.json({ error: 'invalid type' }, { status: 400 });
   }
   const rm = searchParams.get('rm');

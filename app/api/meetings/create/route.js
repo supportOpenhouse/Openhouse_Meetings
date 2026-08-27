@@ -39,9 +39,14 @@ export async function POST(request) {
 
   if (!audio_url) return NextResponse.json({ error: 'audio_url required' }, { status: 400 });
 
-  if (meeting_type !== 'engagement' && meeting_type !== 'visit' && meeting_type !== 'onboarding') {
+  if (
+    meeting_type !== 'engagement' &&
+    meeting_type !== 'visit' &&
+    meeting_type !== 'onboarding' &&
+    meeting_type !== 'negotiation'
+  ) {
     return NextResponse.json(
-      { error: "meeting_type must be 'engagement', 'visit', or 'onboarding'" },
+      { error: "meeting_type must be 'engagement', 'visit', 'negotiation', or 'onboarding'" },
       { status: 400 }
     );
   }

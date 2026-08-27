@@ -11,6 +11,7 @@ import {
   Home,
   Briefcase,
   Handshake,
+  Scale,
   Target,
   Send,
   AlertCircle,
@@ -30,7 +31,7 @@ import DownloadCsv, { downloadCsv } from '@/components/insights/DownloadCsv';
 
 // Which meeting_type each tab's records map to, for CSV export (cross_cut/ask
 // have no single type).
-const TAB_TYPE = { visit: 'visit', engagement: 'engagement', onboarding: 'onboarding', direct: 'call' };
+const TAB_TYPE = { visit: 'visit', negotiation: 'negotiation', engagement: 'engagement', onboarding: 'onboarding', direct: 'call' };
 
 // Collect the unique meeting ids an AI insight result cites across its items.
 function resultMeetingIds(result) {
@@ -50,6 +51,7 @@ const PERIODS = [
 // Which Tier-2 insight cards live under each tab.
 const TAB_INSIGHTS = {
   visit: ['visit_societies', 'visit_config_budget', 'visit_blockers', 'visit_objections'],
+  negotiation: ['negotiation_blockers', 'negotiation_concessions'],
   engagement: ['engagement_cp_issues', 'engagement_cp_asks'],
   onboarding: ['onboarding_objections', 'onboarding_competitors'],
   direct: ['direct_demand', 'direct_blockers', 'direct_pipeline', 'direct_awareness'],
@@ -67,6 +69,8 @@ const INSIGHT_TITLES = {
   visit_config_budget: 'Configuration & budget demand',
   visit_blockers: 'Why buyers are not closing',
   visit_objections: 'Top objections during visits',
+  negotiation_blockers: 'What blocks deals from closing',
+  negotiation_concessions: 'Concessions buyers push for',
   engagement_cp_issues: 'Issues CPs raise about Openhouse',
   engagement_cp_asks: 'What CPs are asking for',
   onboarding_objections: 'Objections that block onboarding',
@@ -398,6 +402,7 @@ export default function InsightsClient({ initialData }) {
 
       <div className="oh-ins-tabs">
         <TabBtn active={tab === 'visit'} onClick={() => setTab('visit')} icon={Home} label="Visit" />
+        <TabBtn active={tab === 'negotiation'} onClick={() => setTab('negotiation')} icon={Scale} label="Negotiation" />
         <TabBtn active={tab === 'engagement'} onClick={() => setTab('engagement')} icon={Briefcase} label="Engagement" />
         <TabBtn active={tab === 'onboarding'} onClick={() => setTab('onboarding')} icon={Handshake} label="Onboarding" />
         <TabBtn active={tab === 'direct'} onClick={() => setTab('direct')} icon={Phone} label="Direct" />
@@ -418,6 +423,7 @@ export default function InsightsClient({ initialData }) {
 
       <StatContext.Provider value={{ openStat, exportUrl }}>
         {tab === 'visit' && <VisitTab m={t1.visit} />}
+        {tab === 'negotiation' && <NegotiationTab m={t1.negotiation} />}
         {tab === 'engagement' && <EngagementTab m={t1.engagement} />}
         {tab === 'onboarding' && <OnboardingTab m={t1.onboarding} />}
         {tab === 'direct' && <DirectTab m={t1.direct} />}
@@ -438,7 +444,7 @@ export default function InsightsClient({ initialData }) {
           <div className="oh-ins-section-head">
             <Sparkles size={14} /> AI insights — generated on demand
           </div>
-          {TAB_INSIGHTS[tab].map((key) => (
+          {(TAB_INSIGHTS[tab] || []).map((key) => (
             <InsightCard
               key={key}
               insightKey={key}
@@ -641,6 +647,74 @@ function VisitTab({ m }) {
           <Sparkbars data={m.volumeByWeek} />
         </Panel>
         <Panel title="RM leaderboard (visits · avg score)">
+          {m.topRms.length === 0 && <Empty />}
+          {m.topRms.map((r, i) => (
+            <RankRow key={i} rank={i + 1} name={r.rm_name || '—'} value={`${r.visits} · ${r.avg_score ?? '—'}`} />
+          ))}
+        </Panel>
+      </div>
+      <style jsx>{`
+        .oh-ins-2col {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 14px;
+          align-items: start;
+        }
+        @media (max-width: 760px) { .oh-ins-2col { grid-template-columns: 1fr; } }
+      `}</style>
+    </div>
+  );
+}
+
+function NegotiationTab({ m }) {
+  const { openStat, exportUrl } = useContext(StatContext);
+  return (
+    <div>
+      <StatGrid>
+        <Stat
+          label="Negotiations"
+          value={m.total}
+          onClick={() => openStat('All negotiations', { type: 'negotiation' })}
+        />
+        <Stat
+          label="Closing intent"
+          value={m.closing}
+          accent
+          onClick={() => openStat('Token / booking intent', { type: 'negotiation', param: 'token_or_booking_intent' })}
+        />
+        <Stat
+          label="Avg deal score"
+          value={m.avgScore != null ? `${m.avgScore}/100` : '—'}
+          onClick={() => openStat('All negotiations', { type: 'negotiation' })}
+        />
+        <TempStat
+          mix={m.byClassification}
+          onSegmentClick={(temp) =>
+            openStat(`${temp[0].toUpperCase() + temp.slice(1)} negotiations`, { type: 'negotiation', temp })
+          }
+        />
+      </StatGrid>
+
+      <Panel
+        title="Deal funnel — how close to closing"
+        action={<DownloadCsv href={exportUrl({ type: 'negotiation' }, 'negotiation-funnel')} title="Download all negotiation records (current filters)" />}
+      >
+        {m.funnel.map((f) => (
+          <BarRow
+            key={f.key}
+            label={f.label}
+            pct={f.pct}
+            caption={`${f.met}/${f.total}`}
+            onClick={() => openStat(f.label, { type: 'negotiation', param: f.key })}
+          />
+        ))}
+      </Panel>
+
+      <div className="oh-ins-2col">
+        <Panel title="Weekly negotiation volume">
+          <Sparkbars data={m.volumeByWeek} />
+        </Panel>
+        <Panel title="RM leaderboard (deals · avg score)">
           {m.topRms.length === 0 && <Empty />}
           {m.topRms.map((r, i) => (
             <RankRow key={i} rank={i + 1} name={r.rm_name || '—'} value={`${r.visits} · ${r.avg_score ?? '—'}`} />
