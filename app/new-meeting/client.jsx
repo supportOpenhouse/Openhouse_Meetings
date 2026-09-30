@@ -32,7 +32,9 @@ import { logEvent } from '@/lib/clientLog';
 import { saveLocalRecording, deleteLocalRecording } from '@/lib/localQueue';
 import { buildRecordingFilename, parseRecordingFilename, triggerDownload } from '@/lib/recordingName';
 import { uploadAndCreateMeeting } from '@/lib/uploadMeeting';
-import { getMicStatus } from '@/lib/micRecorder';
+import { getMicStatus, readRecordingAsBlob, cleanupRecordingFile, discardMicRecording } from '@/lib/micRecorder';
+import { findRecoverableRecording } from '@/lib/recordingRecovery';
+import RecoverRecordingBanner from '@/components/RecoverRecordingBanner';
 import { getRecordingSession, setRecordingSession, clearRecordingSession } from '@/lib/recordingSession';
 
 // If no upload progress is observed for this long, surface a "looks stalled"
@@ -69,19 +71,24 @@ export default function NewMeetingClient({ user }) {
     // the UI to match (when we have session metadata to reconstruct from)
     // or discard the orphan (when we don't — without form metadata the
     // recording can never be uploaded anyway, so it's just a stuck mic).
+    // If the app was killed mid-recording, offer the file it left behind.
     (async () => {
       const status = await getMicStatus();
-      if (status !== 'recording' && status !== 'paused') return;
+      if (status !== 'recording' && status !== 'paused') {
+        const found = await findRecoverableRecording('demand');
+        if (found) setRecoverable(found);
+        return;
+      }
       const sess = getRecordingSession();
       if (!sess) {
+        logEvent('recording.orphan_discarded', {
+          payload: { where: 'new-meeting.mount', status },
+        });
         // Native is recording but we lost the form context (app data
         // cleared, session expired, etc.). Free the mic so the form
         // doesn't hit "Already recording" later. Best-effort; if discard
         // fails NativeRecorder.start has its own safety net.
-        try {
-          const { discardMicRecording } = await import('@/lib/micRecorder');
-          await discardMicRecording();
-        } catch {}
+        await discardMicRecording();
         try {
           const { stopMicForeground } = await import('@/lib/micForeground');
           await stopMicForeground();
@@ -92,6 +99,7 @@ export default function NewMeetingClient({ user }) {
       if (typeof sess.isOnboarding === 'boolean') setIsOnboarding(sess.isOnboarding);
       if (sess.selectedVisit) setSelectedVisit(sess.selectedVisit);
       if (sess.startedAtMs) setStartedAt(sess.startedAtMs);
+      if (sess.interrupted) setReviewInterrupted(true);
       setResumeSession(sess);
       if (sess.step === 'review' || status === 'paused') {
         setReviewedDuration(sess.reviewedDuration || 0);
@@ -105,6 +113,17 @@ export default function NewMeetingClient({ user }) {
   // Holds the Recorder instance methods (pause/resume/finalize/discard).
   const recorderRef = useRef(null);
   const [reviewedDuration, setReviewedDuration] = useState(0);
+  // True when the native recorder died mid-recording (usually a phone call
+  // taking the mic): review then steers to Upload, since Continue can't work.
+  const [reviewInterrupted, setReviewInterrupted] = useState(false);
+  // { sess, orphan } when the app was killed mid-recording and its file
+  // survived — shown as "Recover previous recording" on the form.
+  const [recoverable, setRecoverable] = useState(null);
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  const [recoverError, setRecoverError] = useState(null);
+  // Recovered { blob, durSec, filePath } waiting for the restored form state
+  // to render before onRecorded (which reads form/startedAt) runs.
+  const [pendingRecovery, setPendingRecovery] = useState(null);
   const [form, setForm] = useState({
     cp_code: '',
     cp_mobile: '',
@@ -185,6 +204,15 @@ export default function NewMeetingClient({ user }) {
 
   function startRecording() {
     const now = Date.now();
+    if (recoverable) {
+      // RM ignored the recover banner. The old file stays in app cache but
+      // this new session replaces the metadata it needed.
+      logEvent('recording.discarded', {
+        cp_code: recoverable.sess.form?.cp_code || undefined,
+        payload: { engine: 'native', elapsed_seconds: recoverable.orphan.durationSec || 0, orphan: true, ignored: true },
+      });
+      setRecoverable(null);
+    }
     setStartedAt(now);
     setIsRestoreFlow(false);
     setDownloadedName(null);
@@ -234,12 +262,69 @@ export default function NewMeetingClient({ user }) {
   }
 
   // Called by Recorder when the user taps Pause — show the review screen.
-  function onRecorderPaused(elapsedSec) {
+  // NativeRecorder also calls it itself (interrupted=true) when the mic dies.
+  function onRecorderPaused(elapsedSec, { interrupted = false } = {}) {
     setReviewedDuration(elapsedSec);
+    setReviewInterrupted(interrupted);
     setStep('review');
     const sess = getRecordingSession();
-    if (sess) setRecordingSession({ ...sess, step: 'review', reviewedDuration: elapsedSec });
+    if (sess) setRecordingSession({ ...sess, step: 'review', reviewedDuration: elapsedSec, interrupted });
   }
+
+  // "Recover previous recording": restore the killed session's form, then
+  // hand the file to the normal upload path (via the effect below).
+  async function recoverOrphan() {
+    if (!recoverable) return;
+    const { sess, orphan } = recoverable;
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      const blob = await readRecordingAsBlob(orphan);
+      const durSec = orphan.durationSec || sess.accumSec || 0;
+      if (sess.form) setForm(sess.form);
+      if (typeof sess.isOnboarding === 'boolean') setIsOnboarding(sess.isOnboarding);
+      setSelectedVisit(sess.selectedVisit || null);
+      setStartedAt(sess.startedAtMs || orphan.startedAtMs || Date.now() - durSec * 1000);
+      // The blob now lives in memory and (next) the IndexedDB queue, which
+      // has its own retry path — the session's job is done.
+      clearRecordingSession();
+      logEvent('recording.recovered', {
+        cp_code: sess.form?.cp_code || undefined,
+        payload: { engine: 'native', audio_seconds: durSec, blob_bytes: blob.size },
+      });
+      setRecoverable(null);
+      setPendingRecovery({ blob, durSec, filePath: orphan.filePath });
+    } catch (e) {
+      setRecoverError(e?.message || 'Could not read the saved recording.');
+      logEvent('error', { payload: { where: 'new-meeting.recover', message: e?.message } });
+    } finally {
+      setRecoverBusy(false);
+    }
+  }
+
+  async function discardOrphan() {
+    if (!recoverable) return;
+    if (!confirm('Discard the unsaved recording? This cannot be undone.')) return;
+    const { sess, orphan } = recoverable;
+    await discardMicRecording();
+    clearRecordingSession();
+    logEvent('recording.discarded', {
+      cp_code: sess.form?.cp_code || undefined,
+      payload: { engine: 'native', elapsed_seconds: orphan.durationSec || 0, orphan: true },
+    });
+    setRecoverable(null);
+  }
+
+  useEffect(() => {
+    if (!pendingRecovery) return;
+    const { blob, durSec, filePath } = pendingRecovery;
+    setPendingRecovery(null);
+    (async () => {
+      await onRecorded(blob, durSec);
+      cleanupRecordingFile(filePath);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRecovery]);
 
   // Review screen actions
   function resumeRecording() {
@@ -308,6 +393,10 @@ export default function NewMeetingClient({ user }) {
   // it survives a failed/stalled network, a tab close, or a power loss. On a
   // successful upload we delete the local copy.
   async function onRecorded(blob, durSec) {
+    // The mic is off and the upload flow owns the audio now; tells
+    // RecordingGuard a missing native file isn't a lost recording.
+    const sess = getRecordingSession();
+    if (sess) setRecordingSession({ ...sess, step: 'finalized' });
     setRecordedBlob(blob);
     recordedBlobRef.current = blob;
     setRecordedDuration(durSec);
@@ -796,6 +885,17 @@ export default function NewMeetingClient({ user }) {
           </p>
 
           <div className="oh-form">
+            {recoverable && (
+              <RecoverRecordingBanner
+                orphan={recoverable.orphan}
+                who={recoverable.sess.form?.cp_code || recoverable.sess.form?.cp_name || recoverable.sess.form?.cp_mobile}
+                busy={recoverBusy}
+                error={recoverError}
+                onRecover={recoverOrphan}
+                onDiscard={discardOrphan}
+              />
+            )}
+
             {!isDirectRm && (
               <button
                 type="button"
@@ -1095,17 +1195,27 @@ export default function NewMeetingClient({ user }) {
                 <span className="oh-eyebrow">Recorded</span>
                 <div className="oh-mono">{fmtDuration(reviewedDuration)}</div>
               </div>
-              <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginTop: 0 }}>
-                Continue if you have more to capture, or upload to finish. Discard throws this
-                recording away.
-              </p>
+              {reviewInterrupted ? (
+                <p style={{ fontSize: 13.5, color: 'var(--warning)', marginTop: 0 }}>
+                  Recording stopped — a phone call or another app took the microphone. Everything
+                  up to that point is saved. Upload it, then start a new recording if the meeting
+                  is still going.
+                </p>
+              ) : (
+                <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginTop: 0 }}>
+                  Continue if you have more to capture, or upload to finish. Discard throws this
+                  recording away.
+                </p>
+              )}
               <div className="oh-review-actions">
                 <button className="oh-btn accent" onClick={uploadFromReview}>
                   Upload
                 </button>
-                <button className="oh-btn" onClick={resumeRecording}>
-                  Continue recording
-                </button>
+                {!reviewInterrupted && (
+                  <button className="oh-btn" onClick={resumeRecording}>
+                    Continue recording
+                  </button>
+                )}
                 <button className="oh-btn ghost danger" onClick={discardRecording}>
                   Discard
                 </button>

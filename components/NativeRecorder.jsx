@@ -2,6 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
 import { Mic, Pause, Play } from 'lucide-react';
+import { App } from '@capacitor/app';
 import { fmtDuration } from '@/lib/utils';
 import { logEvent } from '@/lib/clientLog';
 import { startMicForeground, stopMicForeground } from '@/lib/micForeground';
@@ -15,6 +16,7 @@ import {
   cleanupRecordingFile,
   readRecordingAsBlob,
   getMicStatus,
+  onMicRecorderError,
 } from '@/lib/micRecorder';
 import { getRecordingSession, setRecordingSession } from '@/lib/recordingSession';
 
@@ -24,7 +26,11 @@ import { getRecordingSession, setRecordingSession } from '@/lib/recordingSession
 // surface + callbacks of components/Recorder.jsx exactly, so new-meeting can
 // swap it in transparently:
 //   ref: finalize() · resume() · discard() · elapsed()
-//   props: onPause(sec) · onDone(blob, sec) · onCancel() · cpCode · onLocation
+//   props: onPause(sec, { interrupted }) · onDone(blob, sec) · onCancel() · cpCode · onLocation
+//
+// interrupted=true means the native recorder died mid-recording (usually a
+// phone call taking the mic). The audio up to that point is kept; the parent
+// should steer the RM to upload rather than continue.
 //
 // Recorder backend: our own MicRecorder plugin (records to an app-cache file
 // and returns a file path), not capacitor-voice-recorder. The file-path flow
@@ -43,7 +49,56 @@ const NativeRecorder = forwardRef(function NativeRecorder(
   const accumRef = useRef(0);
   const timerRef = useRef(null);
 
+  // Mirrors for listeners registered once on mount (avoid stale closures).
+  const recordingRef = useRef(false);
+  const pausedRef = useRef(false);
+  const cpCodeRef = useRef(cpCode);
+  const interruptedRef = useRef(false);
+  const pauseRef = useRef(null);
+  recordingRef.current = recording;
+  pausedRef.current = paused;
+  cpCodeRef.current = cpCode;
+
   useEffect(() => () => stopTimer(), []);
+
+  // Telemetry for what happens around a phone call: the app going to the
+  // background/foreground while recording, and the native recorder erroring
+  // out. Lets us tell a killed process (orphan found on relaunch) apart from
+  // the recorder failing in place.
+  useEffect(() => {
+    let handle = null;
+    let removed = false;
+    Promise.resolve(
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (!recordingRef.current) return;
+        logEvent(isActive ? 'recording.foregrounded' : 'recording.backgrounded', {
+          cp_code: cpCodeRef.current || undefined,
+          payload: { engine: 'native', paused: pausedRef.current, elapsed_seconds: currentElapsed() },
+        });
+      })
+    )
+      .then((h) => {
+        handle = h;
+        if (removed) h?.remove?.();
+      })
+      .catch(() => {});
+    const offError = onMicRecorderError(({ what, extra } = {}) => {
+      interruptedRef.current = true;
+      logEvent('recording.error', {
+        cp_code: cpCodeRef.current || undefined,
+        payload: { engine: 'native', what, extra, elapsed_seconds: currentElapsed() },
+      });
+      // Nothing more is being captured — stop the clock and drop to the
+      // review screen so the RM uploads what was recorded.
+      if (recordingRef.current && !pausedRef.current) pauseRef.current?.();
+    });
+    return () => {
+      removed = true;
+      handle?.remove?.();
+      offError();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Recovery: if the native plugin is already recording (user navigated
   // away and got bounced back by RecordingGuard), restore our UI state
@@ -133,6 +188,10 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       // there's no session worth restoring, so dropping the orphan is safe.
       const orphanStatus = await getMicStatus();
       if (orphanStatus === 'recording' || orphanStatus === 'paused') {
+        logEvent('recording.orphan_discarded', {
+          cp_code: cpCode || undefined,
+          payload: { where: 'native-recorder.start', status: orphanStatus },
+        });
         try { await discardMicRecording(); } catch {}
         try { await stopMicForeground(); } catch {}
       }
@@ -142,6 +201,7 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       await startMicForeground();
       await startMicRecording();
       captureLocation();
+      interruptedRef.current = false;
       accumRef.current = 0;
       startRef.current = Date.now();
       setRecording(true);
@@ -150,7 +210,9 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       startTimer();
       // Seed/update the session so a future remount can restore state.
       const sess = getRecordingSession() || {};
-      setRecordingSession({ ...sess, accumSec: 0, lastResumeMs: startRef.current });
+      // micStarted tells RecordingGuard this session really had a live mic,
+      // so a missing file afterwards counts as a lost recording.
+      setRecordingSession({ ...sess, accumSec: 0, lastResumeMs: startRef.current, micStarted: true });
       logEvent('recording.started', { cp_code: cpCode || undefined, payload: { engine: 'native' } });
     } catch (e) {
       setError(e?.message || 'Could not start recording.');
@@ -159,7 +221,12 @@ const NativeRecorder = forwardRef(function NativeRecorder(
   }
 
   async function pause() {
-    try { await pauseMicRecording(); } catch {}
+    try {
+      await pauseMicRecording();
+    } catch (e) {
+      // Expected after a recorder error; still log so it's visible.
+      logEvent('error', { payload: { where: 'native-recorder.pause', message: e?.message } });
+    }
     if (startRef.current) accumRef.current += Math.round((Date.now() - startRef.current) / 1000);
     startRef.current = null;
     setPaused(true);
@@ -169,13 +236,24 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     if (sess) setRecordingSession({ ...sess, accumSec: accumRef.current, lastResumeMs: null });
     logEvent('recording.paused', {
       cp_code: cpCode || undefined,
-      payload: { elapsed_seconds: accumRef.current, engine: 'native' },
+      payload: { elapsed_seconds: accumRef.current, engine: 'native', interrupted: interruptedRef.current },
     });
-    onPause && onPause(accumRef.current);
+    onPause && onPause(accumRef.current, { interrupted: interruptedRef.current });
   }
+  pauseRef.current = pause;
 
   async function resume() {
-    try { await resumeMicRecording(); } catch {}
+    // The recorder is dead after an error; pretending to resume would show a
+    // ticking timer over nothing. Send the RM back to review instead.
+    if (interruptedRef.current) {
+      onPause && onPause(accumRef.current, { interrupted: true });
+      return;
+    }
+    try {
+      await resumeMicRecording();
+    } catch (e) {
+      logEvent('error', { payload: { where: 'native-recorder.resume', message: e?.message } });
+    }
     startRef.current = Date.now();
     setPaused(false);
     startTimer();
@@ -191,10 +269,26 @@ const NativeRecorder = forwardRef(function NativeRecorder(
     }
     const durSec = currentElapsed();
     try {
-      const v = await stopMicRecording(); // { filePath, mimeType, sizeBytes }
+      const v = await stopMicRecording(); // { filePath, mimeType, sizeBytes, recovered, ... }
       await stopMicForeground();
       if (!v?.filePath) throw new Error('Recorder returned no file path');
-      const blob = await readRecordingAsBlob({ filePath: v.filePath, mimeType: v.mimeType });
+      const blob = await readRecordingAsBlob(v);
+      // After a recorder failure the JS timer overstates what was captured;
+      // the native side measured the real audio length from the file.
+      const finalDur = v.recovered && v.durationSec > 0 ? v.durationSec : durSec;
+      if (v.recovered) {
+        logEvent('recording.salvaged', {
+          cp_code: cpCode || undefined,
+          payload: {
+            engine: 'native',
+            stop_error: v.stopError || null,
+            recorder_error: v.recorderError || null,
+            timer_seconds: durSec,
+            audio_seconds: v.durationSec ?? null,
+            blob_bytes: blob.size,
+          },
+        });
+      }
       // File served its purpose; drop the cached copy so it doesn't pile up
       // across many meetings. Best-effort — Android will reclaim cache anyway.
       cleanupRecordingFile(v.filePath);
@@ -203,9 +297,9 @@ const NativeRecorder = forwardRef(function NativeRecorder(
       setPaused(false);
       logEvent('recording.finalized', {
         cp_code: cpCode || undefined,
-        payload: { duration_seconds: durSec, blob_bytes: blob.size, mime: blob.type, engine: 'native' },
+        payload: { duration_seconds: finalDur, blob_bytes: blob.size, mime: blob.type, engine: 'native' },
       });
-      onDone(blob, durSec);
+      onDone(blob, finalDur);
     } catch (e) {
       setError(e?.message || 'Could not finish the recording.');
       logEvent('error', { payload: { where: 'native-recorder.finalize', message: e?.message } });

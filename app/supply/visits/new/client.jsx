@@ -20,7 +20,10 @@ import NativeRecorder from '@/components/NativeRecorder';
 import { uploadVisitAudio, createSalesVisit } from '@/lib/salesUpload';
 import { fmtDuration } from '@/lib/utils';
 import { initials } from '@/lib/salesFormat';
-import { getMicStatus } from '@/lib/micRecorder';
+import { getMicStatus, readRecordingAsBlob, cleanupRecordingFile, discardMicRecording } from '@/lib/micRecorder';
+import { findRecoverableRecording } from '@/lib/recordingRecovery';
+import { logEvent } from '@/lib/clientLog';
+import RecoverRecordingBanner from '@/components/RecoverRecordingBanner';
 import { getRecordingSession, setRecordingSession, clearRecordingSession } from '@/lib/recordingSession';
 
 const ENGAGEMENT = [
@@ -77,6 +80,14 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   // Set on mount when we restore an in-progress recording — NativeRecorder reads
   // it to rebuild its timer without touching the still-running mic.
   const [resumeSession, setResumeSession] = useState(null);
+  // Native recorder died mid-recording (e.g. a phone call took the mic).
+  const [reviewInterrupted, setReviewInterrupted] = useState(false);
+  // { sess, orphan } when the app was killed mid-recording and its file
+  // survived (see lib/recordingRecovery.js).
+  const [recoverable, setRecoverable] = useState(null);
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  const [recoverError, setRecoverError] = useState(null);
+  const [pendingRecovery, setPendingRecovery] = useState(null);
 
   // Mount: detect the native platform, then either RESTORE an in-progress visit
   // recording (survived a screen-lock / WebView reload via the foreground
@@ -109,8 +120,23 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
           }
           // Orphan (a demand recording, or no CP context) — free the mic so a
           // fresh visit can be recorded cleanly.
-          try { const { discardMicRecording } = await import('@/lib/micRecorder'); await discardMicRecording(); } catch {}
+          logEvent('recording.orphan_discarded', {
+            payload: { where: 'supply-visit.mount', status, flow: sess?.flow || null },
+          });
+          await discardMicRecording();
           try { const { stopMicForeground } = await import('@/lib/micForeground'); await stopMicForeground(); } catch {}
+        }
+      }
+
+      // App was killed mid-recording: offer the saved file before anything
+      // else (the preselect flow would start a new session over it).
+      if (native) {
+        const found = await findRecoverableRecording('supply');
+        if (cancelled) return;
+        if (found) {
+          setRecoverable(found);
+          setStep('cp');
+          return;
         }
       }
 
@@ -134,6 +160,14 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   }, []);
 
   function selectCp(selected) {
+    if (recoverable) {
+      // Rep ignored the recover banner; the new session replaces its metadata.
+      logEvent('recording.discarded', {
+        cp_code: recoverable.sess.cp?.cp_id || undefined,
+        payload: { engine: 'native', flow: 'supply', elapsed_seconds: recoverable.orphan.durationSec || 0, orphan: true, ignored: true },
+      });
+      setRecoverable(null);
+    }
     setCp(selected);
     recordStartRef.current = new Date();
     setStep('record');
@@ -151,10 +185,60 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   }
 
   // ---- recorder callbacks ----
-  function onRecorderPaused(sec) {
+  function onRecorderPaused(sec, { interrupted = false } = {}) {
     setReviewDuration(sec);
+    setReviewInterrupted(interrupted);
     setStep('review');
   }
+
+  async function recoverOrphan() {
+    if (!recoverable) return;
+    const { sess, orphan } = recoverable;
+    setRecoverBusy(true);
+    setRecoverError(null);
+    try {
+      const b = await readRecordingAsBlob(orphan);
+      const dur = orphan.durationSec || sess.accumSec || 0;
+      setCp(sess.cp);
+      recordStartRef.current = new Date(sess.startedAtMs || orphan.startedAtMs || Date.now() - dur * 1000);
+      clearRecordingSession();
+      logEvent('recording.recovered', {
+        cp_code: sess.cp?.cp_id || undefined,
+        payload: { engine: 'native', flow: 'supply', audio_seconds: dur, blob_bytes: b.size },
+      });
+      setRecoverable(null);
+      setPendingRecovery({ blob: b, dur, filePath: orphan.filePath });
+    } catch (e) {
+      setRecoverError(e?.message || 'Could not read the saved recording.');
+      logEvent('error', { payload: { where: 'supply-visit.recover', message: e?.message } });
+    } finally {
+      setRecoverBusy(false);
+    }
+  }
+
+  async function discardOrphan() {
+    if (!recoverable) return;
+    if (!confirm('Discard the unsaved recording? This cannot be undone.')) return;
+    const { sess, orphan } = recoverable;
+    await discardMicRecording();
+    clearRecordingSession();
+    logEvent('recording.discarded', {
+      cp_code: sess.cp?.cp_id || undefined,
+      payload: { engine: 'native', flow: 'supply', elapsed_seconds: orphan.durationSec || 0, orphan: true },
+    });
+    setRecoverable(null);
+  }
+
+  // Runs after setCp has rendered — onRecorded's upload reads `cp`.
+  useEffect(() => {
+    if (!pendingRecovery) return;
+    const { blob: b, dur, filePath } = pendingRecovery;
+    setPendingRecovery(null);
+    onRecorded(b, dur);
+    // Keep the native file until the audio is safely uploaded.
+    audioUploadPromiseRef.current?.then(() => cleanupRecordingFile(filePath)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRecovery]);
   function onRecorded(b, dur) {
     setBlob(b);
     setDurSec(dur);
@@ -291,7 +375,21 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
   }
 
   if (step === 'cp') {
-    return <CpPicker onSelect={selectCp} />;
+    return (
+      <>
+        {recoverable && (
+          <RecoverRecordingBanner
+            orphan={recoverable.orphan}
+            who={recoverable.sess.cp?.cp_name || recoverable.sess.cp?.cp_id}
+            busy={recoverBusy}
+            error={recoverError}
+            onRecover={recoverOrphan}
+            onDiscard={discardOrphan}
+          />
+        )}
+        <CpPicker onSelect={selectCp} />
+      </>
+    );
   }
 
   return (
@@ -360,14 +458,23 @@ export default function SalesNewVisitClient({ user, preselectedCpId }) {
                 <span className="oh-eyebrow">Recorded</span>
                 <div className="oh-mono dur">{fmtDuration(reviewDuration)}</div>
               </div>
-              <p>Use this recording to continue to the assessment, keep recording, or discard.</p>
+              {reviewInterrupted ? (
+                <p style={{ color: 'var(--warning)' }}>
+                  Recording stopped — a phone call or another app took the microphone. Everything
+                  up to that point is saved; use it to continue to the assessment.
+                </p>
+              ) : (
+                <p>Use this recording to continue to the assessment, keep recording, or discard.</p>
+              )}
               <div className="acts">
                 <button className="oh-btn accent" onClick={useRecording}>
                   <CheckCircle2 size={16} /> Use recording
                 </button>
-                <button className="oh-btn" onClick={continueRecording}>
-                  Continue recording
-                </button>
+                {!reviewInterrupted && (
+                  <button className="oh-btn" onClick={continueRecording}>
+                    Continue recording
+                  </button>
+                )}
                 <button className="oh-btn ghost danger" onClick={discardRecording}>
                   Discard
                 </button>
