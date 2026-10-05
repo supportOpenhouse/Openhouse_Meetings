@@ -18,12 +18,17 @@ const MEETING_TYPE_LABELS = {
 // "Engagement · Engagement".
 const TYPE_WORDS_PREFIX = /^(?:(?:engagement|engage|engg|eng|meeting|meet|site|visit|call|onboarding|negotiation|cp)\b[\s.,:-]*)+/i;
 
+function meetingTypeCell(m) {
+  const type = MEETING_TYPE_LABELS[m.meeting_type] || m.meeting_type || '';
+  if (!m.salestrail_call_id) return type;
+  return type ? `${type} (phone call)` : 'Phone call';
+}
+
 // Purpose column: the meeting type, plus the RM's typed purpose when it adds
 // something. The typed field is optional and absent for onboarding, phone
 // call imports and direct uploads, so on its own it was mostly blank.
 function purposeCell(m) {
-  let type = MEETING_TYPE_LABELS[m.meeting_type] || m.meeting_type || '';
-  if (m.salestrail_call_id) type = type ? `${type} (phone call)` : 'Phone call';
+  const type = meetingTypeCell(m);
   const note = (m.purpose || '').trim().replace(TYPE_WORDS_PREFIX, '');
   if (!note) return type;
   return type ? `${type} · ${note}` : note;
@@ -100,6 +105,7 @@ export async function GET(request) {
     'Follow-up Date',
     'Transcript',
     'Audio URL',
+    'Meeting Type',
     'Purpose',
   ];
 
@@ -148,6 +154,7 @@ export async function GET(request) {
         listOrString(n.followUp),
         m.transcript_text || '',
         m.audio_url || '',
+        meetingTypeCell(m),
         purposeCell(m),
       ]
         .map(csvCell)
