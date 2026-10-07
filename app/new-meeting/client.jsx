@@ -12,6 +12,7 @@ import {
   Briefcase,
   Loader2,
   CheckCircle2,
+  Check,
   AlertCircle,
   RefreshCw,
   MapPin,
@@ -1722,9 +1723,16 @@ function VisitPicker({ visits, state, error, partial, selected, onSelect, onRetr
               <button
                 type="button"
                 key={v.id}
-                className={`oh-visit-card ${isSel ? 'selected' : ''}`}
+                className={`oh-visit-card ${isSel ? 'selected' : selected ? 'dim' : ''}`}
                 onClick={() => onSelect(v)}
+                aria-pressed={!!isSel}
               >
+                {/* A span, not the icon itself: styled-jsx classes don't
+                    reach into child components like lucide icons. */}
+                <span className="oh-visit-radio" aria-hidden="true">
+                  {isSel && <Check size={14} strokeWidth={3} />}
+                </span>
+                <div className="oh-visit-body">
                 <div className="oh-visit-card-head">
                   <span className="oh-visit-buyer">
                     {v.buyer_name || '(no buyer name)'}
@@ -1742,7 +1750,7 @@ function VisitPicker({ visits, state, error, partial, selected, onSelect, onRetr
                     Broker: {v.broker_name || ''}{v.broker_contact ? ` · ${v.broker_contact}` : ''}
                   </div>
                 )}
-                {isSel && <CheckCircle2 size={13} className="oh-visit-check" />}
+                </div>
               </button>
             );
           })}
@@ -1787,20 +1795,53 @@ function VisitPicker({ visits, state, error, partial, selected, onSelect, onRetr
         }
         .oh-visit-card {
           all: unset;
+          box-sizing: border-box;
+          width: 100%;
           cursor: pointer;
           padding: 12px 14px;
-          border: 1px solid var(--border);
+          /* 2px on every card so selecting doesn't shift the layout. */
+          border: 2px solid var(--border);
           border-radius: 11px;
           background: var(--paper);
-          display: block;
-          position: relative;
-          transition: border-color 0.15s, background 0.15s;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          transition: border-color 0.15s, background 0.15s, opacity 0.15s, box-shadow 0.15s;
         }
         .oh-visit-card:hover { border-color: var(--ink-3); }
+        .oh-visit-card.dim { opacity: 0.6; }
+        /* Solid fill + white text: unmistakable on a phone in daylight,
+           unlike the old 6% tint. */
         .oh-visit-card.selected {
-          border-color: var(--accent, #2c8a72);
-          background: rgba(44, 138, 114, 0.06);
+          border-color: var(--accent);
+          background: var(--accent);
+          box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.35);
         }
+        .oh-visit-card.selected .oh-visit-buyer,
+        .oh-visit-card.selected .oh-visit-time,
+        .oh-visit-card.selected .oh-visit-card-sub,
+        .oh-visit-card.selected .oh-visit-card-sub2 {
+          color: #fff;
+        }
+        .oh-visit-card.selected .oh-visit-card-sub2 { opacity: 0.85; }
+        .oh-visit-radio {
+          flex: none;
+          width: 22px;
+          height: 22px;
+          margin-top: 1px;
+          border-radius: 50%;
+          border: 2px solid var(--border-strong, var(--ink-3));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+        }
+        .oh-visit-card.selected .oh-visit-radio {
+          border-color: #fff;
+          background: #fff;
+          color: var(--accent);
+        }
+        .oh-visit-body { flex: 1; min-width: 0; }
         .oh-visit-card-head {
           display: flex;
           justify-content: space-between;
@@ -1825,12 +1866,6 @@ function VisitPicker({ visits, state, error, partial, selected, onSelect, onRetr
           font-size: 11.5px;
           color: var(--ink-3);
           margin-top: 2px;
-        }
-        .oh-visit-check {
-          position: absolute;
-          top: 12px;
-          right: 14px;
-          color: var(--accent, #2c8a72);
         }
       `}</style>
     </div>
