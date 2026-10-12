@@ -94,11 +94,13 @@ export const ONBOARDING_QUESTIONS = [
 // Direct-RM phone-call summary — a buyer-discovery survey. Direct RMs upload
 // recordings of calls with prospective home BUYERS (Gurgaon / Haryana
 // affordable-housing market). Every choice question is answered by Claude
-// picking from the fixed `options` — when the buyer doesn't say it outright,
-// Claude infers the single most likely option from the rest of the call.
+// picking from the fixed `options` — but only when the buyer actually said it;
+// otherwise the answer is "Not discussed" (single choice) or [] (multi).
+// Claude never infers an option (see summarizeCall in lib/claude.js).
 //
 // Extra entry fields used only by this set:
 //   options — the allowed answers; Claude must pick from these verbatim
+//             (single-choice questions also accept "Not discussed")
 //   list    — true → multi-select (Claude returns an array of options)
 //   (no `options` and no `list`) → free-text synthesis field
 export const CALL_QUESTIONS = [
@@ -124,7 +126,7 @@ export const CALL_QUESTIONS = [
   {
     key: 'budget',
     label: 'All-in budget (flat price + GST + registration)',
-    options: ['Under ₹50 lacs', '₹50–65 lacs', '₹65–75 lacs'],
+    options: ['Under ₹50 lacs', '₹50–65 lacs', '₹65–75 lacs', '₹75 lacs–1 Cr', 'Above ₹1 Cr'],
   },
   {
     key: 'configuration',
