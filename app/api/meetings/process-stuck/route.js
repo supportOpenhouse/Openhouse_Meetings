@@ -10,6 +10,9 @@ import {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Belt and braces with lib/processMeeting's no-store: never serve this route's
+// database reads from the Next.js fetch cache.
+export const fetchCache = 'force-no-store';
 export const maxDuration = 800;
 
 // Stop picking up new meetings after this long so the run (and the meetings
