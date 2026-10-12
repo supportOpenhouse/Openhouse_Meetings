@@ -2,7 +2,7 @@
 // the /api/meetings/process-stuck cron). Run with:
 //   node --env-file=.env.local drizzle/process_stuck.js [--dry-run] [--concurrency=3]
 
-import { findStuckMeetings, processMeeting, markGaveUp, MAX_PROCESS_ATTEMPTS } from '../lib/processMeeting.js';
+import { findStuckMeetings, processMeeting, claimMeeting, markGaveUp, MAX_PROCESS_ATTEMPTS } from '../lib/processMeeting.js';
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -34,8 +34,12 @@ let failed = 0;
 async function worker() {
   while (queue.length) {
     const m = queue.shift();
+    if (!(await claimMeeting(m, { source: 'backfill' }))) {
+      console.log(`  - ${m.id} already being processed elsewhere, skipped`);
+      continue;
+    }
     const t0 = Date.now();
-    const r = await processMeeting(m, { rmName: m.rm_name || 'Unknown', source: 'backfill' });
+    const r = await processMeeting(m, { rmName: m.rm_name || 'Unknown', source: 'backfill', alreadyClaimed: true });
     if (r.ok) ok++;
     else failed++;
     console.log(`  ${r.ok ? '✓' : '✗'} ${m.id} ${m.meeting_type} ${m.duration_seconds}s — ${Date.now() - t0}ms${r.ok ? '' : ' — ' + r.error}`);

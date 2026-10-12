@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import {
   findStuckMeetings,
   processMeeting,
+  claimMeeting,
   markGaveUp,
   MAX_PROCESS_ATTEMPTS,
 } from '@/lib/processMeeting';
@@ -35,7 +36,7 @@ export async function GET(request) {
 
   const startedAt = Date.now();
   const stuck = await findStuckMeetings();
-  const result = { found: stuck.length, processed: 0, failed: 0, gave_up: 0, deferred: 0 };
+  const result = { found: stuck.length, processed: 0, failed: 0, skipped: 0, gave_up: 0, deferred: 0 };
 
   const queue = [];
   for (const m of stuck) {
@@ -55,7 +56,12 @@ export async function GET(request) {
         return;
       }
       const m = queue.shift();
-      const r = await processMeeting(m, { rmName: m.rm_name || 'Unknown', source: 'sweeper' });
+      // Another run (or the browser trigger) got to it first.
+      if (!(await claimMeeting(m, { source: 'sweeper' }))) {
+        result.skipped++;
+        continue;
+      }
+      const r = await processMeeting(m, { rmName: m.rm_name || 'Unknown', source: 'sweeper', alreadyClaimed: true });
       if (r.ok) result.processed++;
       else result.failed++;
     }
