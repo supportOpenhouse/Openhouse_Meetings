@@ -1,9 +1,15 @@
 {
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "crons": [
     {
       "path": "/api/salestrail/sync",
       "schedule": "30 16,20 * * *"
+    },
+    {
+      "path": "/api/meetings/process-stuck",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

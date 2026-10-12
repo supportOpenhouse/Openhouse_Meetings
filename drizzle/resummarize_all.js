@@ -9,6 +9,7 @@
 //   --legacy-only   only meetings whose summary is the old flat shape
 //   --since=YYYY-MM-DD   only meetings started on/after this date
 //   --type=call     only meetings of this meeting_type (call|engagement|visit|onboarding)
+//   --exclude-type=call  skip meetings of this meeting_type
 //   --max-duration=N only meetings this many seconds or shorter (e.g. the
 //                    content-free calls that were fabricated: --max-duration=60)
 //   --limit=N       safety cap (default 1000)
@@ -17,6 +18,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import { summarizeMeeting } from '../lib/claude.js';
+import { usageTotals } from '../lib/anthropicRequest.js';
 
 if (!process.env.DATABASE_URL) {
   console.error('DATABASE_URL not set');
@@ -38,6 +40,7 @@ const args = Object.fromEntries(
 const LEGACY_ONLY = !!args['legacy-only'];
 const SINCE = args.since ? new Date(args.since) : null;
 const TYPE = args.type ? String(args.type) : null;
+const EXCLUDE_TYPE = args['exclude-type'] ? String(args['exclude-type']) : null;
 const MAX_DURATION = args['max-duration'] != null ? parseInt(args['max-duration'], 10) : null;
 const LIMIT = parseInt(args.limit || '1000', 10);
 const CONCURRENCY = Math.max(1, parseInt(args.concurrency || '3', 10));
@@ -45,10 +48,6 @@ const DRY = !!args['dry-run'];
 
 const sql = neon(process.env.DATABASE_URL);
 
-function isLegacyShape(summary) {
-  if (!summary) return true;
-  return !(summary.engagement || summary.visit || summary.score);
-}
 
 async function pickMeetings() {
   // All filters pushed into SQL (NULL-guard pattern) so LIMIT applies to the
@@ -56,9 +55,12 @@ async function pickMeetings() {
   const since = SINCE ? SINCE.toISOString() : null;
   const type = TYPE || null;
   const maxDur = Number.isFinite(MAX_DURATION) ? MAX_DURATION : null;
+  // Transcripts are NOT selected here — thousands of them exceed Neon's 64 MB
+  // response cap. runOne loads each meeting's transcript when it's processed.
   const rows = await sql`
     SELECT m.id, m.cp_code, m.cp_mobile, m.purpose, m.duration_seconds,
-           m.transcript_text, m.summary, m.meeting_type, u.name AS rm_name
+           m.meeting_type, u.name AS rm_name,
+           (m.summary IS NULL OR NOT (m.summary ? 'engagement' OR m.summary ? 'visit' OR m.summary ? 'score')) AS is_legacy
     FROM meetings m
     LEFT JOIN users u ON u.id = m.rm_id
     WHERE m.status = 'ready'
@@ -66,22 +68,23 @@ async function pickMeetings() {
       AND length(m.transcript_text) > 0
       AND (${since}::timestamptz IS NULL OR m.started_at >= ${since}::timestamptz)
       AND (${type}::text IS NULL OR coalesce(m.meeting_type, 'engagement') = ${type}::text)
+      AND (${EXCLUDE_TYPE}::text IS NULL OR coalesce(m.meeting_type, 'engagement') <> ${EXCLUDE_TYPE}::text)
       AND (${maxDur}::int IS NULL OR m.duration_seconds <= ${maxDur}::int)
     ORDER BY m.started_at DESC
     LIMIT ${LIMIT}
   `;
-  return LEGACY_ONLY ? rows.filter((r) => isLegacyShape(r.summary)) : rows;
+  return LEGACY_ONLY ? rows.filter((r) => r.is_legacy) : rows;
 }
 
 async function runOne(m) {
+  const [{ transcript_text: transcript }] = await sql`SELECT transcript_text FROM meetings WHERE id = ${m.id}`;
   if (DRY) {
     // True dry-run: don't bother Claude, just report what WOULD be processed.
-    const transcriptLen = (m.transcript_text || '').length;
-    return { ms: 0, score: '—', classification: 'dry', transcriptLen };
+    return { ms: 0, score: '—', classification: 'dry', transcriptLen: (transcript || '').length };
   }
   const started = Date.now();
   const summary = await summarizeMeeting(
-    m.transcript_text,
+    transcript,
     {
       rm_name: m.rm_name || 'Unknown',
       cp_code: m.cp_code,
@@ -139,6 +142,11 @@ async function run() {
   });
 
   console.log(`\nDone. ok=${done} failed=${failed}${DRY ? ' (dry run, no writes)' : ''}`);
+  if (usageTotals.calls) {
+    // Sonnet 5.5 list price: $2 / MTok input, $10 / MTok output.
+    const cost = (usageTotals.input * 2 + usageTotals.output * 10) / 1e6;
+    console.log(`Tokens: ${usageTotals.input} in / ${usageTotals.output} out over ${usageTotals.calls} calls ≈ $${cost.toFixed(2)}`);
+  }
 }
 
 run().catch((e) => {

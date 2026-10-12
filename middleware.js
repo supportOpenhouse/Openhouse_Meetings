@@ -18,12 +18,14 @@ export default auth((req) => {
   // cron, admin session for the manual button) — let it through untouched so
   // the tokenless cron request isn't redirected to /login.
   const isSalestrailRoute = pathname.startsWith('/api/salestrail');
+  // Same for the stuck-meeting sweeper cron (/api/meetings/process-stuck).
+  const isCronRoute = pathname === '/api/meetings/process-stuck';
   const isPublicAsset =
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname === '/';
 
-  if (isApiAuthRoute || isSalestrailRoute || isPublicAsset) return NextResponse.next();
+  if (isApiAuthRoute || isSalestrailRoute || isCronRoute || isPublicAsset) return NextResponse.next();
 
   // Where each role lands after login / when bounced off a forbidden page.
   const homeFor = (role) =>
