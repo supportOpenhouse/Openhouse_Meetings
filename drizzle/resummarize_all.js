@@ -10,6 +10,8 @@
 //   --since=YYYY-MM-DD   only meetings started on/after this date
 //   --type=call     only meetings of this meeting_type (call|engagement|visit|onboarding)
 //   --exclude-type=call  skip meetings of this meeting_type
+//   --stale-before=ISO   only meetings whose summary was generated before this
+//                        time (retry the ones a previous run failed on)
 //   --max-duration=N only meetings this many seconds or shorter (e.g. the
 //                    content-free calls that were fabricated: --max-duration=60)
 //   --limit=N       safety cap (default 1000)
@@ -41,6 +43,7 @@ const LEGACY_ONLY = !!args['legacy-only'];
 const SINCE = args.since ? new Date(args.since) : null;
 const TYPE = args.type ? String(args.type) : null;
 const EXCLUDE_TYPE = args['exclude-type'] ? String(args['exclude-type']) : null;
+const STALE_BEFORE = args['stale-before'] ? new Date(args['stale-before']).toISOString() : null;
 const MAX_DURATION = args['max-duration'] != null ? parseInt(args['max-duration'], 10) : null;
 const LIMIT = parseInt(args.limit || '1000', 10);
 const CONCURRENCY = Math.max(1, parseInt(args.concurrency || '3', 10));
@@ -69,6 +72,8 @@ async function pickMeetings() {
       AND (${since}::timestamptz IS NULL OR m.started_at >= ${since}::timestamptz)
       AND (${type}::text IS NULL OR coalesce(m.meeting_type, 'engagement') = ${type}::text)
       AND (${EXCLUDE_TYPE}::text IS NULL OR coalesce(m.meeting_type, 'engagement') <> ${EXCLUDE_TYPE}::text)
+      AND (${STALE_BEFORE}::timestamptz IS NULL
+           OR coalesce((m.summary->>'generated_at')::timestamptz, '-infinity') < ${STALE_BEFORE}::timestamptz)
       AND (${maxDur}::int IS NULL OR m.duration_seconds <= ${maxDur}::int)
     ORDER BY m.started_at DESC
     LIMIT ${LIMIT}

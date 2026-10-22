@@ -282,7 +282,7 @@ async function scanWindow(sql, from, to, result) {
 // Phase B — fetch + transcribe one batch. Returns how many rows were picked.
 async function processBatch(sql, result) {
   const pending = await sql`
-    SELECT id, salestrail_call_id, cp_mobile, audio_url, duration_seconds
+    SELECT id, salestrail_call_id, cp_mobile, audio_url, duration_seconds, transcript_text
     FROM meetings
     WHERE status = 'fetching' AND salestrail_call_id IS NOT NULL
       AND salestrail_fetch_attempts < ${MAX_ATTEMPTS}
@@ -336,44 +336,58 @@ async function processOne(sql, m) {
       }
     }
 
-    // Get the audio. Normally a fresh fetch from Salestrail; on a retry the
-    // recording may already be re-hosted on our Blob.
-    let buf;
-    let mime;
-    let audioUrl = m.audio_url;
-    if (audioUrl) {
-      const r = await fetch(audioUrl);
-      if (!r.ok) throw new Error(`Re-hosted audio unavailable: ${r.status}`);
-      buf = Buffer.from(await r.arrayBuffer());
-      mime = r.headers.get('content-type') || 'audio/mpeg';
-    } else {
-      const rec = await fetchRecording(m.salestrail_call_id);
-      if (!rec.ok && rec.status === 404) {
+    // A retry after a Claude failure reuses the transcript saved on the first
+    // attempt — each re-transcription is billed by ElevenLabs.
+    let text = m.transcript_text;
+    if (text == null) {
+      // Get the audio. Normally a fresh fetch from Salestrail; on a retry the
+      // recording may already be re-hosted on our Blob.
+      let buf;
+      let mime;
+      let audioUrl = m.audio_url;
+      if (audioUrl) {
+        const r = await fetch(audioUrl);
+        if (!r.ok) throw new Error(`Re-hosted audio unavailable: ${r.status}`);
+        buf = Buffer.from(await r.arrayBuffer());
+        mime = r.headers.get('content-type') || 'audio/mpeg';
+      } else {
+        const rec = await fetchRecording(m.salestrail_call_id);
+        if (!rec.ok && rec.status === 404) {
+          await sql`
+            UPDATE meetings SET status = 'no_recording', cp_code = ${cpCode}, cp_name = ${cpName}
+            WHERE id = ${m.id}
+          `;
+          return 'no_recording';
+        }
+        buf = rec.buffer;
+        mime = rec.contentType;
+        const blob = await put(
+          `meetings/salestrail/${m.salestrail_call_id}.${extForAudio(mime)}`,
+          buf,
+          { access: 'public', contentType: mime, token: process.env.BLOB_READ_WRITE_TOKEN }
+        );
+        audioUrl = blob.url;
         await sql`
-          UPDATE meetings SET status = 'no_recording', cp_code = ${cpCode}, cp_name = ${cpName}
+          UPDATE meetings
+          SET audio_url = ${audioUrl}, cp_code = ${cpCode}, cp_name = ${cpName}
           WHERE id = ${m.id}
         `;
-        return 'no_recording';
       }
-      buf = rec.buffer;
-      mime = rec.contentType;
-      const blob = await put(
-        `meetings/salestrail/${m.salestrail_call_id}.${extForAudio(mime)}`,
-        buf,
-        { access: 'public', contentType: mime, token: process.env.BLOB_READ_WRITE_TOKEN }
-      );
-      audioUrl = blob.url;
+
+      // Transcribe + summarize with the engagement question set.
+      const transcript = await transcribeWithElevenLabs(buf, mime, process.env.ELEVENLABS_LANGUAGE || '');
+      text = transcript.text || '';
       await sql`
         UPDATE meetings
-        SET audio_url = ${audioUrl}, cp_code = ${cpCode}, cp_name = ${cpName}
+        SET language = ${transcript.language_code || null},
+            transcript_text = ${text},
+            transcript_words = ${JSON.stringify(transcript.words || [])}::jsonb
         WHERE id = ${m.id}
       `;
     }
 
-    // Transcribe + summarize with the engagement question set.
-    const transcript = await transcribeWithElevenLabs(buf, mime, process.env.ELEVENLABS_LANGUAGE || '');
     const summary = await summarizeWithClaude(
-      transcript.text || '',
+      text,
       {
         rm_name: null,
         cp_code: cpCode,
@@ -386,10 +400,8 @@ async function processOne(sql, m) {
 
     await sql`
       UPDATE meetings
-      SET language = ${transcript.language_code || null},
-          transcript_text = ${transcript.text || ''},
-          transcript_words = ${JSON.stringify(transcript.words || [])}::jsonb,
-          summary = ${JSON.stringify(summary)}::jsonb,
+      SET summary = ${JSON.stringify(summary)}::jsonb,
+          cp_code = ${cpCode}, cp_name = ${cpName},
           status = 'ready', error_message = NULL
       WHERE id = ${m.id}
     `;
